@@ -163,12 +163,9 @@ The Kairo Event dashboard will allow developers to:
 
 ### Backend
 
-* Node.js
-* TypeScript
-* Fastify
+* .Net
+* C#
 * PostgreSQL
-* Zod
-* Vitest
 
 ### Frontend
 
