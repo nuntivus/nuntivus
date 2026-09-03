@@ -124,8 +124,7 @@ The Kairo Event dashboard will allow developers to:
 
 ### Backend
 
-* [ ] TypeScript setup
-* [ ] Fastify API
+* [ ] Project setup
 * [ ] Receive events
 * [ ] Store events
 * [ ] Destinations
