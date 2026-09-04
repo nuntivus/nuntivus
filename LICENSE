@@ -2,31 +2,66 @@ Business Source License 1.1
 
 Parameters
 
-Licensor:             Sposato Salvatore
+Licensor: Salvatore Sposato
 
-Licensed Work:        Kairo Event
+Licensed Work: Kairo Event
 
 Additional Use Grant:
 
-You may make production use of the Licensed Work for your own
-internal business purposes, including self-hosting the Licensed Work
-within infrastructure owned, leased, or controlled by you.
+You may use the Licensed Work for development, testing, evaluation,
+and production use, including use for the internal business purposes
+of an individual or organization.
 
-You may modify the Licensed Work and use those modifications for the
-same purposes.
+You may install, operate, modify, and use the Licensed Work on
+infrastructure owned, leased, or controlled by you, including
+infrastructure provided by a public or private cloud provider.
 
-You may not use the Licensed Work, or a modified version of the
-Licensed Work, to provide to third parties a hosted, managed, SaaS,
-cloud, or other commercial service whose primary purpose is to provide
-functionality substantially similar to the Licensed Work.
+You may also engage a third party to install, maintain, support, or
+operate the Licensed Work on your behalf, provided that the Licensed
+Work is used solely for your internal business purposes.
 
-For clarity, consulting, integration, implementation, development,
-testing, and support services performed for a customer that operates
-the Licensed Work for its own internal use are permitted.
+You may not use the Licensed Work to provide a Hosted Kairo Service
+to third parties without a separate commercial license from the
+Licensor.
 
-Use of the Licensed Work to provide a prohibited hosted or managed
-service requires a separate commercial license from the Licensor.
+For purposes of this Additional Use Grant, a "Hosted Kairo Service"
+means a service in which:
 
-Change Date:          2030-09-04
+(a) the Licensed Work is operated by or on behalf of the service
+    provider;
 
-Change License:       Apache License, Version 2.0
+(b) third-party customers are provided access to the functionality
+    of the Licensed Work as a hosted, managed, cloud, SaaS, or
+    similar service; and
+
+(c) providing such functionality is offered as a product or service
+    to those third-party customers.
+
+For clarity, the following are permitted and do not constitute a
+Hosted Kairo Service:
+
+- using the Licensed Work to operate your own applications, products,
+  services, infrastructure, or business;
+
+- using the Licensed Work to deliver events from your applications
+  to your own customers, partners, or external systems;
+
+- allowing your customers to configure destinations, subscriptions,
+  endpoints, or delivery preferences as part of your own product;
+
+- providing consulting, installation, integration, maintenance,
+  hosting, or operational services for a specific customer where
+  the Licensed Work is used solely for that customer's internal
+  business purposes;
+
+- building applications or services that use the Licensed Work as
+  an internal infrastructure component, provided that customers are
+  not being offered the Licensed Work itself as a hosted or managed
+  service.
+
+A separate commercial license is required to offer a Hosted Kairo
+Service.
+
+Change Date: 04-09-2030
+
+Change License: Apache License, Version 2.0
