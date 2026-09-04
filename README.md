@@ -1,120 +1,82 @@
 <img width="1774" height="887" alt="Kairo Event" src="https://github.com/user-attachments/assets/1f65413d-cd2b-4b03-adca-9ad09ca1d5c8" />
 
+# ✈️ Kairo Event
+
 **Self-hosted event delivery infrastructure for SaaS and platform teams.**
 
 > **Publish once. Deliver reliably. Own the infrastructure.**
 
-Kairo Event helps applications reliably deliver business events to customers, partners, APIs, queues, and event brokers without building and maintaining custom delivery infrastructure.
+Kairo helps applications and platforms receive events from multiple sources and reliably deliver them to subscribers across HTTP, queues, and event brokers.
 
-Your application publishes an event once. Kairo handles subscriptions, routing, delivery, retries, rate limits, signing, replay, and delivery history for every subscriber.
-
-```text
-                         Kairo Event
-
-Your Application
-      │
-      │ order.created
-      ▼
-┌─────────────────────────────────────────────┐
-│                                             │
-│                    KAIRO                    │
-│                                             │
-│  persist → match subscriptions → deliver   │
-│                ↓                            │
-│      retry / rate limit / replay            │
-│                                             │
-└───────────────┬───────────────┬─────────────┘
-                │               │
-                ▼               ▼
-          ACME Webhook      Globex Kafka
-                │
-                ▼
-          Partner API
-```
+It centralizes the infrastructure teams usually end up rebuilding themselves: persistence, routing, retries, rate limits, signing, delivery history, replay, and failure handling.
 
 ## Why Kairo?
 
-A webhook sender often starts simple:
+Event delivery often starts simple:
 
 ```text
 event
   ↓
 HTTP POST
   ↓
-customer
-```
+consumer
+````
 
 Then production requirements appear:
 
-- What happens when the customer endpoint is offline?
-- How long should deliveries be retried?
-- How do we prevent duplicate deliveries?
-- How do we sign requests?
-- How do we enforce customer-specific rate limits?
-- How do we see every delivery attempt?
-- How do we replay failed events?
-- How do we support customers that want Kafka or SQS instead of HTTP?
-- How do we prevent one broken destination from affecting everybody else?
+* retries
+* rate limiting
+* signing
+* replay
+* delivery logs
+* endpoint health
+* tenant-specific rules
+* multiple delivery protocols
+* failure isolation
 
-Eventually the application contains its own:
+At that point, teams are no longer building a simple webhook sender.
 
-```text
-webhook worker
-retry scheduler
-dead-letter handling
-signing logic
-rate limiting
-delivery database
-replay scripts
-endpoint configuration
-monitoring
-queue integrations
-```
+They are building event delivery infrastructure.
 
-At that point, the team is building an event delivery platform.
+**Kairo provides that infrastructure as a self-hosted platform.**
 
-**Kairo is that platform.**
+Your systems emit events.
 
-Your application should only need to say:
-
-```text
-order.created happened
-```
-
-Kairo owns how every subscriber receives it.
-
----
+Kairo handles how subscribers receive them.
 
 ## Core Model
-
-Kairo is built around five main concepts:
 
 ```text
 Source
   ↓
 Event
   ↓
-Subscription
-  ↓
-Destination
+Subscriber
   ↓
 Delivery
 ```
 
 ### Source
 
-A **Source** identifies where events enter Kairo.
+A **Source** represents where an event enters Kairo.
 
 Examples:
 
-- Application API
-- Kairo SDK
-- NATS
-- Kafka
+```text
+HTTP API
+Webhook
+Application / SDK
+NATS
+Kafka
+RabbitMQ
+SQS
+```
+
+Kairo normalizes events from different sources into a common internal event model.
 
 ### Event
 
-An **Event** represents something that happened in your application.
+An **Event** represents something that happened.
 
 Examples:
 
@@ -127,354 +89,290 @@ deployment.completed
 
 Events are immutable once accepted.
 
-### Subscription
+### Subscriber
 
-A **Subscription** defines who wants an event and the rules under which it should be delivered.
+A **Subscriber** defines who should receive an event, under which rules, and how Kairo should deliver it.
 
-A subscription can define:
+A subscriber can define:
 
-- event type
-- subscriber
-- destination
-- filters
-- transformations
-- authentication
-- retry policy
-- rate limits
+```text
+event types
+filter
+transformation
+protocol
+endpoint / connection
+authentication
+rate limit
+retry policy
+enabled state
+```
 
 Example:
 
 ```text
-Subscriber:     ACME
-Event:          order.created
-Destination:    ACME Production Webhook
-Filter:         region == "EU"
-Rate limit:     10 requests/second
-Retry policy:   exponential, up to 48 hours
+Subscriber: ACME
+
+Events:
+order.created
+order.updated
+
+Filter:
+region == "EU"
+
+Protocol:
+HTTP
+
+Endpoint:
+https://api.acme.com/events
+
+Authentication:
+HMAC
+
+Rate limit:
+10 requests/second
+
+Retry policy:
+exponential, up to 48 hours
 ```
 
-### Destination
+A subscriber may also use another delivery protocol:
 
-A **Destination** defines where and how Kairo delivers events.
-
-Planned destination types include:
-
-- HTTP / Webhooks
-- Kafka
-- NATS
-- AWS SQS
-- RabbitMQ
-
-A destination stores transport-specific configuration such as endpoint, credentials, authentication, timeout, and concurrency limits.
+```text
+Kafka
+NATS
+RabbitMQ
+SQS
+```
 
 ### Delivery
 
-A **Delivery** represents one event being delivered through one subscription to one destination.
+A **Delivery** represents one event being delivered to one subscriber.
 
 ```text
 event evt_123
      │
-     ├── delivery dlv_001 → ACME      ✓ delivered
-     ├── delivery dlv_002 → Globex    ↻ retrying
-     └── delivery dlv_003 → Partner   ✓ delivered
+     ├── delivery dlv_001 → ACME       ✓ delivered
+     ├── delivery dlv_002 → Globex     ↻ retrying
+     └── delivery dlv_003 → Umbrella   ✓ delivered
 ```
 
-Each delivery keeps its own attempt history.
-
----
+Each delivery has its own state and attempt history.
 
 ## Example
 
-Imagine a SaaS application publishes:
-
 ```text
-invoice.paid
+                        SOURCES
+
+             HTTP      Stripe      Kafka
+               │          │          │
+               └──────────┼──────────┘
+                          ▼
+                        Kairo
+                          │
+                          ▼
+                        Event
+                          │
+              ┌───────────┼───────────┐
+              ▼           ▼           ▼
+
+            ACME        Globex     Umbrella
+
+            HTTP         Kafka        SQS
 ```
 
-Three customers consume the event differently:
+If one subscriber is unavailable:
 
 ```text
-                         invoice.paid
-                              │
-                              ▼
-                            Kairo
-                              │
-            ┌─────────────────┼─────────────────┐
-            ▼                 ▼                 ▼
-
-          ACME             Globex           Umbrella
-
-       HTTP webhook         Kafka              SQS
-       HMAC signing      transformation      EU only
-       10 req/sec
-       retry 48h
-```
-
-The application does not need customer-specific delivery code.
-
-If ACME is unavailable:
-
-```text
-ACME       503 → retry
+ACME       503 → retrying
 Globex     delivered
 Umbrella   delivered
 ```
 
-Only ACME's delivery is affected.
+Only that subscriber's delivery is affected.
 
-Kairo records each attempt and retries according to the subscription policy.
+The others continue normally.
 
----
+## What Problem Does Kairo Solve?
 
-## What Kairo Solves
-
-### Reliable external event delivery
-
-External systems are unreliable.
-
-Kairo handles:
-
-- transient failures
-- timeouts
-- HTTP `429`
-- HTTP `5xx`
-- exponential backoff
-- jitter
-- dead deliveries
-- replay
-
-### Producer / consumer decoupling
-
-Without Kairo:
+Without Kairo, applications often accumulate:
 
 ```text
-Order Service
- ├── knows ACME webhook
- ├── knows Globex Kafka
- ├── knows Partner API
- └── knows Analytics
+webhook workers
+retry schedulers
+queue consumers
+delivery databases
+signing logic
+rate limiting
+replay scripts
+dead-letter handling
+monitoring
+customer-specific delivery code
 ```
 
 With Kairo:
 
 ```text
-Order Service
-      │
-      ▼
-order.created
-      │
-      ▼
-    Kairo
+Application
+    │
+    │ order.created
+    ▼
+  Kairo
+    │
+    ├── ACME → HTTP
+    ├── Globex → Kafka
+    ├── Umbrella → SQS
+    └── Partner → NATS
 ```
 
-Adding or changing a subscriber does not require modifying the producer.
+The producer does not need to know how every subscriber wants to receive the event.
 
-### Multi-tenant delivery policies
+Kairo owns that delivery contract.
 
-Different subscribers can have different:
+## Positioning
 
-```text
-Destinations
-Authentication
-Filters
-Transformations
-Rate limits
-Retry policies
-```
+Kairo focuses on:
 
-### Operational visibility
+> **Reliable event delivery between producers and external or independent consumers.**
 
-Kairo provides a complete event and delivery history:
+Kairo is not intended to be:
 
-```text
-order.created
-evt_123
+* a Kafka replacement
+* a general-purpose message broker
+* a workflow engine
+* an ESB
+* an iPaaS
+* a generic automation platform
+* a general-purpose API gateway
 
-Source
-Orders API
-
-Matched subscriptions
-3
-
-Deliveries
-
-✓ ACME
-  HTTP 200
-  84 ms
-
-✓ Globex
-  Kafka
-  12 ms
-
-↻ Umbrella
-  attempt 1 — timeout
-  attempt 2 — HTTP 503
-  next retry — 14:37
-```
-
----
-
-## What Kairo Is Not
-
-Kairo is intentionally **not**:
-
-- a Kafka replacement
-- a general message broker
-- a workflow engine
-- an ESB
-- an iPaaS
-- a Zapier replacement
-- a general-purpose API gateway
-
-Kairo focuses on one problem:
-
-> **Reliably delivering application events to subscribers and external systems.**
-
----
+Kairo focuses on the unreliable boundary between event producers and their subscribers.
 
 ## Architecture
 
-Kairo separates durable state from asynchronous work.
-
 ```text
-                          ┌─────────────────┐
-                          │ React Dashboard │
-                          └────────┬────────┘
-                                   │
-                                   ▼
-                          ┌─────────────────┐
-                          │    Kairo API    │
-                          │ ASP.NET Core 8  │
-                          └────────┬────────┘
-                                   │
-                                   ▼
-                          ┌─────────────────┐
-                          │   PostgreSQL    │
-                          │                 │
-                          │ source of truth │
-                          └────────┬────────┘
-                                   │
-                          Transactional Outbox
-                                   │
-                                   ▼
-                          ┌─────────────────┐
-                          │ NATS JetStream  │
-                          │ durable work    │
-                          └────────┬────────┘
-                                   │
-                    ┌──────────────┼──────────────┐
-                    ▼              ▼              ▼
-               Subscription    Delivery       Retry
-                 Worker         Worker        Scheduler
-                    │              │
-                    │              ▼
-                    │        Destinations
-                    │
-                    └──────────────┘
+                         Sources
+                           │
+                           ▼
+                  ┌─────────────────┐
+                  │    Kairo API    │
+                  │ ASP.NET Core 8  │
+                  └────────┬────────┘
+                           │
+                           ▼
+                  ┌─────────────────┐
+                  │   PostgreSQL    │
+                  │ source of truth │
+                  └────────┬────────┘
+                           │
+                    Transactional
+                       Outbox
+                           │
+                           ▼
+                  ┌─────────────────┐
+                  │ NATS JetStream  │
+                  │ work transport  │
+                  └────────┬────────┘
+                           │
+             ┌─────────────┼─────────────┐
+             ▼             ▼             ▼
+         Matching       Delivery       Retry
+          Worker         Worker      Scheduler
+             │             │
+             └─────────────┼─────────────┐
+                           ▼             ▼
+                      Subscribers    PostgreSQL
 ```
 
-### PostgreSQL
-
-PostgreSQL is the durable source of truth for:
-
-- sources
-- events
-- subscribers
-- subscriptions
-- destinations
-- deliveries
-- delivery attempts
-- retry state
-- outbox messages
-
-### NATS JetStream
-
-JetStream is used for durable asynchronous work distribution.
-
-It is **not** the canonical business database.
+The main responsibilities are:
 
 ```text
-PostgreSQL = durable state
-JetStream  = work distribution
-Memory     = performance/cache
-```
-
-### Transactional Outbox
-
-Events and the work required to process them are written atomically.
-
-```text
-BEGIN
-
-INSERT event
-INSERT outbox message
-
-COMMIT
-
-     ↓
-
-Outbox Worker
-
-     ↓
+PostgreSQL
+= durable business state
 
 NATS JetStream
+= asynchronous work distribution
+
+Memory
+= caching and performance
 ```
 
-If JetStream is temporarily unavailable, accepted events remain safely stored in PostgreSQL and are published when the broker becomes available again.
+## Event Flow
 
-### Delivery Semantics
+```text
+Source
+  │
+  ▼
+Event accepted
+  │
+  ▼
+Persist event + outbox
+  │
+  ▼
+Commit
+  │
+  ▼
+Publish work to JetStream
+  │
+  ▼
+Match subscribers
+  │
+  ▼
+Create deliveries
+  │
+  ▼
+Deliver
+  │
+  ├── success
+  │
+  └── failure
+         │
+         ▼
+       retry
+         │
+         ▼
+       dead
+```
 
 Kairo uses **at-least-once processing**.
 
-Exactly-once HTTP delivery cannot be guaranteed across arbitrary external systems.
-
-Kairo therefore provides stable identifiers such as:
-
-```text
-Event ID
-Delivery ID
-Attempt number
-```
-
-so consumers can implement idempotency.
-
----
+Accepted events should not disappear because a worker, broker, or destination temporarily fails.
 
 ## Technology
 
-### Backend
+```text
+Backend      .NET 8 / ASP.NET Core
+Database     PostgreSQL
+Data access  Dapper + Npgsql
+Messaging    NATS JetStream
+Frontend     React + TypeScript + Vite
+Deployment   Docker / Docker Compose
+Telemetry    OpenTelemetry
+```
 
-- .NET 8
-- ASP.NET Core
-- C#
-- Dapper
-- Npgsql
-- PostgreSQL
+## Self-Hosting
 
-### Messaging
+Kairo is designed to be self-hosted from the beginning.
 
-- NATS JetStream
+A standard deployment includes:
 
-### Frontend
+```text
+Kairo API
+Kairo Worker
+React Dashboard
+PostgreSQL
+NATS JetStream
+```
 
-- React
-- TypeScript
-- Vite
+and should remain deployable with:
 
-### Observability
+```bash
+docker compose up -d
+```
 
-- OpenTelemetry
+Small installations can run a single worker process.
 
-### Deployment
+Larger installations can scale workers independently without changing the Kairo programming model.
 
-- Docker
-- Docker Compose
-
-Kubernetes support may be added later but is not required to run Kairo.
-
----
-
-## Project Architecture
+## Project Structure
 
 ```text
 kairo-event/
@@ -491,214 +389,26 @@ kairo-event/
 │   └── kairo-dashboard/
 │
 ├── tests/
-│   ├── Kairo.UnitTests/
-│   ├── Kairo.IntegrationTests/
-│   └── Kairo.ArchitectureTests/
 │
-├── deploy/
-│   └── docker/
-│
-└── Kairo.sln
+└── deploy/
 ```
 
-The backend follows a modular architecture with vertical application slices.
-
-```text
-Kairo.Api
-    │
-    ▼
-Kairo.Application
-    │
-    ▼
-Kairo.Domain
-
-Kairo.Infrastructure
-    │
-    ├── PostgreSQL / Dapper
-    ├── NATS JetStream
-    ├── HTTP delivery
-    └── OpenTelemetry
-```
-
-Workers use the same application layer and can later be scaled independently.
-
----
-
-## Self-Hosting
-
-Kairo is designed to be self-hosted from the beginning.
-
-The default deployment should remain simple:
-
-```text
-Kairo API
-Kairo Worker
-React Dashboard
-PostgreSQL
-NATS JetStream
-```
-
-with:
-
-```bash
-docker compose up -d
-```
-
-Small installations can run a single worker process.
-
-Larger installations can independently scale delivery workers:
-
-```text
-API                 × 2
-Subscription Worker × 2
-Delivery Worker     × 10
-Retry Scheduler     × 1
-PostgreSQL
-NATS JetStream
-```
-
-without changing the Kairo programming model.
-
----
-
-## Roadmap
-
-### v0.1 — Reliable HTTP delivery
-
-- [ ] Project foundation
-- [ ] Source management
-- [ ] Event ingestion API
-- [ ] Event persistence
-- [ ] Subscribers
-- [ ] Subscriptions
-- [ ] HTTP destinations
-- [ ] HTTP delivery
-- [ ] Delivery attempts
-- [ ] Retry engine
-- [ ] Dead deliveries
-- [ ] Manual replay
-- [ ] Transactional outbox
-- [ ] NATS JetStream workers
-- [ ] Docker Compose
-
-### v0.2 — Operational Dashboard
-
-- [ ] React dashboard
-- [ ] Event explorer
-- [ ] Event details
-- [ ] Delivery timeline
-- [ ] Failed delivery explorer
-- [ ] Retry / replay
-- [ ] Destination health
-- [ ] Basic metrics
-
-### v0.3 — Delivery Policies
-
-- [ ] Subscription filters
-- [ ] Transformations
-- [ ] HMAC signing
-- [ ] Rate limiting
-- [ ] Destination concurrency limits
-- [ ] Circuit breakers
-- [ ] Configurable retry policies
-
-### v0.4 — Additional Destinations
-
-- [ ] NATS
-- [ ] Kafka
-- [ ] AWS SQS
-- [ ] RabbitMQ
-
-### Future
-
-- Infrastructure as code
-- Kairo CLI
-- Configuration diff / apply
-- Event schemas and versions
-- Delivery contract validation
-- Advanced replay
-- OpenTelemetry tracing
-- High-availability deployment
-- Additional SDKs
-
----
-
-## Design Principles
-
-Kairo is built around several principles.
-
-### Accepted events should not disappear
-
-If Kairo acknowledges an event, component failures should not silently lose it.
-
-### PostgreSQL protects correctness
-
-Canonical events, deliveries, attempts, subscriptions, and retry state are durable.
-
-### Memory protects performance
-
-Subscriptions, compiled filters, destination configuration, and other safe data may be cached in memory.
-
-### Brokers distribute work
-
-JetStream provides asynchronous work distribution and worker crash recovery without replacing PostgreSQL as Kairo's business state.
-
-### Broken destinations stay isolated
-
-One unavailable subscriber should not consume all system capacity or block healthy subscribers.
-
-### Start simple, scale horizontally
-
-Kairo should work with Docker Compose on one machine and scale by adding stateless API and worker processes.
-
----
+The backend uses a modular architecture with vertical application slices.
 
 ## Status
 
-> **Early development**
+Kairo is in early development and is not yet production ready.
 
-Kairo is currently under active development and is not yet production ready.
-
-APIs, schemas, architecture, and configuration may change before the first stable release.
-
----
-
-## Contributing
-
-Kairo is developed publicly and contributions are welcome.
-
-Useful areas include:
-
-- .NET backend
-- React dashboard
-- event delivery
-- PostgreSQL / Dapper
-- NATS JetStream
-- integrations
-- testing
-- observability
-- documentation
-- Docker / self-hosting
-
-Please open an issue before starting large architectural changes.
-
----
+APIs, schemas, and architecture may change before the first stable release.
 
 ## License
 
-Kairo Event is intended to be source-available and self-hostable.
-
-The licensing model is being finalized.
+Kairo Event is source-available and self-hostable.
 
 See [`LICENSE`](LICENSE) for the terms that apply to the current version.
 
----
 
-**Kairo Event**
 
-> Publish once. Deliver reliably. Own the infrastructure.
-
-**Kairo Event — reliable event infrastructure in every direction.**
 
 
 
