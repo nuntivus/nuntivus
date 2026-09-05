@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="KairoServer.Api/KairoServer.Api.csproj" />
+  <Project Path="KairoServer.Application/KairoServer.Application.csproj" />
+  <Project Path="KairoServer.Contracts/KairoServer.Contracts.csproj" />
+  <Project Path="KairoServer.Domain/KairoServer.Domain.csproj" />
+  <Project Path="KairoServer.Infastructure/KairoServer.Infastructure.csproj" />
+  <Project Path="KairoServer.UnitTests/KairoServer.UnitTests.csproj" />
+  <Project Path="KairoServer.Worker/KairoServer.Worker.csproj" />
+</Solution>
