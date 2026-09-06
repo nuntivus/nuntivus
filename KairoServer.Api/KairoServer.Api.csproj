@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\KairoServer.Application\KairoServer.Application.csproj" />
+    <ProjectReference Include="..\KairoServer.Infastructure\KairoServer.Infastructure.csproj" />
   </ItemGroup>
 
 </Project>

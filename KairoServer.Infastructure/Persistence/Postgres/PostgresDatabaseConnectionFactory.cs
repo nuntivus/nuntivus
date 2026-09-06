@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KairoServer.Infastructure.Postgres
+namespace KairoServer.Infastructure.Persistence.Postgres
 {
     public sealed class PostgresDatabaseConnectionFactory : IDatabaseConnectionFactory
     {

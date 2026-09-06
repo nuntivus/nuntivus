@@ -9,7 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KairoServer.Infastructure.Postgres
+namespace KairoServer.Infastructure.Persistence.Postgres
 {
     public class PostgresOutboxRepository : IOutboxRepository
     {
@@ -24,6 +24,7 @@ namespace KairoServer.Infastructure.Postgres
                     INSERT INTO outbox_messages
                     (
                         id,
+                        event_id,
                         type,
                         payload,
                         created_at,
@@ -33,6 +34,7 @@ namespace KairoServer.Infastructure.Postgres
                     VALUES
                     (
                         @Id,
+                        @EventId,
                         @Type,
                         CAST(@Payload AS jsonb),
                         @CreatedAt,
@@ -50,6 +52,7 @@ namespace KairoServer.Infastructure.Postgres
                     new
                     {
                         message.Id,
+                        message.EventId,
                         message.Type,
                         message.Payload,
                         message.CreatedAt

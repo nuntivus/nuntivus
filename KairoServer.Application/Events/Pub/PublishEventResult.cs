@@ -8,5 +8,5 @@ using System.Threading.Tasks;
 namespace KairoServer.Application.Events.Pub
 {
     public sealed record PublishEventResult(
-        EventId EventId);
+        Guid EventId);
 }

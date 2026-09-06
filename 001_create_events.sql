@@ -3,7 +3,7 @@ CREATE TABLE events
     id          uuid        PRIMARY KEY,
     type        text        NOT NULL,
     idempotency_key  text   NOT NULL,
-    source_id   text        NOT NULL,
+    source_id   uuid        NOT NULL,
     occurred_at timestamptz NOT NULL,
     received_at timestamptz NOT NULL,
     metadata    jsonb       NOT NULL DEFAULT '{}'::jsonb,

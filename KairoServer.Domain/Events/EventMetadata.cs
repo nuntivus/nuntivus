@@ -22,5 +22,10 @@ namespace KairoServer.Domain.Events
             }
             return eventMetadata;
         }
+
+        public string ToJson()
+        {
+            return JsonSerializer.Serialize(this);
+        }
     }
 }

@@ -8,21 +8,21 @@ namespace KairoServer.Domain.Sources
 {
     public class Source
     {
-        public SourceId Id { get; }
+        public string Id { get; }
         public string Name { get; }
         public SourceType Type { get; }
         public string Configuration { get; }
         public bool Enabled { get; }
 
         public Source(
-            SourceId id,
+            string id,
             string name,
             SourceType type,
             string configuration,
             bool enabled)
         {
-            if (id == null)
-                throw new ArgumentNullException(nameof(id));
+            if (string.IsNullOrWhiteSpace(id))
+                throw new ArgumentException("Source ID cannot be null or whitespace.", nameof(id));
 
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Source name cannot be null or whitespace.", nameof(name));

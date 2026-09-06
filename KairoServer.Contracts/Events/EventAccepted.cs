@@ -9,7 +9,7 @@ namespace KairoServer.Contracts.Events
 {
 
     public sealed record EventAccepted(
-        EventId EventId,
+        Guid EventId,
         string EventType,
         string SourceId,
         DateTimeOffset OccurredAt);

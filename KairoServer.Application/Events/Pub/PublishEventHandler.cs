@@ -1,16 +1,12 @@
 ﻿using KairoServer.Application.Persistence;
 using KairoServer.Common;
+using KairoServer.Common.Logging;
 using KairoServer.Contracts.Events;
 using KairoServer.Domain.Events;
 using KairoServer.Domain.Outbox;
 using KairoServer.Domain.Sources;
 using System;
-using System.Collections.Generic;
-using System.Diagnostics.Tracing;
-using System.Linq;
-using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace KairoServer.Application.Events.Pub
 {
@@ -19,21 +15,30 @@ namespace KairoServer.Application.Events.Pub
         private readonly IEventRepository _eventRepository;
         private readonly IOutboxRepository _outboxRepository;
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IAppLogger<PublishEventHandler> _logger;
 
         public PublishEventHandler(
-            IEventRepository eventRepository, 
+            IEventRepository eventRepository,
             IOutboxRepository outboxRepository,
-            IUnitOfWork unitOfWork)
+            IUnitOfWork unitOfWork,
+            IAppLogger<PublishEventHandler> logger)
         {
             _eventRepository = eventRepository;
             _outboxRepository = outboxRepository;
             _unitOfWork = unitOfWork;
+            _logger = logger;
         }
 
         public async Task<Result<PublishEventResult>> HandleAsync(
             PublishEventCommand command,
             CancellationToken cancellationToken)
         {
+            _logger.Debug(
+                "Handling PublishEvent (idempotencyKey {IdempotencyKey}, type {Type}, source {Source}).",
+                command.IdempotencyKey,
+                command.Type,
+                command.SourceId);
+
             try
             {
                 var now = DateTimeOffset.UtcNow;
@@ -49,11 +54,12 @@ namespace KairoServer.Application.Events.Pub
                 var eventAccepted = new EventAccepted(
                     @event.Id,
                     @event.Type,
-                    @event.SourceId.Value(),
+                    @event.SourceId,
                     @event.OccurredAt
                 );
 
                 var outbox = OutboxMessage.Create(
+                    @event.Id,
                     OutboxMessageType.EventAccepted,
                     JsonSerializer.Serialize(eventAccepted),
                     now);
@@ -68,11 +74,24 @@ namespace KairoServer.Application.Events.Pub
 
                 _unitOfWork.Commit();
 
+                _logger.Information(
+                    "Event accepted {EventId} (type {Type}, source {Source}, outbox {OutboxId}).",
+                    @event.Id,
+                    @event.Type,
+                    @event.SourceId,
+                    outbox.Id);
+
                 return Result.Success(new PublishEventResult(@event.Id));
             }
             catch (Exception ex)
             {
                 _unitOfWork.Rollback();
+
+                _logger.Error(
+                    ex,
+                    "Failed to publish event (idempotencyKey {IdempotencyKey}, type {Type}).",
+                    command.IdempotencyKey,
+                    command.Type);
 
                 return Result.Failure<PublishEventResult>(ex);
             }

@@ -2,7 +2,7 @@
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Domain.Events;
-namespace KairoServer.Infastructure.Postgres
+namespace KairoServer.Infastructure.Persistence.Postgres
 {
     public class PostgresEventRepository : IEventRepository
     {
@@ -20,6 +20,7 @@ namespace KairoServer.Infastructure.Postgres
                     INSERT INTO events
                     (
                         id,
+                        idempotency_key,
                         type,
                         source_id,
                         occurred_at,
@@ -30,6 +31,7 @@ namespace KairoServer.Infastructure.Postgres
                     VALUES
                     (
                         @Id,
+                        @IdempotencyKey,
                         @Type,
                         @SourceId,
                         @OccurredAt,
@@ -48,11 +50,12 @@ namespace KairoServer.Infastructure.Postgres
                         new
                         {
                             @event.Id,
+                            @event.IdempotencyKey,
                             @event.Type,
                             @event.SourceId,
                             @event.OccurredAt,
                             @event.ReceivedAt,
-                            @event.Metadata,
+                            Metadata = @event.Metadata?.ToJson(),
                             @event.Payload
                         },
                         transaction,

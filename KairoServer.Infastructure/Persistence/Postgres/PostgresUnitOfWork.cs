@@ -6,9 +6,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace KairoServer.Infastructure.Postgres
+namespace KairoServer.Infastructure.Persistence.Postgres
 {
-    internal class PostgresUnitOfWork : IUnitOfWork, IDisposable
+    public class PostgresUnitOfWork : IUnitOfWork, IDisposable
     {
         private readonly IDatabaseConnectionFactory _connectionFactory;
         private IDbConnection? _connection;

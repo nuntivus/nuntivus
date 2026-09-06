@@ -9,20 +9,20 @@ namespace KairoServer.Domain.Events
 {
     public sealed class Event
     {
-        public EventId Id { get; }
+        public Guid Id { get; }
         public string IdempotencyKey { get; }
         public string Type { get; }
-        public SourceId SourceId { get; }
+        public string SourceId { get; }
         public string Payload { get; }
         public DateTimeOffset OccurredAt { get; }
         public DateTimeOffset ReceivedAt { get; }
         public EventMetadata? Metadata { get; }
 
         private Event(
-            EventId id,
+            Guid id,
             string idempotencyKey,
             string type,
-            SourceId sourceId,
+            string sourceId,
             string payload,
             DateTimeOffset occurredAt,
             DateTimeOffset receivedAt,
@@ -41,7 +41,7 @@ namespace KairoServer.Domain.Events
         public static Event Create(
             string idempotencyKey,
             string type,
-            SourceId sourceId,
+            string sourceId,
             DateTimeOffset occurredAt,
             string payload,
             EventMetadata? metadata = null)
@@ -49,11 +49,11 @@ namespace KairoServer.Domain.Events
             if (string.IsNullOrWhiteSpace(type))
                 throw new ArgumentException("Event type is required.");
 
-            if (sourceId == null)
+            if (string.IsNullOrWhiteSpace(sourceId))
                 throw new ArgumentException("Event source is required.");
 
             return new Event(
-                EventId.NewId(),
+                Guid.NewGuid(),
                 idempotencyKey,
                 type,
                 sourceId,
@@ -77,14 +77,13 @@ namespace KairoServer.Domain.Events
             if (string.IsNullOrWhiteSpace(sourceId))
                 throw new ArgumentException("Event source is required.");
 
-            var sourceIdObj = new SourceId(sourceId);
             var eventMetadata = metadata != null ? EventMetadata.Parse(metadata) : null;
 
             return new Event(
-                EventId.NewId(),
+                Guid.NewGuid(),
                 idempotencyKey,
                 type,
-                sourceIdObj,
+                sourceId,
                 payload,
                 occurredAt,
                 DateTimeOffset.UtcNow,
