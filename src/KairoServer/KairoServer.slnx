@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="../../README.md" />
+  </Folder>
   <Project Path="KairoServer.Api/KairoServer.Api.csproj" />
   <Project Path="KairoServer.Application/KairoServer.Application.csproj" />
   <Project Path="KairoServer.Contracts/KairoServer.Contracts.csproj" />
