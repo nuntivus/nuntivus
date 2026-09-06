@@ -1,9 +1,19 @@
 <Solution>
+  <Folder Name="/doc/">
+    <File Path="../../../Desktop/architecture .png" />
+    <File Path="../../../Desktop/technically flow.png" />
+  </Folder>
+  <Folder Name="/migration/">
+    <File Path="001_create_events.sql" />
+    <File Path="002_create_outbox_messages.sql" />
+  </Folder>
   <Folder Name="/Solution Items/">
+    <File Path="../../../Desktop/AI_CONTEXT.md" />
     <File Path="../../README.md" />
   </Folder>
   <Project Path="KairoServer.Api/KairoServer.Api.csproj" />
   <Project Path="KairoServer.Application/KairoServer.Application.csproj" />
+  <Project Path="KairoServer.Common/KairoServer.Common.csproj" Id="cb9b9f49-5153-447f-a7b1-dd8c89f2f0de" />
   <Project Path="KairoServer.Contracts/KairoServer.Contracts.csproj" />
   <Project Path="KairoServer.Domain/KairoServer.Domain.csproj" />
   <Project Path="KairoServer.Infastructure/KairoServer.Infastructure.csproj" />

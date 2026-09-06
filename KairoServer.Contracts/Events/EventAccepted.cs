@@ -1,0 +1,17 @@
+﻿using KairoServer.Domain.Events;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace KairoServer.Contracts.Events
+{
+
+    public sealed record EventAccepted(
+        EventId EventId,
+        string EventType,
+        string SourceId,
+        DateTimeOffset OccurredAt);
+
+}
