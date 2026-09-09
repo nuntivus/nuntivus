@@ -19,7 +19,6 @@ namespace KairoServer.Infastructure.Messaging.Nats
     /// </summary>
     public sealed class NatsEventBusPublisher : IEventBusPublisher
     {
-        private const string NatsMsgIdHeader = "Nats-Msg-Id";
 
         private readonly INatsJSContext _jetStream;
         private readonly NatsOption _options;
