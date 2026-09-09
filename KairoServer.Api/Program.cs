@@ -1,4 +1,5 @@
-using KairoServer.Application.Events.Pub;
+using KairoServer.Application.Customers;
+using KairoServer.Application.Events;
 using KairoServer.Application.Persistence;
 using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Persistence.Postgres;
@@ -25,9 +26,11 @@ builder.Services.AddSingleton<IDatabaseConnectionFactory>(
 builder.Services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
 builder.Services.AddScoped<IEventRepository, PostgresEventRepository>();
 builder.Services.AddScoped<IOutboxRepository, PostgresOutboxRepository>();
+builder.Services.AddScoped<ICustomerRepository, PostgresCustomerRepository>();
 
 // Application handlers
-builder.Services.AddScoped<IPublishEventHandler, PublishEventHandler>();
+builder.Services.AddScoped<IEventService, EventService>();
+builder.Services.AddScoped<ICustomerService, CustomerService>();
 
 var app = builder.Build();
 
@@ -45,3 +48,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// Exposed for WebApplicationFactory<Program> in integration tests.
+public partial class Program { }

@@ -6,6 +6,7 @@
   <Folder Name="/migration/">
     <File Path="001_create_events.sql" />
     <File Path="002_create_outbox_messages.sql" />
+    <File Path="003_create_customers.sql" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path="../../../Desktop/AI_CONTEXT.md" />
@@ -18,5 +19,6 @@
   <Project Path="KairoServer.Domain/KairoServer.Domain.csproj" />
   <Project Path="KairoServer.Infastructure/KairoServer.Infastructure.csproj" />
   <Project Path="KairoServer.UnitTests/KairoServer.UnitTests.csproj" />
+  <Project Path="KairoServer.IntegrationTests/KairoServer.IntegrationTests.csproj" />
   <Project Path="KairoServer.Worker/KairoServer.Worker.csproj" />
 </Solution>

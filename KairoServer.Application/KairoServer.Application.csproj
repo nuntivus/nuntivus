@@ -16,4 +16,9 @@
     <ProjectReference Include="..\KairoServer.Domain\KairoServer.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Customers\Disable\" />
+    <Folder Include="Events\Pub\" />
+  </ItemGroup>
+
 </Project>
