@@ -1,3 +1,5 @@
+using KairoServer.Application.Contracts;
+using KairoServer.Application.Contracts.Destinations;
 using KairoServer.Application.Customers;
 using KairoServer.Application.Events;
 using KairoServer.Application.Persistence;
@@ -6,17 +8,13 @@ using KairoServer.Infastructure.Persistence.Postgres;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Logging
 builder.AddKairoLogging();
-
-// Add services to the container.
 
 builder.Services.AddControllers();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Persistence
 var postgresConnectionString = builder.Configuration.GetConnectionString("Postgres")
     ?? throw new InvalidOperationException("Missing ConnectionStrings:Postgres configuration.");
 
@@ -27,10 +25,14 @@ builder.Services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
 builder.Services.AddScoped<IEventRepository, PostgresEventRepository>();
 builder.Services.AddScoped<IOutboxRepository, PostgresOutboxRepository>();
 builder.Services.AddScoped<ICustomerRepository, PostgresCustomerRepository>();
+builder.Services.AddScoped<IContractRepository, PostgresContractRepository>();
 
-// Application handlers
 builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
+builder.Services.AddScoped<IContractService, ContractService>();
+
+builder.Services.AddSingleton<IDestinationConfigHandler, HttpDestinationConfigHandler>();
+builder.Services.AddSingleton<IDestinationConfigDispatcher, DestinationConfigDispatcher>();
 
 var app = builder.Build();
 

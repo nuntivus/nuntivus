@@ -1,8 +1,10 @@
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Api.Common;
+using KairoServer.Application.Contracts;
 using KairoServer.Application.Customers;
 using KairoServer.Common.Logging;
+using KairoServer.Contracts.CustomerContracts;
 using KairoServer.Contracts.Customers;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,13 +15,16 @@ namespace KairoServer.Api.Controllers.Customers
     public class CustomersController : Controller
     {
         private readonly ICustomerService _customers;
+        private readonly IContractService _contracts;
         private readonly IAppLogger<CustomersController> _logger;
 
         public CustomersController(
             ICustomerService customers,
+            IContractService contracts,
             IAppLogger<CustomersController> logger)
         {
             _customers = customers;
+            _contracts = contracts;
             _logger = logger;
         }
 
@@ -45,11 +50,10 @@ namespace KairoServer.Api.Controllers.Customers
 
         [HttpGet]
         public async Task<IActionResult> List(
-            [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 20,
-            CancellationToken cancellationToken = default)
+            [FromQuery] PagedRequest pagination,
+            CancellationToken cancellationToken)
         {
-            var result = await _customers.ListAsync(page, pageSize, cancellationToken);
+            var result = await _customers.ListAsync(pagination.Page, pagination.PageSize, cancellationToken);
 
             return result.ToActionResult(paged =>
             {
@@ -77,6 +81,28 @@ namespace KairoServer.Api.Controllers.Customers
         {
             var result = await _customers.DisableAsync(id, cancellationToken);
             return result.ToOk();
+        }
+
+        [HttpGet("{id}/contracts")]
+        public async Task<IActionResult> ListContracts(
+            string id,
+            [FromQuery] PagedRequest pagination,
+            CancellationToken cancellationToken)
+        {
+            var result = await _contracts.ListByCustomerAsync(id, pagination.Page, pagination.PageSize, cancellationToken);
+
+            return result.ToActionResult(paged =>
+            {
+                var body = new PagedResponse<ContractView>(
+                    paged.Items,
+                    paged.Page,
+                    paged.PageSize,
+                    paged.TotalCount,
+                    paged.TotalPages,
+                    paged.HasPrevious,
+                    paged.HasNext);
+                return Ok(body);
+            });
         }
     }
 }

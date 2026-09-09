@@ -33,6 +33,7 @@
 
   <ItemGroup>
     <None Update="..\003_create_customers.sql" Link="Migrations\003_create_customers.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="..\004_create_contracts.sql" Link="Migrations\004_create_contracts.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

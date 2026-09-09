@@ -1,0 +1,33 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using KairoServer.Common;
+using KairoServer.Contracts.CustomerContracts;
+
+namespace KairoServer.Application.Contracts
+{
+    public interface IContractService
+    {
+        Task<Result<ContractCreated>> CreateAsync(
+            CreateContractRequest request,
+            CancellationToken cancellationToken);
+
+        Task<Result<ContractView>> GetByIdAsync(
+            Guid id,
+            CancellationToken cancellationToken);
+
+        Task<Result<PagedResult<ContractView>>> ListByCustomerAsync(
+            string customerId,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken);
+
+        Task<Result<ContractView>> EnableAsync(
+            Guid id,
+            CancellationToken cancellationToken);
+
+        Task<Result<ContractView>> DisableAsync(
+            Guid id,
+            CancellationToken cancellationToken);
+    }
+}
