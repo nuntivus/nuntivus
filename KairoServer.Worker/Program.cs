@@ -3,6 +3,7 @@ using KairoServer.Application.Matching;
 using KairoServer.Application.Messaging;
 using KairoServer.Application.Persistence;
 using KairoServer.Infastructure.Caching;
+using KairoServer.Infastructure.Deliveries;
 using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Messaging.Nats;
 using KairoServer.Infastructure.Persistence.Caching;
@@ -90,6 +91,9 @@ builder.Services.AddSingleton<INatsJSContext>(sp =>
     new NatsJSContext(sp.GetRequiredService<INatsConnection>()));
 
 builder.Services.AddSingleton<IEventBusPublisher, NatsEventBusPublisher>();
+
+// Delivery execution boundary (HTTP transport for now).
+builder.Services.AddDeliveryExecution();
 
 // Ensure the JetStream stream exists before publishers start.
 builder.Services.AddHostedService<NatsJetStreamBootstrapper>();
