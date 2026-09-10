@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Common.Logging;
+using KairoServer.Contracts.Deliveries;
 using KairoServer.Contracts.Events;
 using KairoServer.Domain.Deliveries;
+using KairoServer.Domain.Outbox;
 
 namespace KairoServer.Application.Matching
 {
@@ -15,6 +18,7 @@ namespace KairoServer.Application.Matching
         private readonly IEventRepository _events;
         private readonly IContractRepository _contracts;
         private readonly IDeliveryRepository _deliveries;
+        private readonly IOutboxRepository _outbox;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IAppLogger<ContractMatcherService> _logger;
 
@@ -22,12 +26,14 @@ namespace KairoServer.Application.Matching
             IEventRepository events,
             IContractRepository contracts,
             IDeliveryRepository deliveries,
+            IOutboxRepository outbox,
             IUnitOfWork unitOfWork,
             IAppLogger<ContractMatcherService> logger)
         {
             _events = events;
             _contracts = contracts;
             _deliveries = deliveries;
+            _outbox = outbox;
             _unitOfWork = unitOfWork;
             _logger = logger;
         }
@@ -84,6 +90,7 @@ namespace KairoServer.Application.Matching
                         match.CustomerId,
                         authoritative.Type,
                         authoritative.Payload,
+                        match.Destination,
                         now));
                 }
 
@@ -92,6 +99,28 @@ namespace KairoServer.Application.Matching
                 var insertResult = await _deliveries.InsertPendingAsync(
                     deliveries, _unitOfWork, cancellationToken);
                 var inserted = insertResult.EnsureValue();
+
+                foreach (var delivery in deliveries)
+                {
+                    var ready = new DeliveryReady(
+                        delivery.Id,
+                        delivery.EventId,
+                        delivery.ContractId,
+                        delivery.CustomerId,
+                        delivery.EventType,
+                        delivery.Payload,
+                        authoritative.OccurredAt);
+
+                    var outboxMessage = OutboxMessage.Create(
+                        delivery.EventId,
+                        OutboxMessageType.DeliveryReady,
+                        JsonSerializer.Serialize(ready),
+                        now);
+
+                    var outboxResult = await _outbox.InsertAsync(
+                        outboxMessage, _unitOfWork, cancellationToken);
+                    outboxResult.EnsureSuccess();
+                }
 
                 _unitOfWork.Commit();
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -269,7 +270,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     return Result.Success<IReadOnlyList<ContractMatch>>(Array.Empty<ContractMatch>());
 
                 const string sql = """
-                    SELECT c.id AS ContractId, c.customer_id AS CustomerId
+                    SELECT c.id                 AS ContractId,
+                           c.customer_id        AS CustomerId,
+                           c.destination_type   AS DestinationType,
+                           c.destination_config AS DestinationConfig
                     FROM contracts c
                     INNER JOIN contract_event_types cet ON cet.contract_id = c.id
                     INNER JOIN customers cu             ON cu.id = c.customer_id
@@ -281,12 +285,22 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 await using var connection = CreateConnection();
                 await connection.OpenAsync(cancellationToken);
 
-                var rows = await connection.QueryAsync<ContractMatch>(new CommandDefinition(
-                    sql,
-                    new { EventType = eventType },
-                    cancellationToken: cancellationToken));
+                var rows = await connection.QueryAsync<(Guid ContractId, string CustomerId, string DestinationType, string DestinationConfig)>(
+                    new CommandDefinition(
+                        sql,
+                        new { EventType = eventType },
+                        cancellationToken: cancellationToken));
 
-                return Result.Success<IReadOnlyList<ContractMatch>>(rows.AsList());
+                var matches = rows
+                    .Select(r => new ContractMatch(
+                        r.ContractId,
+                        r.CustomerId,
+                        new Destination(
+                            Enum.Parse<DestinationType>(r.DestinationType),
+                            r.DestinationConfig)))
+                    .ToList();
+
+                return Result.Success<IReadOnlyList<ContractMatch>>(matches);
             }
             catch (Exception ex)
             {

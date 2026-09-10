@@ -55,7 +55,7 @@ namespace KairoServer.Infastructure.Messaging.Nats
         /// <summary>
         /// Subject filters the stream captures. Wildcards are supported (e.g. "event.&gt;").
         /// </summary>
-        public string[] Subjects { get; set; } = new[] { "event.>" };
+        public string[] Subjects { get; set; } = new[] { "event.>", "delivery.>" };
 
         /// <summary>
         /// Duplicate detection window used by JetStream for Nats-Msg-Id deduplication.

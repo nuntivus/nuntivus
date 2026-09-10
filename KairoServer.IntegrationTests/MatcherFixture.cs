@@ -112,6 +112,8 @@ namespace KairoServer.IntegrationTests
                 sp.GetRequiredService<CacheOption>()));
 
             services.AddScoped<IDeliveryRepository, PostgresDeliveryRepository>();
+            services.AddScoped<IOutboxRepository, PostgresOutboxRepository>();
+            services.AddSingleton<IOutboxReader, PostgresOutboxReader>();
             services.AddScoped<IContractMatcherService, ContractMatcherService>();
 
             var natsOption = new NatsOption
@@ -119,7 +121,7 @@ namespace KairoServer.IntegrationTests
                 Url = NatsUrl,
                 Name = "kairo-tests",
                 Stream = "KAIRO_EVENTS",
-                Subjects = new[] { "event.>" },
+                Subjects = new[] { "event.>", "delivery.>" },
             };
             services.AddSingleton(natsOption);
 

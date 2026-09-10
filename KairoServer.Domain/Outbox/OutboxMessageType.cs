@@ -9,5 +9,6 @@ namespace KairoServer.Domain.Outbox
     public class OutboxMessageType
     {
         public const string EventAccepted = "event.accepted";
+        public const string DeliveryReady = "delivery.ready";
     }
 }

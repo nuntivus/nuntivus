@@ -1,4 +1,5 @@
 using System;
+using KairoServer.Domain.Contracts;
 
 namespace KairoServer.Domain.Deliveries
 {
@@ -6,8 +7,10 @@ namespace KairoServer.Domain.Deliveries
     /// A logical delivery of an Event to a specific Contract.
     /// Created (idempotently) by the contract matcher stage; later stages
     /// drive it through <see cref="DeliveryStatus.InFlight"/> to a terminal state.
-    /// The <see cref="EventType"/> and <see cref="Payload"/> are denormalized
-    /// so the dispatcher can render/deliver without rejoining events.
+    /// The <see cref="EventType"/>, <see cref="Payload"/>, <see cref="DestinationType"/>
+    /// and <see cref="DestinationConfiguration"/> are denormalized so the dispatcher
+    /// can render/deliver reliably without rejoining events or contracts, and so
+    /// that later contract edits do not retroactively affect in-flight deliveries.
     /// </summary>
     public sealed class Delivery
     {
@@ -17,7 +20,12 @@ namespace KairoServer.Domain.Deliveries
         public string CustomerId { get; }
         public string EventType { get; }
         public string Payload { get; }
+        public DestinationType DestinationType { get; }
+        public string DestinationConfiguration { get; }
         public DeliveryStatus Status { get; private set; }
+        public int AttemptCount { get; private set; }
+        public string? LastError { get; private set; }
+        public DateTimeOffset? NextAttemptAt { get; private set; }
         public DateTimeOffset CreatedAt { get; }
         public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -28,7 +36,12 @@ namespace KairoServer.Domain.Deliveries
             string customerId,
             string eventType,
             string payload,
+            DestinationType destinationType,
+            string destinationConfiguration,
             DeliveryStatus status,
+            int attemptCount,
+            string? lastError,
+            DateTimeOffset? nextAttemptAt,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt)
         {
@@ -38,7 +51,12 @@ namespace KairoServer.Domain.Deliveries
             CustomerId = customerId;
             EventType = eventType;
             Payload = payload;
+            DestinationType = destinationType;
+            DestinationConfiguration = destinationConfiguration;
             Status = status;
+            AttemptCount = attemptCount;
+            LastError = lastError;
+            NextAttemptAt = nextAttemptAt;
             CreatedAt = createdAt;
             UpdatedAt = updatedAt;
         }
@@ -49,6 +67,7 @@ namespace KairoServer.Domain.Deliveries
             string customerId,
             string eventType,
             string payload,
+            Destination destination,
             DateTimeOffset now)
         {
             if (eventId == Guid.Empty)
@@ -59,17 +78,73 @@ namespace KairoServer.Domain.Deliveries
             ArgumentException.ThrowIfNullOrWhiteSpace(customerId);
             ArgumentException.ThrowIfNullOrWhiteSpace(eventType);
             ArgumentException.ThrowIfNullOrWhiteSpace(payload);
+            ArgumentNullException.ThrowIfNull(destination);
 
             return new Delivery(
-                Guid.NewGuid(),
+                UuidV7.Create(now),
                 eventId,
                 contractId,
                 customerId,
                 eventType,
                 payload,
+                destination.Type,
+                destination.Configuration,
                 DeliveryStatus.Pending,
-                now,
-                now);
+                attemptCount: 0,
+                lastError: null,
+                nextAttemptAt: null,
+                createdAt: now,
+                updatedAt: now);
+        }
+
+        /// <summary>
+        /// Transitions to <see cref="DeliveryStatus.InFlight"/> and increments the attempt counter.
+        /// Only valid from <see cref="DeliveryStatus.Pending"/> or <see cref="DeliveryStatus.Failed"/>
+        /// (retry).
+        /// </summary>
+        public void MarkInFlight(DateTimeOffset now)
+        {
+            if (Status is not (DeliveryStatus.Pending or DeliveryStatus.Failed))
+                throw new InvalidOperationException(
+                    $"Cannot transition to InFlight from {Status}.");
+
+            Status = DeliveryStatus.InFlight;
+            AttemptCount++;
+            NextAttemptAt = null;
+            UpdatedAt = now;
+        }
+
+        /// <summary>
+        /// Transitions to the terminal <see cref="DeliveryStatus.Delivered"/> state.
+        /// </summary>
+        public void MarkDelivered(DateTimeOffset now)
+        {
+            if (Status != DeliveryStatus.InFlight)
+                throw new InvalidOperationException(
+                    $"Cannot transition to Delivered from {Status}.");
+
+            Status = DeliveryStatus.Delivered;
+            LastError = null;
+            NextAttemptAt = null;
+            UpdatedAt = now;
+        }
+
+        /// <summary>
+        /// Records a failed attempt. When <paramref name="nextAttemptAt"/> is provided
+        /// the delivery is eligible for retry; otherwise it becomes terminal.
+        /// </summary>
+        public void MarkFailed(string error, DateTimeOffset? nextAttemptAt, DateTimeOffset now)
+        {
+            if (Status != DeliveryStatus.InFlight)
+                throw new InvalidOperationException(
+                    $"Cannot transition to Failed from {Status}.");
+
+            ArgumentException.ThrowIfNullOrWhiteSpace(error);
+
+            Status = DeliveryStatus.Failed;
+            LastError = error;
+            NextAttemptAt = nextAttemptAt;
+            UpdatedAt = now;
         }
 
         /// <summary>
@@ -83,9 +158,16 @@ namespace KairoServer.Domain.Deliveries
             string customerId,
             string eventType,
             string payload,
+            DestinationType destinationType,
+            string destinationConfiguration,
             DeliveryStatus status,
+            int attemptCount,
+            string? lastError,
+            DateTimeOffset? nextAttemptAt,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt) =>
-            new(id, eventId, contractId, customerId, eventType, payload, status, createdAt, updatedAt);
+            new(id, eventId, contractId, customerId, eventType, payload,
+                destinationType, destinationConfiguration, status,
+                attemptCount, lastError, nextAttemptAt, createdAt, updatedAt);
     }
 }

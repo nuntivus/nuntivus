@@ -33,7 +33,12 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         customer_id,
                         event_type,
                         payload,
+                        destination_type,
+                        destination_config,
                         status,
+                        attempt_count,
+                        last_error,
+                        next_attempt_at,
                         created_at,
                         updated_at
                     )
@@ -45,7 +50,12 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         @CustomerId,
                         @EventType,
                         CAST(@Payload AS jsonb),
+                        @DestinationType,
+                        CAST(@DestinationConfiguration AS jsonb),
                         @Status,
+                        @AttemptCount,
+                        @LastError,
+                        @NextAttemptAt,
                         @CreatedAt,
                         @UpdatedAt
                     )
@@ -68,7 +78,12 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                             delivery.CustomerId,
                             delivery.EventType,
                             delivery.Payload,
+                            DestinationType = delivery.DestinationType.ToString(),
+                            delivery.DestinationConfiguration,
                             Status = delivery.Status.ToString(),
+                            delivery.AttemptCount,
+                            delivery.LastError,
+                            delivery.NextAttemptAt,
                             delivery.CreatedAt,
                             delivery.UpdatedAt,
                         },
