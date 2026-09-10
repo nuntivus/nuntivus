@@ -12,6 +12,12 @@ namespace KairoServer.Domain.Events
         public Guid Id { get; }
         public string IdempotencyKey { get; }
         public string Type { get; }
+        /// <summary>
+        /// Canonical identifier of the originating <see cref="Sources.Source"/>.
+        /// This value is preserved verbatim from ingestion onto the canonical Event and
+        /// must never be replaced with, or confused with, a destination identifier.
+        /// It corresponds to the normalized value produced by <see cref="Sources.SourceId"/>.
+        /// </summary>
         public string SourceId { get; }
         public string Payload { get; }
         public DateTimeOffset OccurredAt { get; }

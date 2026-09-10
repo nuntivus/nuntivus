@@ -1,11 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace KairoServer.Domain.Sources
+﻿namespace KairoServer.Domain.Sources
 {
+    /// <summary>
+    /// Categorizes the ingestion adapter that produces events for a <see cref="Source"/>.
+    /// New values should be added as new adapter families are introduced.
+    /// </summary>
     public enum SourceType
     {
         HTTP_API,
