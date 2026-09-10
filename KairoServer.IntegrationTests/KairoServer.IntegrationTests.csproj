@@ -16,6 +16,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="Npgsql" Version="10.0.3" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="3.10.0" />
+    <PackageReference Include="Testcontainers" Version="3.10.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
@@ -25,6 +26,9 @@
     <ProjectReference Include="..\KairoServer.Application\KairoServer.Application.csproj" />
     <ProjectReference Include="..\KairoServer.Common\KairoServer.Common.csproj" />
     <ProjectReference Include="..\KairoServer.Contracts\KairoServer.Contracts.csproj" />
+    <ProjectReference Include="..\KairoServer.Domain\KairoServer.Domain.csproj" />
+    <ProjectReference Include="..\KairoServer.Infastructure\KairoServer.Infastructure.csproj" />
+    <ProjectReference Include="..\KairoServer.Worker\KairoServer.Worker.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,6 +38,9 @@
   <ItemGroup>
     <None Update="..\003_create_customers.sql" Link="Migrations\003_create_customers.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="..\004_create_contracts.sql" Link="Migrations\004_create_contracts.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="..\001_create_events.sql" Link="Migrations\001_create_events.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="..\002_create_outbox_messages.sql" Link="Migrations\002_create_outbox_messages.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="..\005_create_deliveries.sql" Link="Migrations\005_create_deliveries.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -1,9 +1,12 @@
+using KairoServer.Application.Caching;
 using KairoServer.Application.Contracts;
 using KairoServer.Application.Contracts.Destinations;
 using KairoServer.Application.Customers;
 using KairoServer.Application.Events;
 using KairoServer.Application.Persistence;
+using KairoServer.Infastructure.Caching;
 using KairoServer.Infastructure.Logging;
+using KairoServer.Infastructure.Persistence.Caching;
 using KairoServer.Infastructure.Persistence.Postgres;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,11 +24,32 @@ var postgresConnectionString = builder.Configuration.GetConnectionString("Postgr
 builder.Services.AddSingleton<IDatabaseConnectionFactory>(
     _ => new PostgresDatabaseConnectionFactory(postgresConnectionString));
 
+// Caching (in-memory, 60s TTL; configurable via "Cache" section).
+var cacheOption = builder.Configuration.GetSection("Cache").Get<CacheOption>() ?? new CacheOption();
+builder.Services.AddSingleton(cacheOption);
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<ICacheStore, InMemoryCacheStore>();
+
 builder.Services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
-builder.Services.AddScoped<IEventRepository, PostgresEventRepository>();
 builder.Services.AddScoped<IOutboxRepository, PostgresOutboxRepository>();
-builder.Services.AddScoped<ICustomerRepository, PostgresCustomerRepository>();
-builder.Services.AddScoped<IContractRepository, PostgresContractRepository>();
+
+builder.Services.AddScoped<PostgresEventRepository>();
+builder.Services.AddScoped<IEventRepository>(sp => new CachedEventRepository(
+    sp.GetRequiredService<PostgresEventRepository>(),
+    sp.GetRequiredService<ICacheStore>(),
+    sp.GetRequiredService<CacheOption>()));
+
+builder.Services.AddScoped<PostgresCustomerRepository>();
+builder.Services.AddScoped<ICustomerRepository>(sp => new CachedCustomerRepository(
+    sp.GetRequiredService<PostgresCustomerRepository>(),
+    sp.GetRequiredService<ICacheStore>(),
+    sp.GetRequiredService<CacheOption>()));
+
+builder.Services.AddScoped<PostgresContractRepository>();
+builder.Services.AddScoped<IContractRepository>(sp => new CachedContractRepository(
+    sp.GetRequiredService<PostgresContractRepository>(),
+    sp.GetRequiredService<ICacheStore>(),
+    sp.GetRequiredService<CacheOption>()));
 
 builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();

@@ -259,6 +259,41 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        public async Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(
+            string eventType,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(eventType))
+                    return Result.Success<IReadOnlyList<ContractMatch>>(Array.Empty<ContractMatch>());
+
+                const string sql = """
+                    SELECT c.id AS ContractId, c.customer_id AS CustomerId
+                    FROM contracts c
+                    INNER JOIN contract_event_types cet ON cet.contract_id = c.id
+                    INNER JOIN customers cu             ON cu.id = c.customer_id
+                    WHERE c.enabled = TRUE
+                      AND cu.enabled = TRUE
+                      AND cet.event_type = @EventType;
+                    """;
+
+                await using var connection = CreateConnection();
+                await connection.OpenAsync(cancellationToken);
+
+                var rows = await connection.QueryAsync<ContractMatch>(new CommandDefinition(
+                    sql,
+                    new { EventType = eventType },
+                    cancellationToken: cancellationToken));
+
+                return Result.Success<IReadOnlyList<ContractMatch>>(rows.AsList());
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<IReadOnlyList<ContractMatch>>(ex);
+            }
+        }
+
         private static async Task InsertEventTypesAsync(
             System.Data.IDbConnection connection,
             System.Data.IDbTransaction transaction,

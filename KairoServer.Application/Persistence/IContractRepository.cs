@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Common;
@@ -25,6 +26,15 @@ namespace KairoServer.Application.Persistence
             string customerId,
             int page,
             int pageSize,
+            CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Returns the ids of all enabled Contracts (with enabled Customers)
+        /// whose subscribed event types include <paramref name="eventType"/>.
+        /// Hot path invoked once per accepted event by the contract matcher.
+        /// </summary>
+        Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(
+            string eventType,
             CancellationToken cancellationToken);
     }
 }

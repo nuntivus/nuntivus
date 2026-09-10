@@ -15,5 +15,13 @@ namespace KairoServer.Application.Persistence
             Event @event,
             IUnitOfWork uow,
             CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Loads an <see cref="Event"/> by id from the authoritative store,
+        /// or returns a successful <c>null</c> result when it does not exist.
+        /// </summary>
+        Task<Result<Event?>> GetByIdAsync(
+            Guid id,
+            CancellationToken cancellationToken);
     }
 }

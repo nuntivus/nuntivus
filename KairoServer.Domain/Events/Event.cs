@@ -95,5 +95,21 @@ namespace KairoServer.Domain.Events
                 DateTimeOffset.UtcNow,
                 eventMetadata);
         }
+
+        /// <summary>
+        /// Rehydrates an <see cref="Event"/> from persistence. Bypasses invariant
+        /// enforcement on the assumption the stored row is already valid, and
+        /// preserves the authoritative <paramref name="id"/> and <paramref name="receivedAt"/>.
+        /// </summary>
+        public static Event Rehydrate(
+            Guid id,
+            string idempotencyKey,
+            string type,
+            string sourceId,
+            DateTimeOffset occurredAt,
+            DateTimeOffset receivedAt,
+            string payload,
+            EventMetadata? metadata) =>
+            new(id, idempotencyKey, type, sourceId, payload, occurredAt, receivedAt, metadata);
     }
 }
