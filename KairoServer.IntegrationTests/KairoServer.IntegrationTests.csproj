@@ -41,6 +41,7 @@
     <None Update="..\001_create_events.sql" Link="Migrations\001_create_events.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="..\002_create_outbox_messages.sql" Link="Migrations\002_create_outbox_messages.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="..\005_create_deliveries.sql" Link="Migrations\005_create_deliveries.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Migrations\006_create_delivery_attempts.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

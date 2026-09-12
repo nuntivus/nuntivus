@@ -103,7 +103,7 @@ namespace KairoServer.Infastructure.Deliveries.Http
             try
             {
                 using var response = await client.SendAsync(httpRequest, linkedCts.Token);
-                return ClassifyResponse(response, request);
+                return await ClassifyResponseAsync(response, request, linkedCts.Token);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -174,9 +174,13 @@ namespace KairoServer.Infastructure.Deliveries.Http
             }
         }
 
-        private static DeliveryExecutionResult ClassifyResponse(
+        /// <summary>Max bytes of response body captured for observability.</summary>
+        public const int MaxResponseBodyBytes = 1024;
+
+        private static async Task<DeliveryExecutionResult> ClassifyResponseAsync(
             HttpResponseMessage response,
-            DeliveryExecutionRequest request)
+            DeliveryExecutionRequest request,
+            CancellationToken cancellationToken)
         {
             var statusCode = (int)response.StatusCode;
             var meta = new System.Collections.Generic.Dictionary<string, string>
@@ -189,12 +193,22 @@ namespace KairoServer.Infastructure.Deliveries.Http
                 return DeliveryExecutionResult.Success(meta);
             }
 
+            var body = await ReadBoundedBodyAsync(response, cancellationToken);
+            if (!string.IsNullOrEmpty(body))
+            {
+                meta["responseBody"] = body;
+            }
+
             var retryAfter = response.Headers.RetryAfter?.Delta
                 ?? (response.Headers.RetryAfter?.Date is { } d
                     ? d - DateTimeOffset.UtcNow
                     : (TimeSpan?)null);
 
             var error = $"HTTP {statusCode} {response.ReasonPhrase}".Trim();
+            if (!string.IsNullOrEmpty(body))
+            {
+                error = $"{error} :: {body}";
+            }
 
             return response.StatusCode switch
             {
@@ -211,6 +225,32 @@ namespace KairoServer.Infastructure.Deliveries.Http
                 _ => DeliveryExecutionResult.Failure(
                     DeliveryFailureCategory.Transient, error, retryAfter, meta),
             };
+        }
+
+        private static async Task<string?> ReadBoundedBodyAsync(
+            HttpResponseMessage response,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                var buffer = new byte[MaxResponseBodyBytes];
+                var read = 0;
+                while (read < buffer.Length)
+                {
+                    var n = await stream.ReadAsync(
+                        buffer.AsMemory(read, buffer.Length - read),
+                        cancellationToken);
+                    if (n == 0) break;
+                    read += n;
+                }
+                if (read == 0) return null;
+                return Encoding.UTF8.GetString(buffer, 0, read);
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

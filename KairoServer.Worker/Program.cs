@@ -1,4 +1,5 @@
 using KairoServer.Application.Caching;
+using KairoServer.Application.Deliveries.Execution;
 using KairoServer.Application.Matching;
 using KairoServer.Application.Messaging;
 using KairoServer.Application.Persistence;
@@ -8,6 +9,7 @@ using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Messaging.Nats;
 using KairoServer.Infastructure.Persistence.Caching;
 using KairoServer.Infastructure.Persistence.Postgres;
+using KairoServer.Worker.Deliveries;
 using KairoServer.Worker.Matching;
 using KairoServer.Worker.Outbox;
 using NATS.Client.Core;
@@ -58,6 +60,17 @@ builder.Services.AddScoped<IDeliveryRepository, PostgresDeliveryRepository>();
 
 builder.Services.AddScoped<IContractMatcherService, ContractMatcherService>();
 
+// Delivery dispatcher pipeline options.
+var deliveryOption = builder.Configuration.GetSection("Delivery").Get<DeliveryOption>()
+    ?? new DeliveryOption();
+builder.Services.AddSingleton(deliveryOption);
+
+var dispatcherOption = builder.Configuration.GetSection("DeliveryDispatcher").Get<DeliveryDispatcherOption>()
+    ?? new DeliveryDispatcherOption();
+builder.Services.AddSingleton(dispatcherOption);
+
+builder.Services.AddScoped<IDeliveryDispatcherService, DeliveryDispatcherService>();
+
 // NATS / JetStream
 var natsOption = builder.Configuration.GetSection("Nats").Get<NatsOption>()
     ?? new NatsOption();
@@ -101,6 +114,7 @@ builder.Services.AddHostedService<NatsJetStreamBootstrapper>();
 // Hosted workers
 builder.Services.AddHostedService<OutboxPublisherWorker>();
 builder.Services.AddHostedService<ContractMatcherWorker>();
+builder.Services.AddHostedService<DeliveryDispatcherWorker>();
 
 var host = builder.Build();
 host.Run();

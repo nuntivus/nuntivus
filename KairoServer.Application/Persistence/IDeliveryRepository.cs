@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,5 +20,34 @@ namespace KairoServer.Application.Persistence
             IReadOnlyCollection<Delivery> deliveries,
             IUnitOfWork uow,
             CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Loads a <see cref="Delivery"/> by id. Returns <c>null</c> when the
+        /// row does not exist.
+        /// </summary>
+        Task<Result<Delivery?>> GetByIdAsync(
+            Guid deliveryId,
+            CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Persists the current state of a <see cref="Delivery"/> back to the
+        /// store. Uses the row's <c>updated_at</c> as an optimistic guard so
+        /// concurrent dispatchers cannot clobber each other's transitions.
+        /// </summary>
+        Task<Result<bool>> UpdateAsync(
+            Delivery delivery,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Appends a <see cref="DeliveryAttempt"/> row. Duplicate
+        /// (delivery_id, attempt_number) pairs are ignored so retries of the
+        /// same in-flight dispatch stay idempotent.
+        /// </summary>
+        Task<Result<int>> AddAttemptAsync(
+            DeliveryAttempt attempt,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken);
     }
 }
+

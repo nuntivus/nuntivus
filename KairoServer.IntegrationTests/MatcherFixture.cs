@@ -69,7 +69,7 @@ namespace KairoServer.IntegrationTests
             await using var conn = new NpgsqlConnection(ConnectionString);
             await conn.OpenAsync();
             // deliveries cascades from contracts/customers/events; customers cascades cover contracts.
-            await conn.ExecuteAsync("TRUNCATE TABLE deliveries, outbox_messages, events, contract_event_types, contracts, customers CASCADE;");
+            await conn.ExecuteAsync("TRUNCATE TABLE delivery_attempts, deliveries, outbox_messages, events, contract_event_types, contracts, customers CASCADE;");
         }
 
         /// <summary>
@@ -158,6 +158,7 @@ namespace KairoServer.IntegrationTests
                          "003_create_customers.sql",
                          "004_create_contracts.sql",
                          "005_create_deliveries.sql",
+                         "006_create_delivery_attempts.sql",
                      })
             {
                 var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

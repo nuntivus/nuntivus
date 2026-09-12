@@ -102,7 +102,7 @@ namespace KairoServer.IntegrationTests
             var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
             using var uow = new PostgresUnitOfWork(factory);
             uow.Begin(true);
-            var repo = new PostgresDeliveryRepository();
+            var repo = new PostgresDeliveryRepository(factory);
             var result = await repo.InsertPendingAsync(new[] { delivery }, uow, CancellationToken.None);
             uow.Commit();
             return result.EnsureValue();
