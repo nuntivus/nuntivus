@@ -58,12 +58,28 @@ namespace KairoServer.Application.Deliveries.Execution
                 return Result.Success(DeliveryDispatchOutcome.AlreadyTerminal);
             }
 
+            if (delivery.Status is DeliveryStatus.Dead)
+            {
+                return Result.Success(DeliveryDispatchOutcome.AlreadyTerminal);
+            }
+
             if (delivery.Status is DeliveryStatus.Failed && delivery.NextAttemptAt is null)
             {
                 return Result.Success(DeliveryDispatchOutcome.AlreadyTerminal);
             }
 
             var now = DateTimeOffset.UtcNow;
+            var expectedUpdatedAt = delivery.UpdatedAt;
+            if (delivery.Status is DeliveryStatus.Failed
+                && delivery.NextAttemptAt is { } nextAttemptAt
+                && nextAttemptAt > now)
+            {
+                _logger.Information(
+                    "Delivery {DeliveryId} retry deferred until {NextAttemptAt}; skipping early execution.",
+                    delivery.Id, nextAttemptAt);
+                return Result.Success(DeliveryDispatchOutcome.Skipped);
+            }
+
             try
             {
                 delivery.MarkInFlight(now);
@@ -123,6 +139,10 @@ namespace KairoServer.Application.Deliveries.Execution
             {
                 delivery.MarkDelivered(finalizedNow);
             }
+            else if (retry is null)
+            {
+                delivery.MarkDead(execution.Error ?? "Delivery failed.", finalizedNow);
+            }
             else
             {
                 delivery.MarkFailed(execution.Error ?? "Delivery failed.", retry, finalizedNow);
@@ -131,7 +151,21 @@ namespace KairoServer.Application.Deliveries.Execution
             _unitOfWork.Begin(true);
             try
             {
-                (await _deliveries.UpdateAsync(delivery, _unitOfWork, cancellationToken)).EnsureSuccess();
+                var updateResult = await _deliveries.UpdateAsync(
+                    delivery,
+                    expectedUpdatedAt,
+                    _unitOfWork,
+                    cancellationToken);
+                updateResult.EnsureSuccess();
+                if (!updateResult.Value)
+                {
+                    _unitOfWork.Rollback();
+                    _logger.Warning(
+                        "Concurrent update detected for delivery {DeliveryId}; skipping duplicate dispatch result.",
+                        delivery.Id);
+                    return Result.Success(DeliveryDispatchOutcome.Skipped);
+                }
+
                 (await _deliveries.AddAttemptAsync(attempt, _unitOfWork, cancellationToken)).EnsureSuccess();
                 _unitOfWork.Commit();
             }
@@ -199,7 +233,19 @@ namespace KairoServer.Application.Deliveries.Execution
             // Exponential backoff: base * 2^(attempt-1), clamped by MaxBackoff.
             var exp = Math.Min(attemptNumber - 1, 10);
             var ticks = _options.BaseBackoff.Ticks * (long)Math.Pow(2, exp);
-            return TimeSpan.FromTicks(ticks);
+            var delay = TimeSpan.FromTicks(ticks);
+
+            if (_options.JitterRatio <= 0)
+            {
+                return delay;
+            }
+
+            var ratio = Math.Min(_options.JitterRatio, 1d);
+            var min = 1d - ratio;
+            var max = 1d + ratio;
+            var factor = min + (Random.Shared.NextDouble() * (max - min));
+            var jitteredTicks = Math.Max(1L, (long)(delay.Ticks * factor));
+            return TimeSpan.FromTicks(jitteredTicks);
         }
     }
 }

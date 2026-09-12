@@ -97,6 +97,132 @@ namespace KairoServer.IntegrationTests
             Assert.Equal(new[] { a.Id, b.Id }, ordered);
         }
 
+        [Fact]
+        public async Task AddAttemptAsync_And_GetAttemptsByDeliveryIdAsync_Persist_And_Query_Attempts()
+        {
+            var (eventId1, contractId, customerId) = await SeedAsync();
+            var eventId2 = await SeedExtraEventAsync();
+            var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
+            var now = DateTimeOffset.UtcNow;
+
+            var deliveryA = Delivery.CreatePending(eventId1, contractId, customerId, "orders.created", "{}", destination, now);
+            var deliveryB = Delivery.CreatePending(eventId2, contractId, customerId, "orders.created", "{}", destination, now.AddSeconds(1));
+            await InsertAsync(deliveryA);
+            await InsertAsync(deliveryB);
+
+            var a1 = DeliveryAttempt.Create(
+                deliveryA.Id,
+                1,
+                succeeded: false,
+                failureCategory: "Transient",
+                error: "timeout",
+                metadata: new Dictionary<string, string> { ["httpStatus"] = "504" },
+                startedAt: now,
+                completedAt: now.AddSeconds(1));
+            var a2 = DeliveryAttempt.Create(
+                deliveryA.Id,
+                2,
+                succeeded: true,
+                failureCategory: null,
+                error: null,
+                metadata: new Dictionary<string, string> { ["httpStatus"] = "202" },
+                startedAt: now.AddSeconds(2),
+                completedAt: now.AddSeconds(3));
+            var b1 = DeliveryAttempt.Create(
+                deliveryB.Id,
+                1,
+                succeeded: true,
+                failureCategory: null,
+                error: null,
+                metadata: new Dictionary<string, string> { ["httpStatus"] = "200" },
+                startedAt: now.AddSeconds(1),
+                completedAt: now.AddSeconds(2));
+
+            await AddAttemptAsync(a1);
+            await AddAttemptAsync(a2);
+            await AddAttemptAsync(b1);
+
+            var attemptsA = await GetAttemptsAsync(deliveryA.Id);
+
+            Assert.Equal(2, attemptsA.Count);
+            Assert.Equal(1, attemptsA[0].AttemptNumber);
+            Assert.Equal(2, attemptsA[1].AttemptNumber);
+            Assert.False(attemptsA[0].Succeeded);
+            Assert.True(attemptsA[1].Succeeded);
+            Assert.Equal("504", attemptsA[0].Metadata["httpStatus"]);
+            Assert.Equal("202", attemptsA[1].Metadata["httpStatus"]);
+        }
+
+        [Fact]
+        public async Task AddAttemptAsync_Deduplicates_On_Delivery_And_AttemptNumber()
+        {
+            var (eventId, contractId, customerId) = await SeedAsync();
+            var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
+            var now = DateTimeOffset.UtcNow;
+
+            var delivery = Delivery.CreatePending(eventId, contractId, customerId, "orders.created", "{}", destination, now);
+            await InsertAsync(delivery);
+
+            var first = DeliveryAttempt.Create(
+                delivery.Id,
+                1,
+                succeeded: false,
+                failureCategory: "Transient",
+                error: "timeout",
+                metadata: new Dictionary<string, string> { ["httpStatus"] = "504" },
+                startedAt: now,
+                completedAt: now.AddSeconds(1));
+            var duplicate = DeliveryAttempt.Create(
+                delivery.Id,
+                1,
+                succeeded: true,
+                failureCategory: null,
+                error: null,
+                metadata: new Dictionary<string, string> { ["httpStatus"] = "200" },
+                startedAt: now.AddSeconds(2),
+                completedAt: now.AddSeconds(3));
+
+            var inserted1 = await AddAttemptAsync(first);
+            var inserted2 = await AddAttemptAsync(duplicate);
+            var attempts = await GetAttemptsAsync(delivery.Id);
+
+            Assert.Equal(1, inserted1);
+            Assert.Equal(0, inserted2);
+            Assert.Single(attempts);
+            Assert.Equal("504", attempts[0].Metadata["httpStatus"]);
+        }
+
+        [Fact]
+        public async Task ListDeadAsync_Returns_Only_Dead_Deliveries()
+        {
+            var (eventId1, contractId, customerId) = await SeedAsync();
+            var eventId2 = await SeedExtraEventAsync();
+            var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
+            var now = DateTimeOffset.UtcNow;
+
+            var dead = Delivery.CreatePending(eventId1, contractId, customerId, "orders.created", "{}", destination, now);
+            var alive = Delivery.CreatePending(eventId2, contractId, customerId, "orders.created", "{}", destination, now.AddSeconds(1));
+            await InsertAsync(dead);
+            await InsertAsync(alive);
+
+            dead.MarkInFlight(now.AddSeconds(2));
+            dead.MarkDead("final failure", now.AddSeconds(3));
+            await UpdateAsync(dead, now);
+
+            alive.MarkInFlight(now.AddSeconds(2));
+            alive.MarkFailed("retry", now.AddMinutes(1), now.AddSeconds(3));
+            await UpdateAsync(alive, now.AddSeconds(1));
+
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            var repo = new PostgresDeliveryRepository(factory);
+            var page = await repo.ListDeadAsync(1, 20, CancellationToken.None);
+            var deadRows = page.EnsureValue();
+
+            Assert.Single(deadRows.Items);
+            Assert.Equal(dead.Id, deadRows.Items[0].Id);
+            Assert.Equal(DeliveryStatus.Dead, deadRows.Items[0].Status);
+        }
+
         private async Task<int> InsertAsync(Delivery delivery)
         {
             var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
@@ -104,6 +230,36 @@ namespace KairoServer.IntegrationTests
             uow.Begin(true);
             var repo = new PostgresDeliveryRepository(factory);
             var result = await repo.InsertPendingAsync(new[] { delivery }, uow, CancellationToken.None);
+            uow.Commit();
+            return result.EnsureValue();
+        }
+
+        private async Task<int> AddAttemptAsync(DeliveryAttempt attempt)
+        {
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            using var uow = new PostgresUnitOfWork(factory);
+            uow.Begin(true);
+            var repo = new PostgresDeliveryRepository(factory);
+            var result = await repo.AddAttemptAsync(attempt, uow, CancellationToken.None);
+            uow.Commit();
+            return result.EnsureValue();
+        }
+
+        private async Task<IReadOnlyList<DeliveryAttempt>> GetAttemptsAsync(Guid deliveryId)
+        {
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            var repo = new PostgresDeliveryRepository(factory);
+            var result = await repo.GetAttemptsByDeliveryIdAsync(deliveryId, CancellationToken.None);
+            return result.EnsureValue();
+        }
+
+        private async Task<bool> UpdateAsync(Delivery delivery, DateTimeOffset expectedUpdatedAt)
+        {
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            using var uow = new PostgresUnitOfWork(factory);
+            uow.Begin(true);
+            var repo = new PostgresDeliveryRepository(factory);
+            var result = await repo.UpdateAsync(delivery, expectedUpdatedAt, uow, CancellationToken.None);
             uow.Commit();
             return result.EnsureValue();
         }

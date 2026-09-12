@@ -131,7 +131,7 @@ namespace KairoServer.Domain.Deliveries
 
         /// <summary>
         /// Records a failed attempt. When <paramref name="nextAttemptAt"/> is provided
-        /// the delivery is eligible for retry; otherwise it becomes terminal.
+        /// the delivery is eligible for retry.
         /// </summary>
         public void MarkFailed(string error, DateTimeOffset? nextAttemptAt, DateTimeOffset now)
         {
@@ -145,6 +145,55 @@ namespace KairoServer.Domain.Deliveries
             LastError = error;
             NextAttemptAt = nextAttemptAt;
             UpdatedAt = now;
+        }
+
+        /// <summary>
+        /// Transitions to terminal <see cref="DeliveryStatus.Dead"/> when retry policy is exhausted.
+        /// </summary>
+        public void MarkDead(string error, DateTimeOffset now)
+        {
+            if (Status is not (DeliveryStatus.InFlight or DeliveryStatus.Failed))
+                throw new InvalidOperationException(
+                    $"Cannot transition to Dead from {Status}.");
+
+            ArgumentException.ThrowIfNullOrWhiteSpace(error);
+
+            Status = DeliveryStatus.Dead;
+            LastError = error;
+            NextAttemptAt = null;
+            UpdatedAt = now;
+        }
+
+        /// <summary>
+        /// Manual retry operation: reactivates a dead delivery by resetting attempt count
+        /// and clearing error/scheduling state. Returns false when already active.
+        /// </summary>
+        public bool ManualRetryReset(DateTimeOffset now)
+        {
+            if (Status != DeliveryStatus.Dead)
+                return false;
+
+            Status = DeliveryStatus.Pending;
+            AttemptCount = 0;
+            LastError = null;
+            NextAttemptAt = null;
+            UpdatedAt = now;
+            return true;
+        }
+
+        /// <summary>
+        /// Manual requeue operation: reactivates a dead delivery preserving attempt count.
+        /// Returns false when already active.
+        /// </summary>
+        public bool ManualRequeue(DateTimeOffset now)
+        {
+            if (Status != DeliveryStatus.Dead)
+                return false;
+
+            Status = DeliveryStatus.Failed;
+            NextAttemptAt = now;
+            UpdatedAt = now;
+            return true;
         }
 
         /// <summary>

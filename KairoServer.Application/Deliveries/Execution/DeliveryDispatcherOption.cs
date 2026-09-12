@@ -18,5 +18,11 @@ namespace KairoServer.Application.Deliveries.Execution
 
         /// <summary>Upper bound for computed backoff.</summary>
         public TimeSpan MaxBackoff { get; set; } = TimeSpan.FromMinutes(5);
+
+        /// <summary>
+        /// Symmetric randomization ratio applied to computed exponential backoff.
+        /// Example: 0.2 means random delay in [80%, 120%] of the base value.
+        /// </summary>
+        public double JitterRatio { get; set; } = 0.2;
     }
 }

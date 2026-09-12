@@ -4,8 +4,10 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Deliveries.Execution;
+using KairoServer.Application.Persistence;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.Deliveries;
+using KairoServer.Domain.Deliveries;
 using KairoServer.Infastructure.Messaging.Nats;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -139,7 +141,23 @@ namespace KairoServer.Worker.Deliveries
 
                 if (result.IsSuccess)
                 {
-                    await msg.AckAsync(cancellationToken: cancellationToken);
+                    if (result.Value is DeliveryDispatchOutcome.FailedRetry or DeliveryDispatchOutcome.Skipped)
+                    {
+                        var delayed = await TryDelayRedeliveryAsync(
+                            msg,
+                            ready.DeliveryId,
+                            scope.ServiceProvider,
+                            cancellationToken);
+
+                        if (!delayed)
+                        {
+                            await msg.AckAsync(cancellationToken: cancellationToken);
+                        }
+                    }
+                    else
+                    {
+                        await msg.AckAsync(cancellationToken: cancellationToken);
+                    }
                 }
                 else
                 {
@@ -162,6 +180,58 @@ namespace KairoServer.Worker.Deliveries
                     ready.DeliveryId);
                 await msg.NakAsync(delay: _deliveryOptions.NakDelay, cancellationToken: cancellationToken);
             }
+        }
+
+        private async Task<bool> TryDelayRedeliveryAsync(
+            NatsJSMsg<byte[]> msg,
+            Guid deliveryId,
+            IServiceProvider scopeProvider,
+            CancellationToken cancellationToken)
+        {
+            var repo = scopeProvider.GetRequiredService<IDeliveryRepository>();
+            var load = await repo.GetByIdAsync(deliveryId, cancellationToken);
+            if (load.IsFailure)
+            {
+                _logger.Warning(
+                    "Failed to load delivery {DeliveryId} to compute retry delay; using default NAK delay.",
+                    deliveryId);
+                await msg.NakAsync(delay: _deliveryOptions.NakDelay, cancellationToken: cancellationToken);
+                return true;
+            }
+
+            var delivery = load.Value;
+            if (delivery is null)
+            {
+                return false;
+            }
+
+            if (delivery.Status is DeliveryStatus.Delivered)
+            {
+                return false;
+            }
+
+            if (delivery.Status is DeliveryStatus.Dead)
+            {
+                return false;
+            }
+
+            if (delivery.Status is DeliveryStatus.Failed && delivery.NextAttemptAt is null)
+            {
+                return false;
+            }
+
+            var delay = _deliveryOptions.NakDelay;
+            if (delivery.NextAttemptAt is { } nextAttemptAt)
+            {
+                var computed = nextAttemptAt - DateTimeOffset.UtcNow;
+                if (computed > TimeSpan.Zero)
+                {
+                    delay = computed;
+                }
+            }
+
+            await msg.NakAsync(delay: delay, cancellationToken: cancellationToken);
+            return true;
         }
     }
 }

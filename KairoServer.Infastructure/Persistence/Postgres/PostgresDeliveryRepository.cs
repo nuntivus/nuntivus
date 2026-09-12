@@ -111,6 +111,63 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        public async Task<Result<IReadOnlyList<DeliveryAttempt>>> GetAttemptsByDeliveryIdAsync(
+            Guid deliveryId,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                    SELECT
+                        id,
+                        delivery_id      AS DeliveryId,
+                        attempt_number   AS AttemptNumber,
+                        succeeded,
+                        failure_category AS FailureCategory,
+                        error,
+                        metadata::text   AS Metadata,
+                        started_at       AS StartedAt,
+                        completed_at     AS CompletedAt
+                    FROM delivery_attempts
+                    WHERE delivery_id = @DeliveryId
+                    ORDER BY attempt_number;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                var rows = await connection.QueryAsync<DeliveryAttemptRow>(new CommandDefinition(
+                    sql,
+                    new { DeliveryId = deliveryId },
+                    cancellationToken: cancellationToken));
+
+                var attempts = new List<DeliveryAttempt>();
+                foreach (var row in rows)
+                {
+                    var metadata = string.IsNullOrWhiteSpace(row.Metadata)
+                        ? null
+                        : JsonSerializer.Deserialize<Dictionary<string, string>>(row.Metadata);
+
+                    attempts.Add(DeliveryAttempt.Rehydrate(
+                        row.Id,
+                        row.DeliveryId,
+                        row.AttemptNumber,
+                        row.Succeeded,
+                        row.FailureCategory,
+                        row.Error,
+                        metadata,
+                        row.StartedAt,
+                        row.CompletedAt));
+                }
+
+                return Result.Success<IReadOnlyList<DeliveryAttempt>>(attempts);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<IReadOnlyList<DeliveryAttempt>>(ex);
+            }
+        }
+
         public async Task<Result<Delivery?>> GetByIdAsync(
             Guid deliveryId,
             CancellationToken cancellationToken)
@@ -150,21 +207,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     return Result.Success<Delivery?>(null);
                 }
 
-                var delivery = Delivery.Rehydrate(
-                    row.Id,
-                    row.EventId,
-                    row.ContractId,
-                    row.CustomerId,
-                    row.EventType,
-                    row.Payload,
-                    Enum.Parse<DestinationType>(row.DestinationType),
-                    row.DestinationConfig,
-                    Enum.Parse<DeliveryStatus>(row.Status),
-                    row.AttemptCount,
-                    row.LastError,
-                    row.NextAttemptAt,
-                    row.CreatedAt,
-                    row.UpdatedAt);
+                var delivery = MapDelivery(row);
 
                 return Result.Success<Delivery?>(delivery);
             }
@@ -174,8 +217,77 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        public async Task<Result<PagedResult<Delivery>>> ListDeadAsync(
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (page < 1)
+                    return Result.Failure<PagedResult<Delivery>>("validation", "page must be greater than or equal to 1.");
+                if (pageSize < 1)
+                    return Result.Failure<PagedResult<Delivery>>("validation", "pageSize must be greater than or equal to 1.");
+
+                const string sql = """
+                    SELECT
+                        id,
+                        event_id            AS EventId,
+                        contract_id         AS ContractId,
+                        customer_id         AS CustomerId,
+                        event_type          AS EventType,
+                        payload::text       AS Payload,
+                        destination_type    AS DestinationType,
+                        destination_config::text AS DestinationConfig,
+                        status,
+                        attempt_count       AS AttemptCount,
+                        last_error          AS LastError,
+                        next_attempt_at     AS NextAttemptAt,
+                        created_at          AS CreatedAt,
+                        updated_at          AS UpdatedAt
+                    FROM deliveries
+                    WHERE status = @Status
+                    ORDER BY updated_at DESC
+                    OFFSET @Offset LIMIT @PageSize;
+
+                    SELECT COUNT(*)
+                    FROM deliveries
+                    WHERE status = @Status;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                using var multi = await connection.QueryMultipleAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        Status = DeliveryStatus.Dead.ToString(),
+                        Offset = (page - 1) * pageSize,
+                        PageSize = pageSize,
+                    },
+                    cancellationToken: cancellationToken));
+
+                var rows = (await multi.ReadAsync<DeliveryRow>()).AsList();
+                var totalCount = await multi.ReadSingleAsync<long>();
+
+                var mapped = new List<Delivery>(rows.Count);
+                foreach (var row in rows)
+                {
+                    mapped.Add(MapDelivery(row));
+                }
+
+                return Result.Success(PagedResult<Delivery>.Create(mapped, page, pageSize, totalCount));
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<PagedResult<Delivery>>(ex);
+            }
+        }
+
         public async Task<Result<bool>> UpdateAsync(
             Delivery delivery,
+            DateTimeOffset expectedUpdatedAt,
             IUnitOfWork uow,
             CancellationToken cancellationToken)
         {
@@ -191,7 +303,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         last_error      = @LastError,
                         next_attempt_at = @NextAttemptAt,
                         updated_at      = @UpdatedAt
-                    WHERE id = @Id;
+                    WHERE id = @Id
+                      AND updated_at = @ExpectedUpdatedAt;
                     """;
 
                 var rows = await uow.GetConnection()!.ExecuteAsync(new CommandDefinition(
@@ -204,6 +317,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         delivery.LastError,
                         delivery.NextAttemptAt,
                         delivery.UpdatedAt,
+                        ExpectedUpdatedAt = expectedUpdatedAt,
                     },
                     uow.GetTransaction(),
                     cancellationToken: cancellationToken));
@@ -295,6 +409,36 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public DateTimeOffset? NextAttemptAt { get; set; }
             public DateTimeOffset CreatedAt { get; set; }
             public DateTimeOffset UpdatedAt { get; set; }
+        }
+
+        private static Delivery MapDelivery(DeliveryRow row) =>
+            Delivery.Rehydrate(
+                row.Id,
+                row.EventId,
+                row.ContractId,
+                row.CustomerId,
+                row.EventType,
+                row.Payload,
+                Enum.Parse<DestinationType>(row.DestinationType),
+                row.DestinationConfig,
+                Enum.Parse<DeliveryStatus>(row.Status),
+                row.AttemptCount,
+                row.LastError,
+                row.NextAttemptAt,
+                row.CreatedAt,
+                row.UpdatedAt);
+
+        private sealed class DeliveryAttemptRow
+        {
+            public Guid Id { get; set; }
+            public Guid DeliveryId { get; set; }
+            public int AttemptNumber { get; set; }
+            public bool Succeeded { get; set; }
+            public string? FailureCategory { get; set; }
+            public string? Error { get; set; }
+            public string? Metadata { get; set; }
+            public DateTimeOffset StartedAt { get; set; }
+            public DateTimeOffset CompletedAt { get; set; }
         }
     }
 }

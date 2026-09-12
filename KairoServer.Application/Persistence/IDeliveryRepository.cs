@@ -36,6 +36,7 @@ namespace KairoServer.Application.Persistence
         /// </summary>
         Task<Result<bool>> UpdateAsync(
             Delivery delivery,
+            DateTimeOffset expectedUpdatedAt,
             IUnitOfWork uow,
             CancellationToken cancellationToken);
 
@@ -47,6 +48,21 @@ namespace KairoServer.Application.Persistence
         Task<Result<int>> AddAttemptAsync(
             DeliveryAttempt attempt,
             IUnitOfWork uow,
+            CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Loads all recorded attempts for a delivery ordered by attempt number.
+        /// </summary>
+        Task<Result<IReadOnlyList<DeliveryAttempt>>> GetAttemptsByDeliveryIdAsync(
+            Guid deliveryId,
+            CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Lists terminal dead deliveries ordered by most recently updated.
+        /// </summary>
+        Task<Result<PagedResult<Delivery>>> ListDeadAsync(
+            int page,
+            int pageSize,
             CancellationToken cancellationToken);
     }
 }

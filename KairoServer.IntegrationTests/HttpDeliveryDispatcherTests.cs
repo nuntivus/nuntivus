@@ -121,12 +121,41 @@ namespace KairoServer.IntegrationTests
             Assert.Equal(DeliveryDispatchOutcome.FailedTerminal, result.Value);
 
             var (status, _, _, nextAttemptAt) = await ReadDeliveryAsync(deliveryId);
-            Assert.Equal("Failed", status);
+            Assert.Equal("Dead", status);
             Assert.Null(nextAttemptAt);
 
             var attempt = Assert.Single(await ReadAttemptsAsync(deliveryId));
             Assert.Equal("Permanent", attempt.failure_category);
             Assert.Equal("400", attempt.HttpStatus);
+        }
+
+        [Fact]
+        public async Task Dispatch_429_respects_retry_after_when_scheduling_retry()
+        {
+            var (deliveryId, _) = await SeedDeliveryAsync(_server.Url);
+            _server.Enqueue(RespondWithRetryAfter(HttpStatusCode.TooManyRequests, "slow down", TimeSpan.FromSeconds(3)));
+
+            var dispatcher = BuildDispatcher(new DeliveryDispatcherOption
+            {
+                MaxAttempts = 5,
+                BaseBackoff = TimeSpan.FromMilliseconds(10),
+                MaxBackoff = TimeSpan.FromSeconds(10),
+                JitterRatio = 0,
+            });
+
+            var started = DateTimeOffset.UtcNow;
+            var result = await dispatcher.DispatchAsync(deliveryId, CancellationToken.None);
+            result.EnsureSuccess();
+
+            Assert.Equal(DeliveryDispatchOutcome.FailedRetry, result.Value);
+
+            var (_, _, _, nextAttemptAt) = await ReadDeliveryAsync(deliveryId);
+            Assert.NotNull(nextAttemptAt);
+            Assert.InRange(nextAttemptAt!.Value - started, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(8));
+
+            var attempt = Assert.Single(await ReadAttemptsAsync(deliveryId));
+            Assert.Equal("Throttled", attempt.failure_category);
+            Assert.Equal("429", attempt.HttpStatus);
         }
 
         [Fact]
@@ -176,12 +205,49 @@ namespace KairoServer.IntegrationTests
             Assert.Equal(DeliveryDispatchOutcome.FailedTerminal, r2.Value);
 
             var (status, attemptCount, _, nextAttemptAt) = await ReadDeliveryAsync(deliveryId);
-            Assert.Equal("Failed", status);
+            Assert.Equal("Dead", status);
             Assert.Equal(2, attemptCount);
             Assert.Null(nextAttemptAt);
 
             var attempts = await ReadAttemptsAsync(deliveryId);
             Assert.Equal(2, attempts.Count);
+        }
+
+        [Fact]
+        public async Task Dispatch_before_next_attempt_due_is_skipped_without_new_attempt()
+        {
+            var (deliveryId, _) = await SeedDeliveryAsync(_server.Url);
+
+            var options = new DeliveryDispatcherOption
+            {
+                MaxAttempts = 5,
+                BaseBackoff = TimeSpan.FromSeconds(30),
+                MaxBackoff = TimeSpan.FromSeconds(30),
+                JitterRatio = 0,
+            };
+            var dispatcher = BuildDispatcher(options);
+
+            _server.Enqueue(Respond(HttpStatusCode.ServiceUnavailable, "retry later"));
+            var first = await dispatcher.DispatchAsync(deliveryId, CancellationToken.None);
+            first.EnsureSuccess();
+            Assert.Equal(DeliveryDispatchOutcome.FailedRetry, first.Value);
+
+            var (_, attemptCountBefore, _, nextAttemptAtBefore) = await ReadDeliveryAsync(deliveryId);
+            Assert.Equal(1, attemptCountBefore);
+            Assert.NotNull(nextAttemptAtBefore);
+
+            _server.Enqueue(Respond(HttpStatusCode.OK, "should-not-run-yet"));
+            var second = await dispatcher.DispatchAsync(deliveryId, CancellationToken.None);
+            second.EnsureSuccess();
+            Assert.Equal(DeliveryDispatchOutcome.Skipped, second.Value);
+
+            var (_, attemptCountAfter, _, nextAttemptAtAfter) = await ReadDeliveryAsync(deliveryId);
+            Assert.Equal(1, attemptCountAfter);
+            Assert.Equal(nextAttemptAtBefore, nextAttemptAtAfter);
+
+            var attempts = await ReadAttemptsAsync(deliveryId);
+            Assert.Single(attempts);
+            Assert.Single(_server.Received);
         }
 
         // ---- helpers ---------------------------------------------------------
@@ -283,6 +349,17 @@ namespace KairoServer.IntegrationTests
         {
             ctx.Response.StatusCode = (int)status;
             ctx.Response.ContentType = "text/plain";
+            await ctx.Response.WriteAsync(body);
+        };
+
+        private static Func<HttpContext, Task> RespondWithRetryAfter(
+            HttpStatusCode status,
+            string body,
+            TimeSpan retryAfter) => async ctx =>
+        {
+            ctx.Response.StatusCode = (int)status;
+            ctx.Response.ContentType = "text/plain";
+            ctx.Response.Headers.RetryAfter = ((int)retryAfter.TotalSeconds).ToString();
             await ctx.Response.WriteAsync(body);
         };
 

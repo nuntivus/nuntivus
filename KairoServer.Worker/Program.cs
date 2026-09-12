@@ -1,5 +1,6 @@
 using KairoServer.Application.Caching;
 using KairoServer.Application.Deliveries.Execution;
+using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Matching;
 using KairoServer.Application.Messaging;
 using KairoServer.Application.Persistence;
@@ -70,6 +71,7 @@ var dispatcherOption = builder.Configuration.GetSection("DeliveryDispatcher").Ge
 builder.Services.AddSingleton(dispatcherOption);
 
 builder.Services.AddScoped<IDeliveryDispatcherService, DeliveryDispatcherService>();
+builder.Services.AddScoped<IDeliveryRecoveryService, DeliveryRecoveryService>();
 
 // NATS / JetStream
 var natsOption = builder.Configuration.GetSection("Nats").Get<NatsOption>()

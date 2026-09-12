@@ -145,6 +145,60 @@ namespace KairoServer.UnitTests.Deliveries
             Assert.Throws<InvalidOperationException>(() => delivery.MarkInFlight(now));
         }
 
+        [Fact]
+        public void MarkDead_From_InFlight_Sets_Terminal_State()
+        {
+            var delivery = NewPending(out var now);
+            delivery.MarkInFlight(now);
+            delivery.MarkDead("fatal", now.AddSeconds(1));
+
+            Assert.Equal(DeliveryStatus.Dead, delivery.Status);
+            Assert.Equal("fatal", delivery.LastError);
+            Assert.Null(delivery.NextAttemptAt);
+        }
+
+        [Fact]
+        public void ManualRetryReset_From_Dead_Reactivates_And_Resets_AttemptCount()
+        {
+            var delivery = NewPending(out var now);
+            delivery.MarkInFlight(now);
+            delivery.MarkDead("fatal", now.AddSeconds(1));
+
+            var changed = delivery.ManualRetryReset(now.AddSeconds(2));
+
+            Assert.True(changed);
+            Assert.Equal(DeliveryStatus.Pending, delivery.Status);
+            Assert.Equal(0, delivery.AttemptCount);
+            Assert.Null(delivery.LastError);
+            Assert.Null(delivery.NextAttemptAt);
+        }
+
+        [Fact]
+        public void ManualRequeue_From_Dead_Reactivates_Preserving_AttemptCount()
+        {
+            var delivery = NewPending(out var now);
+            delivery.MarkInFlight(now);
+            delivery.MarkDead("fatal", now.AddSeconds(1));
+
+            var changed = delivery.ManualRequeue(now.AddSeconds(2));
+
+            Assert.True(changed);
+            Assert.Equal(DeliveryStatus.Failed, delivery.Status);
+            Assert.Equal(1, delivery.AttemptCount);
+            Assert.NotNull(delivery.NextAttemptAt);
+        }
+
+        [Fact]
+        public void ManualRetryReset_When_Already_Active_Is_NoOp()
+        {
+            var delivery = NewPending(out var now);
+
+            var changed = delivery.ManualRetryReset(now.AddSeconds(1));
+
+            Assert.False(changed);
+            Assert.Equal(DeliveryStatus.Pending, delivery.Status);
+        }
+
         private static Delivery NewPending(out DateTimeOffset now)
         {
             now = DateTimeOffset.UtcNow;
