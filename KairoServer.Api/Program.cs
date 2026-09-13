@@ -6,6 +6,7 @@ using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Events;
 using KairoServer.Application.Persistence;
 using KairoServer.Infastructure.Caching;
+using KairoServer.Infastructure.Deliveries.Http;
 using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Persistence.Caching;
 using KairoServer.Infastructure.Persistence.Postgres;
@@ -56,6 +57,12 @@ builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IDeliveryRecoveryService, DeliveryRecoveryService>();
+
+var destinationCredentialOption =
+    builder.Configuration.GetSection("DestinationCredentials").Get<DestinationCredentialOption>()
+    ?? new DestinationCredentialOption();
+builder.Services.AddSingleton(destinationCredentialOption);
+builder.Services.AddSingleton<IDestinationCredentialProtector, AesGcmDestinationCredentialProtector>();
 
 builder.Services.AddSingleton<IDestinationConfigHandler, HttpDestinationConfigHandler>();
 builder.Services.AddSingleton<IDestinationConfigDispatcher, DestinationConfigDispatcher>();

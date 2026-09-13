@@ -59,5 +59,25 @@ namespace KairoServer.Api.Controllers.Contracts
             var result = await _contracts.DisableAsync(id, cancellationToken);
             return result.ToOk();
         }
+
+        [HttpPost("{id:guid}/credentials")]
+        public async Task<IActionResult> UpdateCredentials(
+            Guid id,
+            [FromBody] UpdateContractCredentialsRequest request,
+            CancellationToken cancellationToken)
+        {
+            var result = await _contracts.UpdateCredentialsAsync(id, request, cancellationToken);
+            return result.ToOk();
+        }
+
+        [HttpPost("{id:guid}/credentials/rotate")]
+        public async Task<IActionResult> RotateCredentials(
+            Guid id,
+            [FromBody] UpdateContractCredentialsRequest request,
+            CancellationToken cancellationToken)
+        {
+            var result = await _contracts.RotateCredentialsAsync(id, request, cancellationToken);
+            return result.ToOk();
+        }
     }
 }

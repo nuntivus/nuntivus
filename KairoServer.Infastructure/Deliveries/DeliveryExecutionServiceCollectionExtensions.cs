@@ -1,6 +1,8 @@
 using KairoServer.Application.Deliveries.Execution;
+using KairoServer.Application.Contracts.Destinations;
 using KairoServer.Infastructure.Deliveries.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace KairoServer.Infastructure.Deliveries
 {
@@ -16,7 +18,9 @@ namespace KairoServer.Infastructure.Deliveries
         {
             services.AddHttpClient(HttpDeliveryExecutor.HttpClientName);
 
-            services.AddSingleton<ISecretResolver, NullSecretResolver>();
+            services.TryAddSingleton(new DestinationCredentialOption());
+            services.TryAddSingleton<IDestinationCredentialProtector, AesGcmDestinationCredentialProtector>();
+            services.AddSingleton<ISecretResolver, ProtectedSecretResolver>();
             services.AddSingleton<IDeliveryExecutor, HttpDeliveryExecutor>();
             services.AddSingleton<IDeliveryExecutorDispatcher, DeliveryExecutorDispatcher>();
 

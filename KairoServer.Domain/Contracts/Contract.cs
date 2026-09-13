@@ -100,5 +100,14 @@ namespace KairoServer.Domain.Contracts
             Enabled = false;
             UpdatedAt = now;
         }
+
+        public void UpdateDestination(Destination destination, DateTimeOffset now)
+        {
+            if (destination is null)
+                throw new ArgumentNullException(nameof(destination));
+
+            Destination = destination;
+            UpdatedAt = now;
+        }
     }
 }

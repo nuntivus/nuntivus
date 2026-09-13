@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
@@ -77,6 +78,50 @@ namespace KairoServer.UnitTests.Deliveries.Execution
             Assert.Equal(TimeSpan.FromSeconds(7), result.RetryAfter);
         }
 
+        [Fact]
+        public async Task Bearer_auth_resolves_secret_and_sets_authorization_header()
+        {
+            HttpRequestMessage? sent = null;
+            var executor = BuildExecutor(req =>
+            {
+                sent = req;
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            });
+
+            var result = await executor.ExecuteAsync(BuildRequest(new HttpDestinationConfig(
+                Url: "https://example.test/webhook",
+                Authentication: new HttpAuthentication("bearer", new HttpCredential("ref", "protected.v1.abcdef")))), CancellationToken.None);
+
+            Assert.True(result.Succeeded);
+            Assert.NotNull(sent);
+            Assert.Equal("Bearer", sent!.Headers.Authorization?.Scheme);
+            Assert.Equal("secret-value", sent.Headers.Authorization?.Parameter);
+        }
+
+        [Fact]
+        public async Task Protected_headers_are_resolved_and_injected()
+        {
+            HttpRequestMessage? sent = null;
+            var executor = BuildExecutor(req =>
+            {
+                sent = req;
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            });
+
+            var result = await executor.ExecuteAsync(BuildRequest(new HttpDestinationConfig(
+                Url: "https://example.test/webhook",
+                Authentication: new HttpAuthentication("none"),
+                ProtectedHeaders: new Dictionary<string, string>
+                {
+                    ["X-Api-Key"] = "protected.v1.abcdef"
+                })), CancellationToken.None);
+
+            Assert.True(result.Succeeded);
+            Assert.NotNull(sent);
+            Assert.True(sent!.Headers.TryGetValues("X-Api-Key", out var values));
+            Assert.Equal("secret-value", Assert.Single(values));
+        }
+
         // --- helpers ---------------------------------------------------------
 
         private static HttpDeliveryExecutor BuildExecutor(Func<HttpRequestMessage, HttpResponseMessage> handler)
@@ -92,7 +137,7 @@ namespace KairoServer.UnitTests.Deliveries.Execution
         {
             var config = configJson ?? JsonSerializer.Serialize(new HttpDestinationConfig(
                 Url: "https://example.test/webhook",
-                Authentication: new HttpAuthentication("none", null)));
+                Authentication: new HttpAuthentication("none")));
 
             return new DeliveryExecutionRequest(
                 DeliveryId: Guid.NewGuid(),
@@ -104,6 +149,9 @@ namespace KairoServer.UnitTests.Deliveries.Execution
                 AttemptNumber: 1,
                 Destination: new Destination(DomainDestinationType.Http, config));
         }
+
+        private static DeliveryExecutionRequest BuildRequest(HttpDestinationConfig config) =>
+            BuildRequest(JsonSerializer.Serialize(config));
 
         private sealed class StubHttpClientFactory : IHttpClientFactory
         {

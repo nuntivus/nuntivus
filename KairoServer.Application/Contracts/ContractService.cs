@@ -117,7 +117,7 @@ namespace KairoServer.Application.Contracts
             if (contract is null)
                 return Result.Failure<ContractView>(Error.NotFound($"Contract '{id}' was not found."));
 
-            return Result.Success(contract.ToView());
+            return MapToView(contract);
         }
 
         public async Task<Result<PagedResult<ContractView>>> ListByCustomerAsync(
@@ -141,7 +141,21 @@ namespace KairoServer.Application.Contracts
             if (result.IsFailure)
                 return Result<PagedResult<ContractView>>.Fail(result.Errors);
 
-            return Result.Success(result.Value.Map(c => c.ToView()));
+            var views = new System.Collections.Generic.List<ContractView>(result.Value.Items.Count);
+            foreach (var contract in result.Value.Items)
+            {
+                var mapped = MapToView(contract);
+                if (mapped.IsFailure)
+                    return Result<PagedResult<ContractView>>.Fail(mapped.Errors);
+
+                views.Add(mapped.Value);
+            }
+
+            return Result.Success(PagedResult<ContractView>.Create(
+                views,
+                result.Value.Page,
+                result.Value.PageSize,
+                result.Value.TotalCount));
         }
 
         public Task<Result<ContractView>> EnableAsync(Guid id, CancellationToken cancellationToken) =>
@@ -149,6 +163,18 @@ namespace KairoServer.Application.Contracts
 
         public Task<Result<ContractView>> DisableAsync(Guid id, CancellationToken cancellationToken) =>
             ToggleAsync(id, enable: false, cancellationToken);
+
+        public Task<Result<ContractView>> UpdateCredentialsAsync(
+            Guid id,
+            UpdateContractCredentialsRequest request,
+            CancellationToken cancellationToken) =>
+            UpsertCredentialsAsync(id, request, "updated", cancellationToken);
+
+        public Task<Result<ContractView>> RotateCredentialsAsync(
+            Guid id,
+            UpdateContractCredentialsRequest request,
+            CancellationToken cancellationToken) =>
+            UpsertCredentialsAsync(id, request, "rotated", cancellationToken);
 
         private async Task<Result<ContractView>> ToggleAsync(
             Guid id,
@@ -185,7 +211,7 @@ namespace KairoServer.Application.Contracts
                     enable ? "enabled" : "disabled",
                     contract.Id);
 
-                return Result.Success(contract.ToView());
+                return MapToView(contract);
             }
             catch (Exception ex)
             {
@@ -193,6 +219,72 @@ namespace KairoServer.Application.Contracts
                 _logger.Error(ex, "Failed to toggle contract {ContractId} (enable={Enable}).", id, enable);
                 return Result.Failure<ContractView>(ex);
             }
+        }
+
+        private async Task<Result<ContractView>> UpsertCredentialsAsync(
+            Guid id,
+            UpdateContractCredentialsRequest request,
+            string action,
+            CancellationToken cancellationToken)
+        {
+            if (id == Guid.Empty)
+                return Result.Failure<ContractView>(Error.Validation("Contract id is required."));
+
+            if (request?.Configuration is null)
+                return Result.Failure<ContractView>(Error.Validation("Destination configuration is required."));
+
+            var destinationResult = _destinations.Build(request.Configuration);
+            if (destinationResult.IsFailure)
+                return Result<ContractView>.Fail(destinationResult.Errors);
+
+            try
+            {
+                var lookup = await _repository.GetByIdAsync(id, cancellationToken);
+                if (lookup.IsFailure)
+                    return Result<ContractView>.Fail(lookup.Errors);
+
+                var contract = lookup.Value;
+                if (contract is null)
+                    return Result.Failure<ContractView>(Error.NotFound($"Contract '{id}' was not found."));
+
+                contract.UpdateDestination(destinationResult.Value, DateTimeOffset.UtcNow);
+
+                _unitOfWork.Begin(true);
+                var update = await _repository.UpdateAsync(contract, _unitOfWork, cancellationToken);
+                if (update.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<ContractView>.Fail(update.Errors);
+                }
+
+                _unitOfWork.Commit();
+                _logger.Information("Contract credentials {Action} {ContractId}.", action, contract.Id);
+
+                return MapToView(contract);
+            }
+            catch (Exception ex)
+            {
+                _unitOfWork.Rollback();
+                _logger.Error(ex, "Failed to {Action} contract credentials {ContractId}.", action, id);
+                return Result.Failure<ContractView>(ex);
+            }
+        }
+
+        private Result<ContractView> MapToView(Contract contract)
+        {
+            var redactedConfig = _destinations.Redact(contract.Destination);
+            if (redactedConfig.IsFailure)
+                return Result<ContractView>.Fail(redactedConfig.Errors);
+
+            return Result.Success(new ContractView(
+                contract.Id,
+                contract.CustomerId,
+                contract.Enabled,
+                new System.Collections.Generic.List<string>(contract.EventTypes),
+                ContractMapping.MapDestinationType(contract.Destination.Type),
+                redactedConfig.Value,
+                contract.CreatedAt,
+                contract.UpdatedAt));
         }
     }
 }

@@ -6,6 +6,7 @@ using KairoServer.Application.Messaging;
 using KairoServer.Application.Persistence;
 using KairoServer.Infastructure.Caching;
 using KairoServer.Infastructure.Deliveries;
+using KairoServer.Infastructure.Deliveries.Http;
 using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Messaging.Nats;
 using KairoServer.Infastructure.Persistence.Caching;
@@ -69,6 +70,10 @@ builder.Services.AddSingleton(deliveryOption);
 var dispatcherOption = builder.Configuration.GetSection("DeliveryDispatcher").Get<DeliveryDispatcherOption>()
     ?? new DeliveryDispatcherOption();
 builder.Services.AddSingleton(dispatcherOption);
+
+var destinationCredentialOption = builder.Configuration.GetSection("DestinationCredentials").Get<DestinationCredentialOption>()
+    ?? new DestinationCredentialOption();
+builder.Services.AddSingleton(destinationCredentialOption);
 
 builder.Services.AddScoped<IDeliveryDispatcherService, DeliveryDispatcherService>();
 builder.Services.AddScoped<IDeliveryRecoveryService, DeliveryRecoveryService>();

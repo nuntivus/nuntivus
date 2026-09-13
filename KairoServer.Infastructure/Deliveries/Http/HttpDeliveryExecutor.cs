@@ -16,6 +16,9 @@ namespace KairoServer.Infastructure.Deliveries.Http
     /// <summary>
     /// HTTP transport implementation of <see cref="IDeliveryExecutor"/>.
     /// Owns parsing and validating <see cref="HttpDestinationConfig"/> and
+    /// injecting destination authentication into outbound requests.
+    /// Credential resolution is centralized through <see cref="ISecretResolver"/>
+    /// so auth storage concerns stay outside delivery orchestration.
     /// maps status codes / transport exceptions to
     /// <see cref="DeliveryFailureCategory"/>. Delivery Core stays HTTP-agnostic.
     /// </summary>
@@ -42,6 +45,11 @@ namespace KairoServer.Infastructure.Deliveries.Http
 
         public DomainDestinationType DestinationType => DomainDestinationType.Http;
 
+        /// <summary>
+        /// Executes one HTTP delivery attempt end-to-end:
+        /// parse destination config, inject headers/auth, send request,
+        /// and classify the transport/protocol outcome.
+        /// </summary>
         public async Task<DeliveryExecutionResult> ExecuteAsync(
             DeliveryExecutionRequest request,
             CancellationToken cancellationToken)
@@ -87,6 +95,18 @@ namespace KairoServer.Infastructure.Deliveries.Http
                 }
             }
 
+            if (config.SecretHeaders is not null)
+            {
+                foreach (var kvp in config.SecretHeaders)
+                {
+                    httpRequest.Headers.TryAddWithoutValidation(kvp.Key, kvp.Value);
+                }
+            }
+
+            var protectedHeadersResult = await ApplyProtectedHeadersAsync(httpRequest, config, cancellationToken);
+            if (protectedHeadersResult is not null)
+                return protectedHeadersResult;
+
             var authResult = await ApplyAuthenticationAsync(httpRequest, config, cancellationToken);
             if (authResult is not null)
             {
@@ -131,33 +151,50 @@ namespace KairoServer.Infastructure.Deliveries.Http
             HttpDestinationConfig config,
             CancellationToken cancellationToken)
         {
+            // Authentication remains protocol-specific here (HTTP boundary),
+            // while upstream layers pass only opaque destination config.
             var authType = config.Authentication?.Type?.Trim().ToLowerInvariant() ?? "none";
             if (authType == "none")
             {
                 return null;
             }
 
-            if (string.IsNullOrWhiteSpace(config.Authentication?.SecretRef))
+            if (config.Authentication?.Credential is null)
             {
                 return DeliveryExecutionResult.Failure(
                     DeliveryFailureCategory.ConfigurationInvalid,
-                    $"HTTP destination auth '{authType}' requires a secretRef.");
+                    $"HTTP destination auth '{authType}' requires credentials.");
             }
 
-            var secret = await _secretResolver.ResolveAsync(
-                config.Authentication.SecretRef!, cancellationToken);
-            if (!secret.IsSuccess)
+            var credentialKind = config.Authentication.Credential.Kind?.Trim().ToLowerInvariant();
+            var credentialValue = config.Authentication.Credential.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(credentialKind) || string.IsNullOrWhiteSpace(credentialValue))
             {
                 return DeliveryExecutionResult.Failure(
                     DeliveryFailureCategory.ConfigurationInvalid,
-                    $"Failed to resolve secret '{config.Authentication.SecretRef}': {secret.Error}");
+                    $"HTTP destination auth '{authType}' has invalid credentials.");
+            }
+
+            var secretResult = credentialKind switch
+            {
+                "ref" => await ResolveCredentialAsync(credentialValue, null, cancellationToken),
+                "inline" => await ResolveCredentialAsync(null, credentialValue, cancellationToken),
+                _ => KairoServer.Common.Result.Failure<string>(
+                    KairoServer.Common.Error.Validation("Unsupported credential kind."))
+            };
+
+            if (secretResult.IsFailure)
+            {
+                return DeliveryExecutionResult.Failure(
+                    DeliveryFailureCategory.ConfigurationInvalid,
+                    $"Failed to resolve credentials for HTTP auth '{authType}'.");
             }
 
             switch (authType)
             {
                 case "bearer":
                     httpRequest.Headers.Authorization =
-                        new AuthenticationHeaderValue("Bearer", secret.Value);
+                        new AuthenticationHeaderValue("Bearer", secretResult.Value);
                     return null;
 
                 case "hmac":
@@ -172,6 +209,54 @@ namespace KairoServer.Infastructure.Deliveries.Http
                         DeliveryFailureCategory.ConfigurationInvalid,
                         $"Unsupported HTTP auth type '{authType}'.");
             }
+        }
+
+        private async Task<DeliveryExecutionResult?> ApplyProtectedHeadersAsync(
+            HttpRequestMessage httpRequest,
+            HttpDestinationConfig config,
+            CancellationToken cancellationToken)
+        {
+            // protectedHeaders contain references (not plaintext values).
+            // Values are resolved just-in-time and never persisted as raw secrets.
+            if (config.ProtectedHeaders is null)
+                return null;
+
+            foreach (var kvp in config.ProtectedHeaders)
+            {
+                var resolved = await ResolveCredentialAsync(kvp.Value, null, cancellationToken);
+                if (resolved.IsFailure)
+                {
+                    return DeliveryExecutionResult.Failure(
+                        DeliveryFailureCategory.ConfigurationInvalid,
+                        $"Failed to resolve destination protected header '{kvp.Key}'.");
+                }
+
+                httpRequest.Headers.TryAddWithoutValidation(kvp.Key, resolved.Value);
+            }
+
+            return null;
+        }
+
+        private async Task<KairoServer.Common.Result<string>> ResolveCredentialAsync(
+            string? secretRef,
+            string? inlineSecret,
+            CancellationToken cancellationToken)
+        {
+            // Unified credential handling:
+            // - ref path => resolve through secret resolver
+            // - inline path => already accepted for execution scope
+            if (!string.IsNullOrWhiteSpace(secretRef))
+            {
+                return await _secretResolver.ResolveAsync(secretRef, cancellationToken);
+            }
+
+            if (!string.IsNullOrWhiteSpace(inlineSecret))
+            {
+                return KairoServer.Common.Result.Success(inlineSecret);
+            }
+
+            return KairoServer.Common.Result.Failure<string>(
+                KairoServer.Common.Error.Validation("Credential is required."));
         }
 
         /// <summary>Max bytes of response body captured for observability.</summary>

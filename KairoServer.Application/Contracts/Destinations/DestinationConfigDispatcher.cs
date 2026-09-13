@@ -4,6 +4,7 @@ using System.Linq;
 using KairoServer.Common;
 using KairoServer.Contracts.CustomerContracts;
 using KairoServer.Domain.Contracts;
+using DomainDestinationType = KairoServer.Domain.Contracts.DestinationType;
 
 namespace KairoServer.Application.Contracts.Destinations
 {
@@ -14,11 +15,15 @@ namespace KairoServer.Application.Contracts.Destinations
     public sealed class DestinationConfigDispatcher : IDestinationConfigDispatcher
     {
         private readonly IReadOnlyDictionary<Type, IDestinationConfigHandler> _handlers;
+        private readonly IReadOnlyDictionary<DomainDestinationType, IDestinationConfigHandler> _handlersByDestinationType;
 
         public DestinationConfigDispatcher(IEnumerable<IDestinationConfigHandler> handlers)
         {
             if (handlers is null) throw new ArgumentNullException(nameof(handlers));
-            _handlers = handlers.ToDictionary(h => h.ConfigType);
+
+            var materialized = handlers.ToArray();
+            _handlers = materialized.ToDictionary(h => h.ConfigType);
+            _handlersByDestinationType = materialized.ToDictionary(h => h.DestinationType);
         }
 
         public Result<Destination> Build(DestinationConfig? configuration)
@@ -36,6 +41,20 @@ namespace KairoServer.Application.Contracts.Destinations
             }
 
             return handler.Build(configuration);
+        }
+
+        public Result<string> Redact(Destination destination)
+        {
+            if (destination is null)
+                return Result.Failure<string>(Error.Validation("Destination is required."));
+
+            if (!_handlersByDestinationType.TryGetValue(destination.Type, out var handler))
+            {
+                return Result.Failure<string>(Error.Validation(
+                    $"Unsupported destination type '{destination.Type}'."));
+            }
+
+            return handler.Redact(destination.Configuration);
         }
     }
 }

@@ -298,9 +298,9 @@ namespace KairoServer.IntegrationTests
                 """,
                 new { id = contractId, cid = customerId, cfg = JsonSerializer.Serialize(new HttpDestinationConfig(
                     url,
-                    new HttpAuthentication("none", null),
-                    null,
-                    5)), now });
+                    new HttpAuthentication("none"),
+                    Headers: null,
+                    TimeoutSeconds: 5)), now });
             await conn.ExecuteAsync("""
                 INSERT INTO events(id, type, idempotency_key, source_id, occurred_at, received_at, metadata, payload)
                 VALUES (@id, 'orders.created', @idem, @src, @now, @now, '{}'::jsonb, '{}'::jsonb);
@@ -309,9 +309,9 @@ namespace KairoServer.IntegrationTests
 
             var destination = new Destination(KairoServer.Domain.Contracts.DestinationType.Http, JsonSerializer.Serialize(new HttpDestinationConfig(
                 url,
-                new HttpAuthentication("none", null),
-                null,
-                5)));
+                new HttpAuthentication("none"),
+                Headers: null,
+                TimeoutSeconds: 5)));
 
             var delivery = Delivery.CreatePending(
                 eventId, contractId, customerId, "orders.created",

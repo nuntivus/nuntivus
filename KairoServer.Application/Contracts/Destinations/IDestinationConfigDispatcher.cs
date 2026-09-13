@@ -12,5 +12,7 @@ namespace KairoServer.Application.Contracts.Destinations
     public interface IDestinationConfigDispatcher
     {
         Result<Destination> Build(DestinationConfig? configuration);
+
+        Result<string> Redact(Destination destination);
     }
 }

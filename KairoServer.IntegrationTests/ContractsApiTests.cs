@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using Dapper;
 using KairoServer.Api.Common;
 using KairoServer.Contracts.CustomerContracts;
@@ -40,7 +41,7 @@ namespace KairoServer.IntegrationTests
                 eventTypes.Length == 0 ? new[] { "orders.created" } : eventTypes,
                 new HttpDestinationConfig(
                     "https://hooks.example.com/acme",
-                    new HttpAuthentication("hmac", "secret.acme.webhook"),
+                    new HttpAuthentication("hmac", new HttpCredential("ref", "secret.acme.webhook")),
                     Headers: null,
                     TimeoutSeconds: 30));
 
@@ -92,7 +93,7 @@ namespace KairoServer.IntegrationTests
                     Array.Empty<string>(),
                     new HttpDestinationConfig(
                         "https://x.example.com",
-                        new HttpAuthentication("none", null))));
+                        new HttpAuthentication("none"))));
 
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
         }
@@ -107,7 +108,7 @@ namespace KairoServer.IntegrationTests
                 new[] { "orders.created" },
                 new HttpDestinationConfig(
                     "not-a-url",
-                    new HttpAuthentication("none", null)));
+                    new HttpAuthentication("none")));
 
             var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
@@ -123,7 +124,7 @@ namespace KairoServer.IntegrationTests
                 new[] { "orders.created" },
                 new HttpDestinationConfig(
                     "https://ok.example.com",
-                    new HttpAuthentication("hmac", "plainstring")));
+                    new HttpAuthentication("hmac", new HttpCredential("ref", "plainstring"))));
 
             var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
@@ -139,7 +140,7 @@ namespace KairoServer.IntegrationTests
                 new[] { "orders.created" },
                 new HttpDestinationConfig(
                     "https://ok.example.com",
-                    new HttpAuthentication("basic", "secret.x.y")));
+                    new HttpAuthentication("basic", new HttpCredential("ref", "secret.x.y"))));
 
             var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
@@ -171,6 +172,89 @@ namespace KairoServer.IntegrationTests
 
             using var config = JsonDocument.Parse(view.DestinationConfiguration);
             Assert.Equal("https://hooks.example.com/acme", config.RootElement.GetProperty("Url").GetString());
+            Assert.Equal("***", config.RootElement.GetProperty("Authentication").GetProperty("Credential").GetProperty("Value").GetString());
+        }
+
+        [Fact]
+        public async Task Create_with_inline_bearer_secret_persists_protected_and_get_redacts_secret()
+        {
+            await CreateCustomerAsync("acme");
+
+            var inlineSecret = "bearer-inline-token";
+            var createRequest = new CreateContractRequest(
+                "acme",
+                new[] { "orders.created" },
+                new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("bearer", new HttpCredential("inline", inlineSecret)),
+                    Headers: new Dictionary<string, string> { ["X-App"] = "kairo" },
+                    SecretHeaders: new Dictionary<string, string> { ["X-Api-Key"] = "abc123" },
+                    TimeoutSeconds: 30));
+
+            var createResp = await _client.PostAsJsonAsync("/v1/contracts", createRequest);
+            Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
+            var created = await createResp.Content.ReadFromJsonAsync<ContractCreated>();
+
+            var getResp = await _client.GetAsync($"/v1/contracts/{created!.Id}");
+            Assert.Equal(HttpStatusCode.OK, getResp.StatusCode);
+            var view = await getResp.Content.ReadFromJsonAsync<ContractView>();
+
+            using var redacted = JsonDocument.Parse(view!.DestinationConfiguration);
+            Assert.Equal("***", redacted.RootElement.GetProperty("Authentication").GetProperty("Credential").GetProperty("Value").GetString());
+            var secretHeaders = redacted.RootElement.GetProperty("SecretHeaders");
+            Assert.Equal("***", secretHeaders.GetProperty("X-Api-Key").GetString());
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var storedConfig = await conn.ExecuteScalarAsync<string>(
+                "SELECT destination_config::text FROM contracts WHERE id = @id;",
+                new { id = created.Id });
+
+            Assert.Contains("protected.", storedConfig);
+            Assert.DoesNotContain(inlineSecret, storedConfig);
+            Assert.DoesNotContain("abc123", storedConfig);
+        }
+
+        [Fact]
+        public async Task Update_and_rotate_credentials_replace_stored_secret()
+        {
+            await CreateCustomerAsync("acme");
+            var create = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme"));
+            var created = await create.Content.ReadFromJsonAsync<ContractCreated>();
+
+            var updateResp = await _client.PostAsJsonAsync(
+                $"/v1/contracts/{created!.Id}/credentials",
+                new UpdateContractCredentialsRequest(new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("bearer", new HttpCredential("inline", "token-v1")),
+                    TimeoutSeconds: 30)));
+            Assert.Equal(HttpStatusCode.OK, updateResp.StatusCode);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var firstStored = await conn.ExecuteScalarAsync<string>(
+                "SELECT destination_config::text FROM contracts WHERE id = @id;",
+                new { id = created.Id });
+
+            var rotateResp = await _client.PostAsJsonAsync(
+                $"/v1/contracts/{created.Id}/credentials/rotate",
+                new UpdateContractCredentialsRequest(new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("bearer", new HttpCredential("inline", "token-v2")),
+                    TimeoutSeconds: 30)));
+            Assert.Equal(HttpStatusCode.OK, rotateResp.StatusCode);
+            var rotatedView = await rotateResp.Content.ReadFromJsonAsync<ContractView>();
+
+            using var redacted = JsonDocument.Parse(rotatedView!.DestinationConfiguration);
+            Assert.Equal("***", redacted.RootElement.GetProperty("Authentication").GetProperty("Credential").GetProperty("Value").GetString());
+
+            var secondStored = await conn.ExecuteScalarAsync<string>(
+                "SELECT destination_config::text FROM contracts WHERE id = @id;",
+                new { id = created.Id });
+
+            Assert.Contains("protected.", firstStored);
+            Assert.Contains("protected.", secondStored);
+            Assert.NotEqual(firstStored, secondStored);
+            Assert.DoesNotContain("token-v1", secondStored);
+            Assert.DoesNotContain("token-v2", secondStored);
         }
 
         [Fact]

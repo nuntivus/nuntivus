@@ -29,5 +29,15 @@ namespace KairoServer.Application.Contracts
         Task<Result<ContractView>> DisableAsync(
             Guid id,
             CancellationToken cancellationToken);
+
+        Task<Result<ContractView>> UpdateCredentialsAsync(
+            Guid id,
+            UpdateContractCredentialsRequest request,
+            CancellationToken cancellationToken);
+
+        Task<Result<ContractView>> RotateCredentialsAsync(
+            Guid id,
+            UpdateContractCredentialsRequest request,
+            CancellationToken cancellationToken);
     }
 }
