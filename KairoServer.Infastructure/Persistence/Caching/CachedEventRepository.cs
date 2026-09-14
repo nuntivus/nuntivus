@@ -35,5 +35,21 @@ namespace KairoServer.Infastructure.Persistence.Caching
                 _ttl,
                 ct => _inner.GetByIdAsync(id, ct),
                 cancellationToken);
+
+        public Task<Result<EventReplay?>> GetReplayAsync(
+            Guid sourceEventId,
+            string replayKey,
+            CancellationToken cancellationToken) =>
+            _cache.GetOrCreateAsync(
+                $"{CacheKeys.EventReplays}:{sourceEventId}:{replayKey}",
+                _ttl,
+                ct => _inner.GetReplayAsync(sourceEventId, replayKey, ct),
+                cancellationToken);
+
+        public Task<Result> InsertReplayAsync(
+            EventReplay replay,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken) =>
+            _inner.InsertReplayAsync(replay, uow, cancellationToken);
     }
 }

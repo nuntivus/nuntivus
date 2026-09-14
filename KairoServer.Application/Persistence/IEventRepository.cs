@@ -23,5 +23,15 @@ namespace KairoServer.Application.Persistence
         Task<Result<Event?>> GetByIdAsync(
             Guid id,
             CancellationToken cancellationToken);
+
+        Task<Result<EventReplay?>> GetReplayAsync(
+            Guid sourceEventId,
+            string replayKey,
+            CancellationToken cancellationToken);
+
+        Task<Result> InsertReplayAsync(
+            EventReplay replay,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken);
     }
 }

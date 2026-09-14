@@ -6,9 +6,11 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using KairoServer.Application.Events;
 using KairoServer.Application.Matching;
 using KairoServer.Application.Messaging;
 using KairoServer.Application.Persistence;
+using KairoServer.Common.Logging;
 using KairoServer.Contracts.Events;
 using KairoServer.Domain.Contracts;
 using KairoServer.Domain.Customers;
@@ -219,6 +221,65 @@ namespace KairoServer.IntegrationTests
             result.EnsureSuccess();
             Assert.Equal(2, result.Value.InsertedDeliveries);
             Assert.Equal(2, await CountDeliveriesAsync(@event.Id));
+        }
+
+        [Fact]
+        public async Task Replay_uses_current_contract_configuration_when_matching()
+        {
+            await SeedCustomerAsync("acme");
+            var contractId = await SeedContractAsync("acme", new[] { "orders.created" });
+            var sourceEvent = await SeedEventAsync("orders.created", "{\"orderId\":\"replay-me\"}");
+
+            await using (var scope = _services.CreateAsyncScope())
+            {
+                var contracts = scope.ServiceProvider.GetRequiredService<IContractRepository>();
+                var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                var contractResult = await contracts.GetByIdAsync(contractId, CancellationToken.None);
+                var contract = contractResult.EnsureValue()!;
+
+                contract.UpdateDestination(
+                    new Destination(DestinationType.Http, "{\"Url\":\"https://replay.example.com\"}"),
+                    DateTimeOffset.UtcNow);
+
+                uow.Begin(true);
+                (await contracts.UpdateAsync(contract, uow, CancellationToken.None)).EnsureSuccess();
+                uow.Commit();
+            }
+
+            ReplayEventResult replay;
+            await using (var scope = _services.CreateAsyncScope())
+            {
+                var eventService = new EventService(
+                    scope.ServiceProvider.GetRequiredService<IEventRepository>(),
+                    scope.ServiceProvider.GetRequiredService<IOutboxRepository>(),
+                    scope.ServiceProvider.GetRequiredService<IUnitOfWork>(),
+                    scope.ServiceProvider.GetRequiredService<IAppLogger<EventService>>());
+
+                var replayResult = await eventService.ReplayAsync(
+                    sourceEvent.Id,
+                    "ops-replay-current-config",
+                    null,
+                    CancellationToken.None);
+
+                replay = replayResult.EnsureValue();
+                Assert.True(replay.Created);
+            }
+
+            var replayedEvent = replay.ReplayedEventId;
+            var matcher = _services.GetRequiredService<IContractMatcherService>();
+            var match = await matcher.MatchAsync(
+                new EventAccepted(replayedEvent, sourceEvent.Type, sourceEvent.SourceId, sourceEvent.OccurredAt),
+                CancellationToken.None);
+
+            match.EnsureSuccess();
+            Assert.Equal(1, match.Value.InsertedDeliveries);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var destinationConfig = await conn.ExecuteScalarAsync<string>(
+                "SELECT destination_config::text FROM deliveries WHERE event_id = @eventId LIMIT 1;",
+                new { eventId = replayedEvent });
+
+            Assert.Contains("https://replay.example.com", destinationConfig);
         }
 
         // ---- end-to-end pipeline via JetStream + Worker -----------------------

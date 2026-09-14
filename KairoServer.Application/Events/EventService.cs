@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -89,6 +90,114 @@ namespace KairoServer.Application.Events
                 _logger.Error(ex, "Failed to publish event (idempotencyKey {IdempotencyKey}, type {Type}).",
                     idempotencyKey, type);
                 return Result.Failure<Guid>(ex);
+            }
+        }
+
+        public async Task<Result<ReplayEventResult>> ReplayAsync(
+            Guid eventId,
+            string replayKey,
+            string? reason,
+            CancellationToken cancellationToken)
+        {
+            if (eventId == Guid.Empty)
+                return Result.Failure<ReplayEventResult>(Error.Validation("eventId is required."));
+            if (string.IsNullOrWhiteSpace(replayKey))
+                return Result.Failure<ReplayEventResult>(Error.Validation("replayKey is required."));
+
+            replayKey = replayKey.Trim();
+
+            try
+            {
+                var existing = await _eventRepository.GetReplayAsync(eventId, replayKey, cancellationToken);
+                var existingReplay = existing.EnsureValue();
+                if (existingReplay is not null)
+                {
+                    return Result.Success(new ReplayEventResult(
+                        existingReplay.SourceEventId,
+                        existingReplay.ReplayedEventId,
+                        Created: false));
+                }
+
+                var sourceResult = await _eventRepository.GetByIdAsync(eventId, cancellationToken);
+                var source = sourceResult.EnsureValue();
+                if (source is null)
+                    return Result.Failure<ReplayEventResult>(Error.NotFound($"Event '{eventId}' was not found."));
+
+                var now = DateTimeOffset.UtcNow;
+                var replayMetadata = source.Metadata is null
+                    ? new EventMetadata()
+                    : EventMetadata.Parse(source.Metadata.ToJson());
+
+                replayMetadata["kairo.replay.sourceEventId"] = source.Id.ToString("D");
+                replayMetadata["kairo.replay.key"] = replayKey;
+                replayMetadata["kairo.replay.requestedAt"] = now.ToString("O");
+                if (!string.IsNullOrWhiteSpace(reason))
+                    replayMetadata["kairo.replay.reason"] = reason.Trim();
+
+                var replayedEvent = Event.Create(
+                    idempotencyKey: $"replay:{source.Id:D}:{replayKey}",
+                    type: source.Type,
+                    sourceId: source.SourceId,
+                    occurredAt: source.OccurredAt,
+                    payload: source.Payload,
+                    metadata: replayMetadata);
+
+                var accepted = new EventAccepted(
+                    replayedEvent.Id,
+                    replayedEvent.Type,
+                    replayedEvent.SourceId,
+                    replayedEvent.OccurredAt);
+
+                var replay = new EventReplay(source.Id, replayKey, replayedEvent.Id, now);
+
+                var outbox = OutboxMessage.Create(
+                    replayedEvent.Id,
+                    OutboxMessageType.EventAccepted,
+                    JsonSerializer.Serialize(accepted),
+                    now);
+
+                _unitOfWork.Begin(true);
+
+                var eventInsert = await _eventRepository.InsertAsync(replayedEvent, _unitOfWork, cancellationToken);
+                eventInsert.EnsureSuccess();
+
+                var replayInsert = await _eventRepository.InsertReplayAsync(replay, _unitOfWork, cancellationToken);
+                if (replayInsert.IsFailure && replayInsert.Errors.Any(e => e.Code == "conflict"))
+                {
+                    _unitOfWork.Rollback();
+                    var winner = await _eventRepository.GetReplayAsync(eventId, replayKey, cancellationToken);
+                    var winningReplay = winner.EnsureValue();
+                    if (winningReplay is not null)
+                    {
+                        return Result.Success(new ReplayEventResult(
+                            winningReplay.SourceEventId,
+                            winningReplay.ReplayedEventId,
+                            Created: false));
+                    }
+                }
+                replayInsert.EnsureSuccess();
+
+                var outboxInsert = await _outboxRepository.InsertAsync(outbox, _unitOfWork, cancellationToken);
+                outboxInsert.EnsureSuccess();
+
+                _unitOfWork.Commit();
+
+                _logger.Information(
+                    "Event replay accepted (source {SourceEventId}, replayed {ReplayedEventId}, replayKey {ReplayKey}).",
+                    source.Id,
+                    replayedEvent.Id,
+                    replayKey);
+
+                return Result.Success(new ReplayEventResult(source.Id, replayedEvent.Id, Created: true));
+            }
+            catch (Exception ex)
+            {
+                _unitOfWork.Rollback();
+                _logger.Error(ex,
+                    "Failed to replay event {EventId} with replayKey {ReplayKey}.",
+                    eventId,
+                    replayKey);
+                return Result.Failure<ReplayEventResult>(ex);
             }
         }
     }

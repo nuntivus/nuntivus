@@ -1,4 +1,5 @@
 using KairoServer.Application.Events;
+using KairoServer.Api.Common;
 using KairoServer.Common.Extensions;
 using KairoServer.Common.Logging;
 using Microsoft.AspNetCore.Mvc;
@@ -43,6 +44,29 @@ namespace KairoServer.Api.Controllers.Events
             var eventId = result.EnsureValue();
 
             return Ok(new PublishEventResponse(eventId.ToString(), "accepted"));
+        }
+
+        [HttpPost("{id:guid}/replay")]
+        public async Task<IActionResult> Replay(
+            Guid id,
+            ReplayEventRequest request,
+            CancellationToken cancellationToken)
+        {
+            _logger.Information(
+                "Received ReplayEvent request (eventId {EventId}, replayKey {ReplayKey}).",
+                id,
+                request.ReplayKey);
+
+            var result = await _events.ReplayAsync(
+                id,
+                request.ReplayKey,
+                request.Reason,
+                cancellationToken);
+
+            return result.ToActionResult(replay => Ok(new ReplayEventResponse(
+                replay.SourceEventId.ToString("D"),
+                replay.ReplayedEventId.ToString("D"),
+                replay.Created ? "accepted" : "already_replayed")));
         }
     }
 }

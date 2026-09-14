@@ -15,5 +15,16 @@ namespace KairoServer.Application.Events
             DateTimeOffset occurredAt,
             string? metadata,
             CancellationToken cancellationToken);
+
+        Task<Result<ReplayEventResult>> ReplayAsync(
+            Guid eventId,
+            string replayKey,
+            string? reason,
+            CancellationToken cancellationToken);
     }
+
+    public sealed record ReplayEventResult(
+        Guid SourceEventId,
+        Guid ReplayedEventId,
+        bool Created);
 }
