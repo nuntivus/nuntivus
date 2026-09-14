@@ -12,5 +12,6 @@ namespace KairoServer.Contracts.CustomerContracts
         IReadOnlyCollection<string> EventTypes,
         DestinationConfig Configuration,
         IReadOnlyCollection<ContractSchemaTargetRequest>? SchemaTargets = null,
-        ContractFilterRequest? Filter = null);
+    ContractFilterRequest? Filter = null,
+    ContractPayloadTransformationRequest? Transformation = null);
 }

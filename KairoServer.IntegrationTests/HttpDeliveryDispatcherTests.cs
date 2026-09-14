@@ -250,6 +250,36 @@ namespace KairoServer.IntegrationTests
             Assert.Single(_server.Received);
         }
 
+        [Fact]
+        public async Task Dispatch_with_invalid_transformation_marks_terminal_configuration_failure()
+        {
+            var transformation = JsonSerializer.Serialize(new ContractPayloadTransformation(
+                1,
+                new[]
+                {
+                    new ContractPayloadFieldMapping("order.missing", "payload.orderId")
+                }));
+
+            var (deliveryId, _) = await SeedDeliveryAsync(_server.Url, transformation);
+
+            var dispatcher = BuildDispatcher();
+            var result = await dispatcher.DispatchAsync(deliveryId, CancellationToken.None);
+            result.EnsureSuccess();
+
+            Assert.Equal(DeliveryDispatchOutcome.FailedTerminal, result.Value);
+
+            var (status, attemptCount, lastError, nextAttemptAt) = await ReadDeliveryAsync(deliveryId);
+            Assert.Equal("Dead", status);
+            Assert.Equal(1, attemptCount);
+            Assert.NotNull(lastError);
+            Assert.Contains("Transformation source selector", lastError);
+            Assert.Null(nextAttemptAt);
+
+            var attempt = Assert.Single(await ReadAttemptsAsync(deliveryId));
+            Assert.Equal("ConfigurationInvalid", attempt.failure_category);
+            Assert.Empty(_server.Received);
+        }
+
         // ---- helpers ---------------------------------------------------------
 
         private IDeliveryDispatcherService BuildDispatcher(DeliveryDispatcherOption? options = null)
@@ -267,6 +297,7 @@ namespace KairoServer.IntegrationTests
             services.AddSingleton<ISecretResolver, NullSecretResolver>();
             services.AddSingleton<IDeliveryExecutor, HttpDeliveryExecutor>();
             services.AddSingleton<IDeliveryExecutorDispatcher, DeliveryExecutorDispatcher>();
+            services.AddSingleton<IDeliveryPayloadTransformer, DeliveryPayloadTransformer>();
 
             services.AddSingleton(options ?? new DeliveryDispatcherOption
             {
@@ -280,7 +311,7 @@ namespace KairoServer.IntegrationTests
             return sp.CreateScope().ServiceProvider.GetRequiredService<IDeliveryDispatcherService>();
         }
 
-        private async Task<(Guid deliveryId, Guid eventId)> SeedDeliveryAsync(string url)
+        private async Task<(Guid deliveryId, Guid eventId)> SeedDeliveryAsync(string url, string? transformationConfiguration = null)
         {
             var customerId = "cust-" + Guid.NewGuid().ToString("N")[..6];
             var contractId = Guid.NewGuid();
@@ -315,7 +346,7 @@ namespace KairoServer.IntegrationTests
 
             var delivery = Delivery.CreatePending(
                 eventId, contractId, customerId, "orders.created",
-                "{\"orderId\":\"o-1\"}", destination, now);
+                "{\"orderId\":\"o-1\"}", destination, now, transformationConfiguration);
 
             var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
             using var uow = new PostgresUnitOfWork(factory);

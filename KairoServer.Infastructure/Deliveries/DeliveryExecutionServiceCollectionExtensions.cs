@@ -23,6 +23,7 @@ namespace KairoServer.Infastructure.Deliveries
             services.AddSingleton<ISecretResolver, ProtectedSecretResolver>();
             services.AddSingleton<IDeliveryExecutor, HttpDeliveryExecutor>();
             services.AddSingleton<IDeliveryExecutorDispatcher, DeliveryExecutorDispatcher>();
+            services.AddSingleton<IDeliveryPayloadTransformer, DeliveryPayloadTransformer>();
 
             return services;
         }

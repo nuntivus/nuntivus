@@ -154,6 +154,65 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Create_with_transformation_persists_and_returns_transformation()
+        {
+            await CreateCustomerAsync("acme");
+
+            var req = new CreateContractRequest(
+                "acme",
+                new[] { "orders.created" },
+                new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("none")),
+                Transformation: new ContractPayloadTransformationRequest(
+                    1,
+                    new[]
+                    {
+                        new ContractPayloadFieldMappingRequest("order.id", "payload.orderId"),
+                        new ContractPayloadFieldMappingRequest("order.amount", "payload.amount")
+                    }));
+
+            var createResp = await _client.PostAsJsonAsync("/v1/contracts", req);
+
+            Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
+            var created = await createResp.Content.ReadFromJsonAsync<ContractCreated>();
+            Assert.NotNull(created);
+            Assert.NotNull(created!.Transformation);
+            Assert.Equal(1, created.Transformation!.Version);
+            Assert.Equal(2, created.Transformation.FieldMappings.Count);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var transformationJson = await conn.ExecuteScalarAsync<string?>(
+                "SELECT transformation_config::text FROM contracts WHERE id = @id;",
+                new { id = created.Id });
+
+            Assert.False(string.IsNullOrWhiteSpace(transformationJson));
+        }
+
+        [Fact]
+        public async Task Create_with_duplicate_transformation_targets_returns_400()
+        {
+            await CreateCustomerAsync("acme");
+
+            var req = new CreateContractRequest(
+                "acme",
+                new[] { "orders.created" },
+                new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("none")),
+                Transformation: new ContractPayloadTransformationRequest(
+                    1,
+                    new[]
+                    {
+                        new ContractPayloadFieldMappingRequest("order.id", "payload.orderId"),
+                        new ContractPayloadFieldMappingRequest("order.externalId", "payload.orderId")
+                    }));
+
+            var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
+
+        [Fact]
         public async Task Create_with_invalid_filter_selector_returns_400()
         {
             await CreateCustomerAsync("acme");

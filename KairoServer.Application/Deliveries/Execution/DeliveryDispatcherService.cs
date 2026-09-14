@@ -20,6 +20,7 @@ namespace KairoServer.Application.Deliveries.Execution
     {
         private readonly IDeliveryRepository _deliveries;
         private readonly IDeliveryExecutorDispatcher _executors;
+        private readonly IDeliveryPayloadTransformer _payloadTransformer;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IAppLogger<DeliveryDispatcherService> _logger;
         private readonly DeliveryDispatcherOption _options;
@@ -27,12 +28,14 @@ namespace KairoServer.Application.Deliveries.Execution
         public DeliveryDispatcherService(
             IDeliveryRepository deliveries,
             IDeliveryExecutorDispatcher executors,
+            IDeliveryPayloadTransformer payloadTransformer,
             IUnitOfWork unitOfWork,
             IAppLogger<DeliveryDispatcherService> logger,
             DeliveryDispatcherOption? options = null)
         {
             _deliveries = deliveries ?? throw new ArgumentNullException(nameof(deliveries));
             _executors = executors ?? throw new ArgumentNullException(nameof(executors));
+            _payloadTransformer = payloadTransformer ?? throw new ArgumentNullException(nameof(payloadTransformer));
             _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _options = options ?? new DeliveryDispatcherOption();
@@ -93,34 +96,47 @@ namespace KairoServer.Application.Deliveries.Execution
             }
 
             var attemptNumber = delivery.AttemptCount;
-            var request = new DeliveryExecutionRequest(
-                delivery.Id,
-                delivery.EventId,
-                delivery.ContractId,
-                delivery.CustomerId,
-                delivery.EventType,
-                delivery.Payload,
-                attemptNumber,
-                new Destination(delivery.DestinationType, delivery.DestinationConfiguration));
-
             var startedAt = DateTimeOffset.UtcNow;
+            var payloadResult = _payloadTransformer.Apply(
+                delivery.Payload,
+                delivery.TransformationConfiguration);
+
             DeliveryExecutionResult execution;
-            try
+            if (payloadResult.IsFailure)
             {
-                execution = await _executors.ExecuteAsync(request, cancellationToken);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex,
-                    "Unhandled error while executing delivery {DeliveryId} attempt {Attempt}.",
-                    delivery.Id, attemptNumber);
                 execution = DeliveryExecutionResult.Failure(
-                    DeliveryFailureCategory.Transient,
-                    $"Executor threw: {ex.Message}");
+                    DeliveryFailureCategory.ConfigurationInvalid,
+                    payloadResult.Error?.Message ?? "Transformation failed.");
+            }
+            else
+            {
+                var request = new DeliveryExecutionRequest(
+                    delivery.Id,
+                    delivery.EventId,
+                    delivery.ContractId,
+                    delivery.CustomerId,
+                    delivery.EventType,
+                    payloadResult.Value,
+                    attemptNumber,
+                    new Destination(delivery.DestinationType, delivery.DestinationConfiguration));
+
+                try
+                {
+                    execution = await _executors.ExecuteAsync(request, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error(ex,
+                        "Unhandled error while executing delivery {DeliveryId} attempt {Attempt}.",
+                        delivery.Id, attemptNumber);
+                    execution = DeliveryExecutionResult.Failure(
+                        DeliveryFailureCategory.Transient,
+                        $"Executor threw: {ex.Message}");
+                }
             }
             var completedAt = DateTimeOffset.UtcNow;
 

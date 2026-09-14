@@ -19,6 +19,7 @@ namespace KairoServer.Application.Contracts
         public const int EventTypeMaxLength = 128;
         public const int MaxEventTypesPerContract = 100;
         public const int MaxFilterRulesPerScope = 50;
+        public const int MaxTransformationMappings = 100;
         public const int FilterSelectorMaxLength = 200;
         public const int FilterValueMaxLength = 500;
 

@@ -104,6 +104,10 @@ namespace KairoServer.Application.Contracts
             if (filterValidation.IsFailure)
                 return Result<ContractCreated>.Fail(filterValidation.Errors);
 
+            var transformationValidation = ValidateTransformation(request.Transformation);
+            if (transformationValidation.IsFailure)
+                return Result<ContractCreated>.Fail(transformationValidation.Errors);
+
             var destinationResult = _destinations.Build(request.Configuration);
             if (destinationResult.IsFailure)
                 return Result<ContractCreated>.Fail(destinationResult.Errors);
@@ -128,7 +132,8 @@ namespace KairoServer.Application.Contracts
                     domainSchemaTargets,
                     request.Filter.ToDomain(),
                     destinationResult.Value,
-                    now);
+                    now,
+                    request.Transformation.ToDomain());
 
                 _unitOfWork.Begin(true);
                 var insert = await _repository.InsertAsync(contract, _unitOfWork, cancellationToken);
@@ -334,6 +339,7 @@ namespace KairoServer.Application.Contracts
                 new System.Collections.Generic.List<string>(contract.EventTypes),
                 ContractMapping.ToSchemaTargetViews(contract.SchemaTargets),
                 ContractMapping.ToFilterView(contract.Filter),
+                ContractMapping.ToTransformationView(contract.Transformation),
                 ContractMapping.MapDestinationType(contract.Destination.Type),
                 redactedConfig.Value,
                 contract.CreatedAt,
@@ -361,6 +367,46 @@ namespace KairoServer.Application.Contracts
                 return metadataValidation;
 
             return ValidateFilterRules(payloadRules, "payload");
+        }
+
+        private static Result ValidateTransformation(ContractPayloadTransformationRequest? transformation)
+        {
+            if (transformation is null)
+                return Result.Success();
+
+            if (transformation.Version <= 0)
+                return Result.Failure(Error.Validation("Transformation version must be greater than zero."));
+
+            var mappings = transformation.FieldMappings ?? Array.Empty<ContractPayloadFieldMappingRequest>();
+            if (mappings.Count == 0)
+                return Result.Failure(Error.Validation("Transformation must include at least one field mapping."));
+
+            if (mappings.Count > ContractValidation.MaxTransformationMappings)
+                return Result.Failure(Error.Validation(
+                    $"At most {ContractValidation.MaxTransformationMappings} transformation mappings are allowed."));
+
+            return ValidateTransformationMappings(mappings);
+        }
+
+        private static Result ValidateTransformationMappings(IReadOnlyCollection<ContractPayloadFieldMappingRequest> mappings)
+        {
+            var seenTargets = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var mapping in mappings)
+            {
+                if (!ContractValidation.IsValidFilterSelector(mapping.SourceSelector))
+                    return Result.Failure(Error.Validation(
+                        $"Invalid transformation source selector '{mapping.SourceSelector}'. Use dot-separated keys only."));
+
+                if (!ContractValidation.IsValidFilterSelector(mapping.TargetSelector))
+                    return Result.Failure(Error.Validation(
+                        $"Invalid transformation target selector '{mapping.TargetSelector}'. Use dot-separated keys only."));
+
+                if (!seenTargets.Add(mapping.TargetSelector))
+                    return Result.Failure(Error.Validation(
+                        $"Duplicate transformation target selector '{mapping.TargetSelector}'."));
+            }
+
+            return Result.Success();
         }
 
         private static Result ValidateFilterRules(

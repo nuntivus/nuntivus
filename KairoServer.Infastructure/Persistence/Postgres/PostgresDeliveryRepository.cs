@@ -43,6 +43,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         customer_id,
                         event_type,
                         payload,
+                        transformation_config,
                         destination_type,
                         destination_config,
                         status,
@@ -60,6 +61,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         @CustomerId,
                         @EventType,
                         CAST(@Payload AS jsonb),
+                        CAST(@TransformationConfiguration AS jsonb),
                         @DestinationType,
                         CAST(@DestinationConfiguration AS jsonb),
                         @Status,
@@ -88,6 +90,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                             delivery.CustomerId,
                             delivery.EventType,
                             delivery.Payload,
+                            delivery.TransformationConfiguration,
                             DestinationType = delivery.DestinationType.ToString(),
                             delivery.DestinationConfiguration,
                             Status = delivery.Status.ToString(),
@@ -182,6 +185,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         customer_id         AS CustomerId,
                         event_type          AS EventType,
                         payload::text       AS Payload,
+                        transformation_config::text AS TransformationConfig,
                         destination_type    AS DestinationType,
                         destination_config::text AS DestinationConfig,
                         status,
@@ -237,6 +241,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         customer_id         AS CustomerId,
                         event_type          AS EventType,
                         payload::text       AS Payload,
+                        transformation_config::text AS TransformationConfig,
                         destination_type    AS DestinationType,
                         destination_config::text AS DestinationConfig,
                         status,
@@ -401,6 +406,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public string CustomerId { get; set; } = string.Empty;
             public string EventType { get; set; } = string.Empty;
             public string Payload { get; set; } = string.Empty;
+            public string? TransformationConfig { get; set; }
             public string DestinationType { get; set; } = string.Empty;
             public string DestinationConfig { get; set; } = string.Empty;
             public string Status { get; set; } = string.Empty;
@@ -419,6 +425,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 row.CustomerId,
                 row.EventType,
                 row.Payload,
+                row.TransformationConfig,
                 Enum.Parse<DestinationType>(row.DestinationType),
                 row.DestinationConfig,
                 Enum.Parse<DeliveryStatus>(row.Status),

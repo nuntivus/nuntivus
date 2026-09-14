@@ -22,6 +22,7 @@ namespace KairoServer.Domain.Contracts
         public IReadOnlyCollection<string> EventTypes => _eventTypes;
         public IReadOnlyCollection<ContractSchemaTarget> SchemaTargets => _schemaTargets;
         public ContractFilter? Filter { get; }
+        public ContractPayloadTransformation? Transformation { get; }
         public DateTimeOffset CreatedAt { get; }
         public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -32,6 +33,7 @@ namespace KairoServer.Domain.Contracts
             IEnumerable<string> eventTypes,
             IEnumerable<ContractSchemaTarget> schemaTargets,
             ContractFilter? filter,
+            ContractPayloadTransformation? transformation,
             Destination destination,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt)
@@ -44,6 +46,11 @@ namespace KairoServer.Domain.Contracts
             Filter = filter is null
                 ? null
                 : new ContractFilter(filter.MetadataRules, filter.PayloadRules);
+            Transformation = transformation is null
+                ? null
+                : new ContractPayloadTransformation(
+                    transformation.Version,
+                    transformation.FieldMappings);
             Destination = destination;
             CreatedAt = createdAt;
             UpdatedAt = updatedAt;
@@ -55,7 +62,8 @@ namespace KairoServer.Domain.Contracts
             IEnumerable<ContractSchemaTarget>? schemaTargets,
             ContractFilter? filter,
             Destination destination,
-            DateTimeOffset now)
+            DateTimeOffset now,
+            ContractPayloadTransformation? transformation = null)
         {
             if (string.IsNullOrWhiteSpace(customerId))
                 throw new ArgumentException("Customer id cannot be null or whitespace.", nameof(customerId));
@@ -102,6 +110,7 @@ namespace KairoServer.Domain.Contracts
                 materialized,
                 materializedSchemaTargets,
                 filter,
+                transformation,
                 destination,
                 createdAt: now,
                 updatedAt: now);
@@ -120,7 +129,8 @@ namespace KairoServer.Domain.Contracts
             ContractFilter? filter,
             Destination destination,
             DateTimeOffset createdAt,
-            DateTimeOffset updatedAt) =>
+            DateTimeOffset updatedAt,
+            ContractPayloadTransformation? transformation = null) =>
             new(
                 id,
                 customerId,
@@ -128,6 +138,7 @@ namespace KairoServer.Domain.Contracts
                 eventTypes,
                 schemaTargets ?? Array.Empty<ContractSchemaTarget>(),
                 filter,
+                transformation,
                 destination,
                 createdAt,
                 updatedAt);

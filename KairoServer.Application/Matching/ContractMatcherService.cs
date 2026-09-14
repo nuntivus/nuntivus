@@ -113,7 +113,10 @@ namespace KairoServer.Application.Matching
                         authoritative.Type,
                         authoritative.Payload,
                         match.Destination,
-                        now));
+                        now,
+                        match.Transformation is null
+                            ? null
+                            : JsonSerializer.Serialize(match.Transformation)));
                 }
 
                 _unitOfWork.Begin(true);

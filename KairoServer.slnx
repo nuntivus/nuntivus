@@ -11,6 +11,8 @@
     <File Path="005_create_deliveries.sql" />
     <File Path="007_create_event_replays.sql" />
     <File Path="008_create_event_definitions.sql" />
+    <File Path="009_create_contract_filters.sql" />
+    <File Path="010_add_contract_payload_transformations.sql" />
     <File Path="KairoServer.IntegrationTests/Migrations/006_create_delivery_attempts.sql" />
   </Folder>
   <Folder Name="/Solution Items/">

@@ -19,6 +19,7 @@ namespace KairoServer.Application.Contracts
                 new System.Collections.Generic.List<string>(c.EventTypes),
                 ToSchemaTargetViews(c.SchemaTargets),
                 ToFilterView(c.Filter),
+                ToTransformationView(c.Transformation),
                 MapDestinationType(c.Destination.Type),
                 c.Destination.Configuration,
                 c.CreatedAt,
@@ -32,6 +33,7 @@ namespace KairoServer.Application.Contracts
                 new System.Collections.Generic.List<string>(c.EventTypes),
                 ToSchemaTargetViews(c.SchemaTargets),
                 ToFilterView(c.Filter),
+                ToTransformationView(c.Transformation),
                 MapDestinationType(c.Destination.Type),
                 c.CreatedAt);
 
@@ -52,6 +54,21 @@ namespace KairoServer.Application.Contracts
                 return null;
 
             return new ContractFilter(metadata, payload);
+        }
+
+        public static ContractPayloadTransformation? ToDomain(this ContractPayloadTransformationRequest? transformation)
+        {
+            if (transformation is null)
+                return null;
+
+            var mappings = (transformation.FieldMappings ?? System.Array.Empty<ContractPayloadFieldMappingRequest>())
+                .Select(m => new ContractPayloadFieldMapping(m.SourceSelector, m.TargetSelector))
+                .ToArray();
+
+            if (mappings.Length == 0)
+                return null;
+
+            return new ContractPayloadTransformation(transformation.Version, mappings);
         }
 
         public static System.Collections.Generic.IReadOnlyCollection<ContractSchemaTargetView> ToSchemaTargetViews(
@@ -81,6 +98,18 @@ namespace KairoServer.Application.Contracts
             var payload = filter.PayloadRules.Select(ToFilterRuleView).ToArray();
 
             return new ContractFilterView(metadata, payload);
+        }
+
+        public static ContractPayloadTransformationView? ToTransformationView(ContractPayloadTransformation? transformation)
+        {
+            if (transformation is null || transformation.FieldMappings.Count == 0)
+                return null;
+
+            var mappings = transformation.FieldMappings
+                .Select(m => new ContractPayloadFieldMappingView(m.SourceSelector, m.TargetSelector))
+                .ToArray();
+
+            return new ContractPayloadTransformationView(transformation.Version, mappings);
         }
 
         public static DomainFilterOperator MapFilterOperator(DtoFilterOperator value) => value switch

@@ -20,6 +20,7 @@ namespace KairoServer.Domain.Deliveries
         public string CustomerId { get; }
         public string EventType { get; }
         public string Payload { get; }
+        public string? TransformationConfiguration { get; }
         public DestinationType DestinationType { get; }
         public string DestinationConfiguration { get; }
         public DeliveryStatus Status { get; private set; }
@@ -36,6 +37,7 @@ namespace KairoServer.Domain.Deliveries
             string customerId,
             string eventType,
             string payload,
+            string? transformationConfiguration,
             DestinationType destinationType,
             string destinationConfiguration,
             DeliveryStatus status,
@@ -51,6 +53,7 @@ namespace KairoServer.Domain.Deliveries
             CustomerId = customerId;
             EventType = eventType;
             Payload = payload;
+            TransformationConfiguration = transformationConfiguration;
             DestinationType = destinationType;
             DestinationConfiguration = destinationConfiguration;
             Status = status;
@@ -68,7 +71,8 @@ namespace KairoServer.Domain.Deliveries
             string eventType,
             string payload,
             Destination destination,
-            DateTimeOffset now)
+            DateTimeOffset now,
+            string? transformationConfiguration = null)
         {
             if (eventId == Guid.Empty)
                 throw new ArgumentException("EventId cannot be empty.", nameof(eventId));
@@ -87,6 +91,7 @@ namespace KairoServer.Domain.Deliveries
                 customerId,
                 eventType,
                 payload,
+                transformationConfiguration,
                 destination.Type,
                 destination.Configuration,
                 DeliveryStatus.Pending,
@@ -198,8 +203,28 @@ namespace KairoServer.Domain.Deliveries
 
         /// <summary>
         /// Rehydrates a Delivery from persistence. Bypasses invariant enforcement
-        /// on the assumption the stored row is already valid.
+        /// on the assumption the stored row (including transformation configuration snapshot) is already valid.
         /// </summary>
+        public static Delivery Rehydrate(
+            Guid id,
+            Guid eventId,
+            Guid contractId,
+            string customerId,
+            string eventType,
+            string payload,
+            string? transformationConfiguration,
+            DestinationType destinationType,
+            string destinationConfiguration,
+            DeliveryStatus status,
+            int attemptCount,
+            string? lastError,
+            DateTimeOffset? nextAttemptAt,
+            DateTimeOffset createdAt,
+            DateTimeOffset updatedAt) =>
+            new(id, eventId, contractId, customerId, eventType, payload,
+                transformationConfiguration, destinationType, destinationConfiguration, status,
+                attemptCount, lastError, nextAttemptAt, createdAt, updatedAt);
+
         public static Delivery Rehydrate(
             Guid id,
             Guid eventId,
@@ -215,8 +240,21 @@ namespace KairoServer.Domain.Deliveries
             DateTimeOffset? nextAttemptAt,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt) =>
-            new(id, eventId, contractId, customerId, eventType, payload,
-                destinationType, destinationConfiguration, status,
-                attemptCount, lastError, nextAttemptAt, createdAt, updatedAt);
+            Rehydrate(
+                id,
+                eventId,
+                contractId,
+                customerId,
+                eventType,
+                payload,
+                transformationConfiguration: null,
+                destinationType,
+                destinationConfiguration,
+                status,
+                attemptCount,
+                lastError,
+                nextAttemptAt,
+                createdAt,
+                updatedAt);
     }
 }

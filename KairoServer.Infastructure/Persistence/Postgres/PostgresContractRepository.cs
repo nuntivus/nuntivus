@@ -39,6 +39,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         enabled,
                         destination_type,
                         destination_config,
+                        transformation_config,
                         created_at,
                         updated_at
                     )
@@ -49,6 +50,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         @Enabled,
                         @DestinationType,
                         @DestinationConfig::jsonb,
+                        CAST(@TransformationConfig AS jsonb),
                         @CreatedAt,
                         @UpdatedAt
                     );
@@ -66,6 +68,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         contract.Enabled,
                         DestinationType = contract.Destination.Type.ToString(),
                         DestinationConfig = contract.Destination.Configuration,
+                        TransformationConfig = SerializeTransformation(contract.Transformation),
                         contract.CreatedAt,
                         contract.UpdatedAt
                     },
@@ -104,6 +107,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     SET enabled = @Enabled,
                         destination_type = @DestinationType,
                         destination_config = @DestinationConfig::jsonb,
+                        transformation_config = CAST(@TransformationConfig AS jsonb),
                         updated_at = @UpdatedAt
                     WHERE id = @Id;
                     """;
@@ -123,6 +127,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         contract.Enabled,
                         DestinationType = contract.Destination.Type.ToString(),
                         DestinationConfig = contract.Destination.Configuration,
+                        TransformationConfig = SerializeTransformation(contract.Transformation),
                         contract.UpdatedAt
                     },
                     transaction,
@@ -158,7 +163,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             try
             {
                 const string sql = """
-                    SELECT id, customer_id, enabled, destination_type, destination_config,
+                    SELECT id, customer_id, enabled, destination_type, destination_config, transformation_config::text AS transformation_config,
                            created_at, updated_at
                     FROM contracts
                     WHERE id = @Id
@@ -221,7 +226,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             try
             {
                 const string sql = """
-                    SELECT id, customer_id, enabled, destination_type, destination_config,
+                    SELECT id, customer_id, enabled, destination_type, destination_config, transformation_config::text AS transformation_config,
                            created_at, updated_at,
                            COUNT(*) OVER() AS total_count
                     FROM contracts
@@ -349,7 +354,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     SELECT c.id                 AS ContractId,
                            c.customer_id        AS CustomerId,
                            c.destination_type   AS DestinationType,
-                           c.destination_config AS DestinationConfig
+                           c.destination_config AS DestinationConfig,
+                           c.transformation_config::text AS TransformationConfig
                     FROM contracts c
                     INNER JOIN contract_event_types cet ON cet.contract_id = c.id
                     INNER JOIN customers cu             ON cu.id = c.customer_id
@@ -368,7 +374,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 await using var connection = CreateConnection();
                 await connection.OpenAsync(cancellationToken);
 
-                var rows = await connection.QueryAsync<(Guid ContractId, string CustomerId, string DestinationType, string DestinationConfig)>(
+                var rows = await connection.QueryAsync<(Guid ContractId, string CustomerId, string DestinationType, string DestinationConfig, string? TransformationConfig)>(
                     new CommandDefinition(
                         sql,
                         new { EventType = eventType },
@@ -398,7 +404,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         new Destination(
                             Enum.Parse<DestinationType>(r.DestinationType),
                             r.DestinationConfig),
-                        filtersByContract.TryGetValue(r.ContractId, out var filter) ? filter : null))
+                        filtersByContract.TryGetValue(r.ContractId, out var filter) ? filter : null,
+                        DeserializeTransformation(r.TransformationConfig)))
                     .ToList();
 
                 return Result.Success<IReadOnlyList<ContractMatch>>(matches);
@@ -574,6 +581,22 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             return new ContractFilter(metadata, payload);
         }
 
+        private static string? SerializeTransformation(ContractPayloadTransformation? transformation)
+        {
+            if (transformation is null)
+                return null;
+
+            return JsonSerializer.Serialize(transformation);
+        }
+
+        private static ContractPayloadTransformation? DeserializeTransformation(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return null;
+
+            return JsonSerializer.Deserialize<ContractPayloadTransformation>(json);
+        }
+
         private NpgsqlConnection CreateConnection() =>
             (NpgsqlConnection)_connectionFactory.CreateConnection();
 
@@ -584,6 +607,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public bool enabled { get; set; }
             public string destination_type { get; set; } = string.Empty;
             public string destination_config { get; set; } = string.Empty;
+            public string? transformation_config { get; set; }
             public DateTimeOffset created_at { get; set; }
             public DateTimeOffset updated_at { get; set; }
 
@@ -603,7 +627,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     filter,
                     destination,
                     created_at,
-                    updated_at);
+                    updated_at,
+                    DeserializeTransformation(transformation_config));
             }
         }
 
@@ -614,6 +639,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public bool enabled { get; set; }
             public string destination_type { get; set; } = string.Empty;
             public string destination_config { get; set; } = string.Empty;
+            public string? transformation_config { get; set; }
             public DateTimeOffset created_at { get; set; }
             public DateTimeOffset updated_at { get; set; }
             public long total_count { get; set; }
@@ -634,7 +660,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     filter,
                     destination,
                     created_at,
-                    updated_at);
+                    updated_at,
+                    DeserializeTransformation(transformation_config));
             }
         }
 
