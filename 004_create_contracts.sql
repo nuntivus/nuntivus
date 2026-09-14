@@ -28,3 +28,15 @@ CREATE TABLE contract_event_types
 
 CREATE INDEX ix_contract_event_types_event_type
 	ON contract_event_types(event_type);
+
+CREATE TABLE contract_schema_targets
+(
+	contract_id    uuid    NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+	event_type     text    NOT NULL,
+	schema_version integer NOT NULL,
+	PRIMARY KEY (contract_id, event_type),
+	CONSTRAINT ck_contract_schema_targets_schema_version CHECK (schema_version > 0)
+);
+
+CREATE INDEX ix_contract_schema_targets_contract_id
+	ON contract_schema_targets(contract_id);

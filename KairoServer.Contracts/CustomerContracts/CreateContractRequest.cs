@@ -10,5 +10,6 @@ namespace KairoServer.Contracts.CustomerContracts
     public sealed record CreateContractRequest(
         string CustomerId,
         IReadOnlyCollection<string> EventTypes,
-        DestinationConfig Configuration);
+        DestinationConfig Configuration,
+        IReadOnlyCollection<ContractSchemaTargetRequest>? SchemaTargets = null);
 }

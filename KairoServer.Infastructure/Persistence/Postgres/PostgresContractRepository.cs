@@ -72,6 +72,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     cancellationToken: cancellationToken));
 
                 await InsertEventTypesAsync(connection, transaction, contract, cancellationToken);
+                await InsertSchemaTargetsAsync(connection, transaction, contract, cancellationToken);
 
                 return Result.Success();
             }
@@ -135,6 +136,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     cancellationToken: cancellationToken));
 
                 await InsertEventTypesAsync(connection, transaction, contract, cancellationToken);
+                await DeleteSchemaTargetsAsync(connection, transaction, contract.Id, cancellationToken);
+                await InsertSchemaTargetsAsync(connection, transaction, contract, cancellationToken);
 
                 return Result.Success();
             }
@@ -162,6 +165,12 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     SELECT event_type FROM contract_event_types WHERE contract_id = @Id;
                     """;
 
+                const string schemaTargetsSql = """
+                    SELECT event_type, schema_version
+                    FROM contract_schema_targets
+                    WHERE contract_id = @Id;
+                    """;
+
                 await using var connection = CreateConnection();
                 await connection.OpenAsync(cancellationToken);
 
@@ -174,7 +183,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 var eventTypes = await connection.QueryAsync<string>(
                     new CommandDefinition(eventTypesSql, new { Id = id }, cancellationToken: cancellationToken));
 
-                return Result.Success<Contract?>(row.ToDomain(eventTypes));
+                var schemaTargets = await connection.QueryAsync<SchemaTargetRow>(
+                    new CommandDefinition(schemaTargetsSql, new { Id = id }, cancellationToken: cancellationToken));
+
+                return Result.Success<Contract?>(row.ToDomain(eventTypes, schemaTargets.Select(s => s.ToDomain())));
             }
             catch (Exception ex)
             {
@@ -206,6 +218,12 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     WHERE contract_id = ANY(@Ids);
                     """;
 
+                const string schemaTargetsSql = """
+                    SELECT contract_id, event_type, schema_version
+                    FROM contract_schema_targets
+                    WHERE contract_id = ANY(@Ids);
+                    """;
+
                 var offset = (page - 1) * pageSize;
 
                 await using var connection = CreateConnection();
@@ -226,6 +244,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 }
 
                 var eventTypesByContract = new Dictionary<Guid, List<string>>();
+                var schemaTargetsByContract = new Dictionary<Guid, List<ContractSchemaTarget>>();
                 if (ids.Count > 0)
                 {
                     var etRows = await connection.QueryAsync<EventTypeRow>(new CommandDefinition(
@@ -242,13 +261,30 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         }
                         list.Add(et.event_type);
                     }
+
+                    var stRows = await connection.QueryAsync<SchemaTargetRow>(new CommandDefinition(
+                        schemaTargetsSql,
+                        new { Ids = ids.ToArray() },
+                        cancellationToken: cancellationToken));
+
+                    foreach (var st in stRows)
+                    {
+                        if (!schemaTargetsByContract.TryGetValue(st.contract_id, out var list))
+                        {
+                            list = new List<ContractSchemaTarget>();
+                            schemaTargetsByContract[st.contract_id] = list;
+                        }
+
+                        list.Add(st.ToDomain());
+                    }
                 }
 
                 var materialized = new List<Contract>(rowList.Count);
                 foreach (var r in rowList)
                 {
                     eventTypesByContract.TryGetValue(r.id, out var etList);
-                    materialized.Add(r.ToDomain(etList ?? new List<string>()));
+                    schemaTargetsByContract.TryGetValue(r.id, out var stList);
+                    materialized.Add(r.ToDomain(etList ?? new List<string>(), stList ?? new List<ContractSchemaTarget>()));
                 }
 
                 return Result.Success(
@@ -331,6 +367,52 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        private static async Task InsertSchemaTargetsAsync(
+            System.Data.IDbConnection connection,
+            System.Data.IDbTransaction transaction,
+            Contract contract,
+            CancellationToken cancellationToken)
+        {
+            if (contract.SchemaTargets.Count == 0) return;
+
+            const string sql = """
+                INSERT INTO contract_schema_targets (contract_id, event_type, schema_version)
+                VALUES (@ContractId, @EventType, @SchemaVersion);
+                """;
+
+            foreach (var target in contract.SchemaTargets)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        ContractId = contract.Id,
+                        target.EventType,
+                        SchemaVersion = target.Version
+                    },
+                    transaction,
+                    cancellationToken: cancellationToken));
+            }
+        }
+
+        private static async Task DeleteSchemaTargetsAsync(
+            System.Data.IDbConnection connection,
+            System.Data.IDbTransaction transaction,
+            Guid contractId,
+            CancellationToken cancellationToken)
+        {
+            const string sql = """
+                DELETE FROM contract_schema_targets
+                WHERE contract_id = @ContractId;
+                """;
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                sql,
+                new { ContractId = contractId },
+                transaction,
+                cancellationToken: cancellationToken));
+        }
+
         private NpgsqlConnection CreateConnection() =>
             (NpgsqlConnection)_connectionFactory.CreateConnection();
 
@@ -344,12 +426,14 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public DateTimeOffset created_at { get; set; }
             public DateTimeOffset updated_at { get; set; }
 
-            public Contract ToDomain(IEnumerable<string> eventTypes)
+            public Contract ToDomain(
+                IEnumerable<string> eventTypes,
+                IEnumerable<ContractSchemaTarget> schemaTargets)
             {
                 var type = Enum.Parse<DestinationType>(destination_type, ignoreCase: true);
                 var destination = new Destination(type, destination_config);
                 return Contract.Rehydrate(
-                    id, customer_id, enabled, eventTypes, destination, created_at, updated_at);
+                    id, customer_id, enabled, eventTypes, schemaTargets, destination, created_at, updated_at);
             }
         }
 
@@ -364,12 +448,14 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public DateTimeOffset updated_at { get; set; }
             public long total_count { get; set; }
 
-            public Contract ToDomain(IEnumerable<string> eventTypes)
+            public Contract ToDomain(
+                IEnumerable<string> eventTypes,
+                IEnumerable<ContractSchemaTarget> schemaTargets)
             {
                 var type = Enum.Parse<DestinationType>(destination_type, ignoreCase: true);
                 var destination = new Destination(type, destination_config);
                 return Contract.Rehydrate(
-                    id, customer_id, enabled, eventTypes, destination, created_at, updated_at);
+                    id, customer_id, enabled, eventTypes, schemaTargets, destination, created_at, updated_at);
             }
         }
 
@@ -377,6 +463,16 @@ namespace KairoServer.Infastructure.Persistence.Postgres
         {
             public Guid contract_id { get; set; }
             public string event_type { get; set; } = string.Empty;
+        }
+
+        private sealed class SchemaTargetRow
+        {
+            public Guid contract_id { get; set; }
+            public string event_type { get; set; } = string.Empty;
+            public int schema_version { get; set; }
+
+            public ContractSchemaTarget ToDomain() =>
+                new(event_type, schema_version);
         }
     }
 }

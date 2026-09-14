@@ -13,6 +13,7 @@ namespace KairoServer.Application.Contracts
                 c.CustomerId,
                 c.Enabled,
                 new System.Collections.Generic.List<string>(c.EventTypes),
+                ToSchemaTargetViews(c.SchemaTargets),
                 MapDestinationType(c.Destination.Type),
                 c.Destination.Configuration,
                 c.CreatedAt,
@@ -24,8 +25,21 @@ namespace KairoServer.Application.Contracts
                 c.CustomerId,
                 c.Enabled,
                 new System.Collections.Generic.List<string>(c.EventTypes),
+                ToSchemaTargetViews(c.SchemaTargets),
                 MapDestinationType(c.Destination.Type),
                 c.CreatedAt);
+
+        public static System.Collections.Generic.IReadOnlyCollection<ContractSchemaTargetView> ToSchemaTargetViews(
+            System.Collections.Generic.IEnumerable<ContractSchemaTarget> targets)
+        {
+            var list = new System.Collections.Generic.List<ContractSchemaTargetView>();
+            foreach (var target in targets)
+            {
+                list.Add(new ContractSchemaTargetView(target.EventType, target.Version));
+            }
+
+            return list;
+        }
 
         public static DtoDestinationType MapDestinationType(DomainDestinationType t) => t switch
         {

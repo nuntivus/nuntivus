@@ -67,5 +67,78 @@ namespace KairoServer.Api.Controllers.Events
                 return Ok(body);
             });
         }
+
+        [HttpPost("{eventType}/schemas")]
+        public async Task<IActionResult> CreateSchemaDraft(
+            string eventType,
+            [FromBody] CreateEventSchemaVersionRequest request,
+            CancellationToken cancellationToken)
+        {
+            var result = await _definitions.CreateSchemaDraftAsync(
+                eventType,
+                request.Version,
+                request.Schema,
+                request.CompatibilityMode,
+                cancellationToken);
+
+            return result.ToActionResult(created =>
+                CreatedAtAction(nameof(GetSchemaVersion), new { eventType, version = created.Version }, created));
+        }
+
+        [HttpGet("{eventType}/schemas")]
+        public async Task<IActionResult> ListSchemaVersions(
+            string eventType,
+            [FromQuery] PagedRequest pagination,
+            CancellationToken cancellationToken)
+        {
+            var result = await _definitions.ListSchemaVersionsAsync(
+                eventType,
+                pagination.Page,
+                pagination.PageSize,
+                cancellationToken);
+
+            return result.ToActionResult(paged =>
+            {
+                var body = new PagedResponse<EventSchemaVersionView>(
+                    paged.Items,
+                    paged.Page,
+                    paged.PageSize,
+                    paged.TotalCount,
+                    paged.TotalPages,
+                    paged.HasPrevious,
+                    paged.HasNext);
+                return Ok(body);
+            });
+        }
+
+        [HttpGet("{eventType}/schemas/{version:int}")]
+        public async Task<IActionResult> GetSchemaVersion(
+            string eventType,
+            int version,
+            CancellationToken cancellationToken)
+        {
+            var result = await _definitions.GetSchemaVersionAsync(eventType, version, cancellationToken);
+            return result.ToOk();
+        }
+
+        [HttpPost("{eventType}/schemas/{version:int}/activate")]
+        public async Task<IActionResult> ActivateSchemaVersion(
+            string eventType,
+            int version,
+            CancellationToken cancellationToken)
+        {
+            var result = await _definitions.ActivateSchemaVersionAsync(eventType, version, cancellationToken);
+            return result.ToOk();
+        }
+
+        [HttpPost("{eventType}/schemas/{version:int}/deprecate")]
+        public async Task<IActionResult> DeprecateSchemaVersion(
+            string eventType,
+            int version,
+            CancellationToken cancellationToken)
+        {
+            var result = await _definitions.DeprecateSchemaVersionAsync(eventType, version, cancellationToken);
+            return result.ToOk();
+        }
     }
 }

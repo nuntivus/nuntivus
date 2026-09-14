@@ -22,5 +22,7 @@ namespace KairoServer.Application.Contracts
             !string.IsNullOrWhiteSpace(value)
             && value!.Length <= EventTypeMaxLength
             && EventTypePattern.IsMatch(value);
+
+        public static bool IsValidSchemaVersion(int version) => version > 0;
     }
 }

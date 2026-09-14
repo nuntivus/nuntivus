@@ -5,8 +5,10 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using Dapper;
 using KairoServer.Api.Common;
+using KairoServer.Api.Controllers.Events;
 using KairoServer.Contracts.CustomerContracts;
 using KairoServer.Contracts.Customers;
+using KairoServer.Contracts.Events;
 using Npgsql;
 
 namespace KairoServer.IntegrationTests
@@ -112,6 +114,62 @@ namespace KairoServer.IntegrationTests
 
             var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
+
+        [Fact]
+        public async Task Create_with_schema_targets_persists_targets()
+        {
+            await CreateCustomerAsync("acme");
+
+            await _client.PostAsJsonAsync("/v1/event-definitions",
+                new CreateEventDefinitionRequest("orders.created", "Order Created", null));
+
+            await _client.PostAsJsonAsync(
+                "/v1/event-definitions/orders.created/schemas",
+                new CreateEventSchemaVersionRequest(1, "{}", SchemaCompatibilityMode.Backward));
+
+            var req = new CreateContractRequest(
+                "acme",
+                new[] { "orders.created" },
+                new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("none")),
+                new[] { new ContractSchemaTargetRequest("orders.created", 1) });
+
+            var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
+
+            Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<ContractCreated>();
+            Assert.NotNull(body);
+            Assert.Single(body!.SchemaTargets);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var count = await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM contract_schema_targets WHERE contract_id = @id",
+                new { id = body.Id });
+
+            Assert.Equal(1, count);
+        }
+
+        [Fact]
+        public async Task Create_with_missing_schema_target_returns_404()
+        {
+            await CreateCustomerAsync("acme");
+
+            await _client.PostAsJsonAsync("/v1/event-definitions",
+                new CreateEventDefinitionRequest("orders.created", "Order Created", null));
+
+            var req = new CreateContractRequest(
+                "acme",
+                new[] { "orders.created" },
+                new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("none")),
+                new[] { new ContractSchemaTargetRequest("orders.created", 99) });
+
+            var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
+
+            Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
         }
 
         [Fact]

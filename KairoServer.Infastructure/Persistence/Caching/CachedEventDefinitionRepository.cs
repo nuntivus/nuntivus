@@ -48,5 +48,48 @@ namespace KairoServer.Infastructure.Persistence.Caching
                 _ttl,
                 ct => _inner.ListAsync(page, pageSize, ct),
                 cancellationToken);
+
+        public Task<Result> InsertSchemaVersionAsync(
+            EventSchemaVersion schemaVersion,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken) =>
+            _inner.InsertSchemaVersionAsync(schemaVersion, uow, cancellationToken);
+
+        public Task<Result<EventSchemaVersion?>> GetSchemaVersionAsync(
+            string eventType,
+            int version,
+            CancellationToken cancellationToken) =>
+            _cache.GetOrCreateAsync(
+                $"{CacheKeys.EventSchemaVersionByTypeAndVersion}:{eventType}:{version}",
+                _ttl,
+                ct => _inner.GetSchemaVersionAsync(eventType, version, ct),
+                cancellationToken);
+
+        public Task<Result<PagedResult<EventSchemaVersion>>> ListSchemaVersionsAsync(
+            string eventType,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken) =>
+            _cache.GetOrCreateAsync(
+                $"{CacheKeys.EventSchemaVersionsList}:{eventType}:{page}:{pageSize}",
+                _ttl,
+                ct => _inner.ListSchemaVersionsAsync(eventType, page, pageSize, ct),
+                cancellationToken);
+
+        public Task<Result> ActivateSchemaVersionAsync(
+            string eventType,
+            int version,
+            DateTimeOffset activatedAt,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken) =>
+            _inner.ActivateSchemaVersionAsync(eventType, version, activatedAt, uow, cancellationToken);
+
+        public Task<Result> DeprecateSchemaVersionAsync(
+            string eventType,
+            int version,
+            DateTimeOffset deprecatedAt,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken) =>
+            _inner.DeprecateSchemaVersionAsync(eventType, version, deprecatedAt, uow, cancellationToken);
     }
 }

@@ -7,6 +7,9 @@ using KairoServer.Common.Logging;
 using KairoServer.Contracts.Events;
 using KairoServer.Domain.Events;
 
+using ContractSchemaCompatibilityMode = KairoServer.Contracts.Events.SchemaCompatibilityMode;
+using ContractSchemaState = KairoServer.Contracts.Events.EventSchemaState;
+
 namespace KairoServer.Application.Events
 {
     public sealed class EventDefinitionService : IEventDefinitionService
@@ -107,6 +110,205 @@ namespace KairoServer.Application.Events
                 return Result<PagedResult<EventDefinitionView>>.Fail(result.Errors);
 
             return Result.Success(result.Value.Map(d => d.ToView()));
+        }
+
+        public async Task<Result<EventSchemaVersionView>> CreateSchemaDraftAsync(
+            string eventType,
+            int version,
+            string schema,
+            ContractSchemaCompatibilityMode compatibilityMode,
+            CancellationToken cancellationToken)
+        {
+            if (!EventDefinitionValidation.IsValidEventType(eventType))
+                return Result.Failure<EventSchemaVersionView>(Error.Validation("eventType is invalid."));
+
+            if (!EventDefinitionValidation.IsValidSchemaVersion(version))
+                return Result.Failure<EventSchemaVersionView>(Error.Validation("version must be greater than 0."));
+
+            if (!EventDefinitionValidation.IsValidSchemaDocument(schema))
+                return Result.Failure<EventSchemaVersionView>(Error.Validation("schema must be valid JSON."));
+
+            if (!EventDefinitionValidation.IsValidCompatibilityMode(EventDefinitionMapping.MapCompatibilityMode(compatibilityMode)))
+                return Result.Failure<EventSchemaVersionView>(Error.Validation("compatibilityMode is invalid."));
+
+            var definitionLookup = await _repository.GetByEventTypeAsync(eventType.Trim(), cancellationToken);
+            if (definitionLookup.IsFailure)
+                return Result<EventSchemaVersionView>.Fail(definitionLookup.Errors);
+
+            if (definitionLookup.Value is null)
+                return Result.Failure<EventSchemaVersionView>(Error.NotFound($"Event definition '{eventType}' was not found."));
+
+            var existing = await _repository.GetSchemaVersionAsync(eventType.Trim(), version, cancellationToken);
+            if (existing.IsFailure)
+                return Result<EventSchemaVersionView>.Fail(existing.Errors);
+
+            if (existing.Value is not null)
+                return Result.Failure<EventSchemaVersionView>(Error.Conflict(
+                    $"Schema version {version} already exists for '{eventType}'."));
+
+            try
+            {
+                var draft = EventSchemaVersion.CreateDraft(
+                    eventType,
+                    version,
+                    schema,
+                    EventDefinitionMapping.MapCompatibilityMode(compatibilityMode),
+                    DateTimeOffset.UtcNow);
+
+                _unitOfWork.Begin(true);
+                var insert = await _repository.InsertSchemaVersionAsync(draft, _unitOfWork, cancellationToken);
+                if (insert.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<EventSchemaVersionView>.Fail(insert.Errors);
+                }
+
+                _unitOfWork.Commit();
+                return Result.Success(draft.ToView());
+            }
+            catch (Exception ex)
+            {
+                _unitOfWork.Rollback();
+                _logger.Error(ex,
+                    "Failed to create draft schema version {Version} for {EventType}.",
+                    version,
+                    eventType);
+                return Result.Failure<EventSchemaVersionView>(ex);
+            }
+        }
+
+        public async Task<Result<EventSchemaVersionView>> ActivateSchemaVersionAsync(
+            string eventType,
+            int version,
+            CancellationToken cancellationToken)
+        {
+            var schemaResult = await GetSchemaVersionAsync(eventType, version, cancellationToken);
+            if (schemaResult.IsFailure)
+                return schemaResult;
+
+            if (schemaResult.Value.State == ContractSchemaState.Deprecated)
+                return Result.Failure<EventSchemaVersionView>(Error.Validation(
+                    "Deprecated schema versions cannot be activated."));
+
+            try
+            {
+                var now = DateTimeOffset.UtcNow;
+
+                _unitOfWork.Begin(true);
+                var activate = await _repository.ActivateSchemaVersionAsync(
+                    eventType.Trim(),
+                    version,
+                    now,
+                    _unitOfWork,
+                    cancellationToken);
+
+                if (activate.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<EventSchemaVersionView>.Fail(activate.Errors);
+                }
+
+                _unitOfWork.Commit();
+            }
+            catch (Exception ex)
+            {
+                _unitOfWork.Rollback();
+                _logger.Error(ex,
+                    "Failed to activate schema version {Version} for {EventType}.",
+                    version,
+                    eventType);
+                return Result.Failure<EventSchemaVersionView>(ex);
+            }
+
+            return await GetSchemaVersionAsync(eventType, version, cancellationToken);
+        }
+
+        public async Task<Result<EventSchemaVersionView>> DeprecateSchemaVersionAsync(
+            string eventType,
+            int version,
+            CancellationToken cancellationToken)
+        {
+            var schemaResult = await GetSchemaVersionAsync(eventType, version, cancellationToken);
+            if (schemaResult.IsFailure)
+                return schemaResult;
+
+            try
+            {
+                var now = DateTimeOffset.UtcNow;
+
+                _unitOfWork.Begin(true);
+                var deprecate = await _repository.DeprecateSchemaVersionAsync(
+                    eventType.Trim(),
+                    version,
+                    now,
+                    _unitOfWork,
+                    cancellationToken);
+
+                if (deprecate.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<EventSchemaVersionView>.Fail(deprecate.Errors);
+                }
+
+                _unitOfWork.Commit();
+            }
+            catch (Exception ex)
+            {
+                _unitOfWork.Rollback();
+                _logger.Error(ex,
+                    "Failed to deprecate schema version {Version} for {EventType}.",
+                    version,
+                    eventType);
+                return Result.Failure<EventSchemaVersionView>(ex);
+            }
+
+            return await GetSchemaVersionAsync(eventType, version, cancellationToken);
+        }
+
+        public async Task<Result<EventSchemaVersionView>> GetSchemaVersionAsync(
+            string eventType,
+            int version,
+            CancellationToken cancellationToken)
+        {
+            if (!EventDefinitionValidation.IsValidEventType(eventType))
+                return Result.Failure<EventSchemaVersionView>(Error.Validation("eventType is invalid."));
+
+            if (!EventDefinitionValidation.IsValidSchemaVersion(version))
+                return Result.Failure<EventSchemaVersionView>(Error.Validation("version must be greater than 0."));
+
+            var result = await _repository.GetSchemaVersionAsync(eventType.Trim(), version, cancellationToken);
+            if (result.IsFailure)
+                return Result<EventSchemaVersionView>.Fail(result.Errors);
+
+            if (result.Value is null)
+                return Result.Failure<EventSchemaVersionView>(Error.NotFound(
+                    $"Schema version {version} for '{eventType}' was not found."));
+
+            return Result.Success(result.Value.ToView());
+        }
+
+        public async Task<Result<PagedResult<EventSchemaVersionView>>> ListSchemaVersionsAsync(
+            string eventType,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken)
+        {
+            if (!EventDefinitionValidation.IsValidEventType(eventType))
+                return Result.Failure<PagedResult<EventSchemaVersionView>>(Error.Validation("eventType is invalid."));
+
+            if (page < 1)
+                return Result.Failure<PagedResult<EventSchemaVersionView>>(
+                    Error.Validation("page must be greater than or equal to 1."));
+
+            if (pageSize < 1 || pageSize > MaxPageSize)
+                return Result.Failure<PagedResult<EventSchemaVersionView>>(
+                    Error.Validation($"pageSize must be between 1 and {MaxPageSize}."));
+
+            var result = await _repository.ListSchemaVersionsAsync(eventType.Trim(), page, pageSize, cancellationToken);
+            if (result.IsFailure)
+                return Result<PagedResult<EventSchemaVersionView>>.Fail(result.Errors);
+
+            return Result.Success(result.Value.Map(v => v.ToView()));
         }
     }
 }

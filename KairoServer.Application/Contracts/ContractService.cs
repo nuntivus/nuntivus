@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Contracts.Destinations;
@@ -17,6 +18,7 @@ namespace KairoServer.Application.Contracts
 
         private readonly IContractRepository _repository;
         private readonly ICustomerRepository _customers;
+        private readonly IEventDefinitionRepository _eventDefinitions;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IDestinationConfigDispatcher _destinations;
         private readonly IAppLogger<ContractService> _logger;
@@ -24,12 +26,14 @@ namespace KairoServer.Application.Contracts
         public ContractService(
             IContractRepository repository,
             ICustomerRepository customers,
+            IEventDefinitionRepository eventDefinitions,
             IUnitOfWork unitOfWork,
             IDestinationConfigDispatcher destinations,
             IAppLogger<ContractService> logger)
         {
             _repository = repository;
             _customers = customers;
+            _eventDefinitions = eventDefinitions;
             _unitOfWork = unitOfWork;
             _destinations = destinations;
             _logger = logger;
@@ -59,6 +63,42 @@ namespace KairoServer.Application.Contracts
                         $"Invalid event type '{et}'. Use dotted lowercase identifiers (e.g. 'orders.created')."));
             }
 
+            var schemaTargets = request.SchemaTargets ?? Array.Empty<ContractSchemaTargetRequest>();
+            if (schemaTargets.Count > 0)
+            {
+                var seen = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+                foreach (var target in schemaTargets)
+                {
+                    if (!ContractValidation.IsValidEventType(target.EventType))
+                        return Result.Failure<ContractCreated>(Error.Validation(
+                            $"Invalid schema target event type '{target.EventType}'."));
+
+                    if (!ContractValidation.IsValidSchemaVersion(target.Version))
+                        return Result.Failure<ContractCreated>(Error.Validation(
+                            $"Invalid schema target version for '{target.EventType}'."));
+
+                    if (!request.EventTypes.Contains(target.EventType, StringComparer.Ordinal))
+                        return Result.Failure<ContractCreated>(Error.Validation(
+                            $"Schema target event type '{target.EventType}' must exist in eventTypes."));
+
+                    if (!seen.Add(target.EventType))
+                        return Result.Failure<ContractCreated>(Error.Validation(
+                            $"Duplicate schema target for event type '{target.EventType}'."));
+
+                    var schemaLookup = await _eventDefinitions.GetSchemaVersionAsync(
+                        target.EventType,
+                        target.Version,
+                        cancellationToken);
+
+                    if (schemaLookup.IsFailure)
+                        return Result<ContractCreated>.Fail(schemaLookup.Errors);
+
+                    if (schemaLookup.Value is null)
+                        return Result.Failure<ContractCreated>(Error.NotFound(
+                            $"Schema version {target.Version} for '{target.EventType}' was not found."));
+                }
+            }
+
             var destinationResult = _destinations.Build(request.Configuration);
             if (destinationResult.IsFailure)
                 return Result<ContractCreated>.Fail(destinationResult.Errors);
@@ -73,9 +113,14 @@ namespace KairoServer.Application.Contracts
             try
             {
                 var now = DateTimeOffset.UtcNow;
+                var domainSchemaTargets = new System.Collections.Generic.List<ContractSchemaTarget>(schemaTargets.Count);
+                foreach (var target in schemaTargets)
+                    domainSchemaTargets.Add(new ContractSchemaTarget(target.EventType, target.Version));
+
                 var contract = Contract.Create(
                     request.CustomerId,
                     request.EventTypes,
+                    domainSchemaTargets,
                     destinationResult.Value,
                     now);
 
@@ -281,6 +326,7 @@ namespace KairoServer.Application.Contracts
                 contract.CustomerId,
                 contract.Enabled,
                 new System.Collections.Generic.List<string>(contract.EventTypes),
+                ContractMapping.ToSchemaTargetViews(contract.SchemaTargets),
                 ContractMapping.MapDestinationType(contract.Destination.Type),
                 redactedConfig.Value,
                 contract.CreatedAt,

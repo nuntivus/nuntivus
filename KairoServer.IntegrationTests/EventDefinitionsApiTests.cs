@@ -127,5 +127,90 @@ namespace KairoServer.IntegrationTests
             var resp = await _client.GetAsync($"/v1/event-definitions?page={page}&pageSize={pageSize}");
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
         }
+
+        [Fact]
+        public async Task Create_schema_draft_returns_201_and_persists_schema_version()
+        {
+            await _client.PostAsJsonAsync("/v1/event-definitions",
+                new CreateEventDefinitionRequest("orders.created", "Order Created", null));
+
+            var draftResp = await _client.PostAsJsonAsync(
+                "/v1/event-definitions/orders.created/schemas",
+                new CreateEventSchemaVersionRequest(
+                    1,
+                    "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}}}",
+                    SchemaCompatibilityMode.Backward));
+
+            Assert.Equal(HttpStatusCode.Created, draftResp.StatusCode);
+            var draft = await draftResp.Content.ReadFromJsonAsync<EventSchemaVersionView>();
+            Assert.NotNull(draft);
+            Assert.Equal(1, draft!.Version);
+            Assert.Equal(EventSchemaState.Draft, draft.State);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var count = await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM event_schema_versions WHERE event_type = @eventType AND version_number = @version",
+                new { eventType = "orders.created", version = 1 });
+            Assert.Equal(1, count);
+        }
+
+        [Fact]
+        public async Task Activate_schema_version_enforces_single_active_schema()
+        {
+            await _client.PostAsJsonAsync("/v1/event-definitions",
+                new CreateEventDefinitionRequest("orders.updated", "Order Updated", null));
+
+            await _client.PostAsJsonAsync(
+                "/v1/event-definitions/orders.updated/schemas",
+                new CreateEventSchemaVersionRequest(1, "{}", SchemaCompatibilityMode.Backward));
+            await _client.PostAsJsonAsync(
+                "/v1/event-definitions/orders.updated/schemas",
+                new CreateEventSchemaVersionRequest(2, "{}", SchemaCompatibilityMode.Forward));
+
+            var activateV1 = await _client.PostAsync("/v1/event-definitions/orders.updated/schemas/1/activate", content: null);
+            Assert.Equal(HttpStatusCode.OK, activateV1.StatusCode);
+
+            var activateV2 = await _client.PostAsync("/v1/event-definitions/orders.updated/schemas/2/activate", content: null);
+            Assert.Equal(HttpStatusCode.OK, activateV2.StatusCode);
+
+            var v1Resp = await _client.GetAsync("/v1/event-definitions/orders.updated/schemas/1");
+            var v1 = await v1Resp.Content.ReadFromJsonAsync<EventSchemaVersionView>();
+            Assert.Equal(EventSchemaState.Draft, v1!.State);
+
+            var v2Resp = await _client.GetAsync("/v1/event-definitions/orders.updated/schemas/2");
+            var v2 = await v2Resp.Content.ReadFromJsonAsync<EventSchemaVersionView>();
+            Assert.Equal(EventSchemaState.Active, v2!.State);
+        }
+
+        [Fact]
+        public async Task Deprecate_schema_version_returns_deprecated_state()
+        {
+            await _client.PostAsJsonAsync("/v1/event-definitions",
+                new CreateEventDefinitionRequest("orders.cancelled", "Order Cancelled", null));
+
+            await _client.PostAsJsonAsync(
+                "/v1/event-definitions/orders.cancelled/schemas",
+                new CreateEventSchemaVersionRequest(1, "{}", SchemaCompatibilityMode.Backward));
+
+            var deprecateResp = await _client.PostAsync("/v1/event-definitions/orders.cancelled/schemas/1/deprecate", content: null);
+            Assert.Equal(HttpStatusCode.OK, deprecateResp.StatusCode);
+
+            var body = await deprecateResp.Content.ReadFromJsonAsync<EventSchemaVersionView>();
+            Assert.NotNull(body);
+            Assert.Equal(EventSchemaState.Deprecated, body!.State);
+        }
+
+        [Fact]
+        public async Task Create_schema_draft_with_invalid_json_returns_400()
+        {
+            await _client.PostAsJsonAsync("/v1/event-definitions",
+                new CreateEventDefinitionRequest("orders.failed", "Order Failed", null));
+
+            var resp = await _client.PostAsJsonAsync(
+                "/v1/event-definitions/orders.failed/schemas",
+                new CreateEventSchemaVersionRequest(1, "not-json", SchemaCompatibilityMode.Backward));
+
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
     }
 }

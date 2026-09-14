@@ -13,12 +13,14 @@ namespace KairoServer.Domain.Contracts
     public sealed class Contract
     {
         private readonly HashSet<string> _eventTypes;
+        private readonly IReadOnlyCollection<ContractSchemaTarget> _schemaTargets;
 
         public Guid Id { get; }
         public string CustomerId { get; }
         public bool Enabled { get; private set; }
         public Destination Destination { get; private set; }
         public IReadOnlyCollection<string> EventTypes => _eventTypes;
+        public IReadOnlyCollection<ContractSchemaTarget> SchemaTargets => _schemaTargets;
         public DateTimeOffset CreatedAt { get; }
         public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -27,6 +29,7 @@ namespace KairoServer.Domain.Contracts
             string customerId,
             bool enabled,
             IEnumerable<string> eventTypes,
+            IEnumerable<ContractSchemaTarget> schemaTargets,
             Destination destination,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt)
@@ -35,6 +38,7 @@ namespace KairoServer.Domain.Contracts
             CustomerId = customerId;
             Enabled = enabled;
             _eventTypes = new HashSet<string>(eventTypes, StringComparer.Ordinal);
+            _schemaTargets = new List<ContractSchemaTarget>(schemaTargets);
             Destination = destination;
             CreatedAt = createdAt;
             UpdatedAt = updatedAt;
@@ -43,6 +47,7 @@ namespace KairoServer.Domain.Contracts
         public static Contract Create(
             string customerId,
             IEnumerable<string> eventTypes,
+            IEnumerable<ContractSchemaTarget>? schemaTargets,
             Destination destination,
             DateTimeOffset now)
         {
@@ -60,14 +65,36 @@ namespace KairoServer.Domain.Contracts
                 .Select(e => e.Trim())
                 .ToArray();
 
+            var materializedSchemaTargets = (schemaTargets ?? Array.Empty<ContractSchemaTarget>())
+                .Select(t => new ContractSchemaTarget(t.EventType, t.Version))
+                .ToArray();
+
             if (materialized.Length == 0)
                 throw new ArgumentException("At least one event type is required.", nameof(eventTypes));
+
+            foreach (var target in materializedSchemaTargets)
+            {
+                if (!materialized.Contains(target.EventType, StringComparer.Ordinal))
+                    throw new ArgumentException(
+                        $"Schema target event type '{target.EventType}' must be present in contract event types.",
+                        nameof(schemaTargets));
+            }
+
+            if (materializedSchemaTargets
+                .GroupBy(t => t.EventType, StringComparer.Ordinal)
+                .Any(g => g.Count() > 1))
+            {
+                throw new ArgumentException(
+                    "Only one schema target per event type is allowed.",
+                    nameof(schemaTargets));
+            }
 
             return new Contract(
                 Guid.NewGuid(),
                 customerId.Trim(),
                 enabled: true,
                 materialized,
+                materializedSchemaTargets,
                 destination,
                 createdAt: now,
                 updatedAt: now);
@@ -82,10 +109,19 @@ namespace KairoServer.Domain.Contracts
             string customerId,
             bool enabled,
             IEnumerable<string> eventTypes,
+            IEnumerable<ContractSchemaTarget>? schemaTargets,
             Destination destination,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt) =>
-            new(id, customerId, enabled, eventTypes, destination, createdAt, updatedAt);
+            new(
+                id,
+                customerId,
+                enabled,
+                eventTypes,
+                schemaTargets ?? Array.Empty<ContractSchemaTarget>(),
+                destination,
+                createdAt,
+                updatedAt);
 
         public void Enable(DateTimeOffset now)
         {

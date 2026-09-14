@@ -26,5 +26,7 @@ namespace KairoServer.Application.Caching
         public const string CustomersById = "customers_by_id";
         public const string EventDefinitionsByType = "event_definitions_by_type";
         public const string EventDefinitionsList = "event_definitions_list";
+        public const string EventSchemaVersionByTypeAndVersion = "event_schema_version_by_type_and_version";
+        public const string EventSchemaVersionsList = "event_schema_versions_list";
     }
 }

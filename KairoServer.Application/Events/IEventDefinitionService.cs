@@ -21,5 +21,33 @@ namespace KairoServer.Application.Events
             int page,
             int pageSize,
             CancellationToken cancellationToken);
+
+        Task<Result<EventSchemaVersionView>> CreateSchemaDraftAsync(
+            string eventType,
+            int version,
+            string schema,
+            SchemaCompatibilityMode compatibilityMode,
+            CancellationToken cancellationToken);
+
+        Task<Result<EventSchemaVersionView>> ActivateSchemaVersionAsync(
+            string eventType,
+            int version,
+            CancellationToken cancellationToken);
+
+        Task<Result<EventSchemaVersionView>> DeprecateSchemaVersionAsync(
+            string eventType,
+            int version,
+            CancellationToken cancellationToken);
+
+        Task<Result<EventSchemaVersionView>> GetSchemaVersionAsync(
+            string eventType,
+            int version,
+            CancellationToken cancellationToken);
+
+        Task<Result<PagedResult<EventSchemaVersionView>>> ListSchemaVersionsAsync(
+            string eventType,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken);
     }
 }

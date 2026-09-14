@@ -63,6 +63,7 @@ namespace KairoServer.IntegrationTests
             var contract = Contract.Create(
                 customerId,
                 eventTypes,
+                schemaTargets: null,
                 new Destination(DestinationType.Http, "{\"Url\":\"https://x.example.com\"}"),
                 now);
             if (!enabled) contract.Disable(now);

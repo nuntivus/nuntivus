@@ -36,7 +36,7 @@ namespace KairoServer.IntegrationTests
         {
             await using var conn = new NpgsqlConnection(ConnectionString);
             await conn.OpenAsync();
-            await conn.ExecuteAsync("TRUNCATE TABLE event_definitions;");
+            await conn.ExecuteAsync("TRUNCATE TABLE event_schema_versions, event_definitions;");
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)

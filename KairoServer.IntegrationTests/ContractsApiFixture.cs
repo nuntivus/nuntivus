@@ -42,6 +42,7 @@ namespace KairoServer.IntegrationTests
             await conn.OpenAsync();
             // contract_event_types cascades from contracts; contracts cascades from customers.
             await conn.ExecuteAsync("TRUNCATE TABLE customers CASCADE;");
+            await conn.ExecuteAsync("TRUNCATE TABLE event_schema_versions, event_definitions;");
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -62,7 +63,7 @@ namespace KairoServer.IntegrationTests
             await using var conn = new NpgsqlConnection(ConnectionString);
             await conn.OpenAsync();
 
-            foreach (var file in new[] { "003_create_customers.sql", "004_create_contracts.sql" })
+            foreach (var file in new[] { "003_create_customers.sql", "004_create_contracts.sql", "008_create_event_definitions.sql" })
             {
                 var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));
                 await conn.ExecuteAsync(sql);
