@@ -20,6 +20,7 @@ namespace KairoServer.Application.Matching
         private readonly IDeliveryRepository _deliveries;
         private readonly IOutboxRepository _outbox;
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IContractFilterEvaluator _filterEvaluator;
         private readonly IAppLogger<ContractMatcherService> _logger;
 
         public ContractMatcherService(
@@ -28,6 +29,7 @@ namespace KairoServer.Application.Matching
             IDeliveryRepository deliveries,
             IOutboxRepository outbox,
             IUnitOfWork unitOfWork,
+            IContractFilterEvaluator filterEvaluator,
             IAppLogger<ContractMatcherService> logger)
         {
             _events = events;
@@ -35,6 +37,7 @@ namespace KairoServer.Application.Matching
             _deliveries = deliveries;
             _outbox = outbox;
             _unitOfWork = unitOfWork;
+            _filterEvaluator = filterEvaluator;
             _logger = logger;
         }
 
@@ -80,9 +83,28 @@ namespace KairoServer.Application.Matching
                     return Result.Success(new MatchResult(0, 0));
                 }
 
-                var now = DateTimeOffset.UtcNow;
-                var deliveries = new List<Delivery>(matches.Count);
+                var filteredMatches = new List<ContractMatch>(matches.Count);
                 foreach (var match in matches)
+                {
+                    var evaluation = _filterEvaluator.Evaluate(match.Filter, authoritative);
+                    if (evaluation.IsFailure)
+                        return Result<MatchResult>.Fail(evaluation.Errors);
+
+                    if (evaluation.Value)
+                        filteredMatches.Add(match);
+                }
+
+                if (filteredMatches.Count == 0)
+                {
+                    _logger.Information(
+                        "No contracts passed detailed filter for event {EventId} of type {Type}.",
+                        authoritative.Id, authoritative.Type);
+                    return Result.Success(new MatchResult(0, 0));
+                }
+
+                var now = DateTimeOffset.UtcNow;
+                var deliveries = new List<Delivery>(filteredMatches.Count);
+                foreach (var match in filteredMatches)
                 {
                     deliveries.Add(Delivery.CreatePending(
                         authoritative.Id,
@@ -126,9 +148,9 @@ namespace KairoServer.Application.Matching
 
                 _logger.Information(
                     "Matched event {EventId} (type {Type}): {MatchedCount} contract(s), {InsertedCount} delivery row(s) inserted.",
-                    authoritative.Id, authoritative.Type, matches.Count, inserted);
+                    authoritative.Id, authoritative.Type, filteredMatches.Count, inserted);
 
-                return Result.Success(new MatchResult(matches.Count, inserted));
+                return Result.Success(new MatchResult(filteredMatches.Count, inserted));
             }
             catch (Exception ex)
             {

@@ -57,6 +57,7 @@ namespace KairoServer.IntegrationTests
                 customerId,
                 eventTypes,
                 schemaTargets: null,
+                filter: null,
                 new Destination(DestinationType.Http, "{\"Url\":\"https://x.example.com\"}"),
                 DateTimeOffset.UtcNow);
 

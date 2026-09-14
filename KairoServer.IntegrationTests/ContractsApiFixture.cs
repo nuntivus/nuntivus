@@ -63,7 +63,7 @@ namespace KairoServer.IntegrationTests
             await using var conn = new NpgsqlConnection(ConnectionString);
             await conn.OpenAsync();
 
-            foreach (var file in new[] { "003_create_customers.sql", "004_create_contracts.sql", "008_create_event_definitions.sql" })
+            foreach (var file in new[] { "003_create_customers.sql", "004_create_contracts.sql", "008_create_event_definitions.sql", "009_create_contract_filters.sql" })
             {
                 var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));
                 await conn.ExecuteAsync(sql);

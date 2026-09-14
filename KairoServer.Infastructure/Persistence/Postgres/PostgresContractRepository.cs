@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -73,6 +74,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
 
                 await InsertEventTypesAsync(connection, transaction, contract, cancellationToken);
                 await InsertSchemaTargetsAsync(connection, transaction, contract, cancellationToken);
+                await InsertFilterRulesAsync(connection, transaction, contract, cancellationToken);
 
                 return Result.Success();
             }
@@ -138,6 +140,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 await InsertEventTypesAsync(connection, transaction, contract, cancellationToken);
                 await DeleteSchemaTargetsAsync(connection, transaction, contract.Id, cancellationToken);
                 await InsertSchemaTargetsAsync(connection, transaction, contract, cancellationToken);
+                await DeleteFilterRulesAsync(connection, transaction, contract.Id, cancellationToken);
+                await InsertFilterRulesAsync(connection, transaction, contract, cancellationToken);
 
                 return Result.Success();
             }
@@ -171,6 +175,13 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     WHERE contract_id = @Id;
                     """;
 
+                const string filterRulesSql = """
+                    SELECT contract_id, scope, rule_order, selector, operator, value, values_json::text AS values_json
+                    FROM contract_filter_rules
+                    WHERE contract_id = @Id
+                    ORDER BY scope ASC, rule_order ASC;
+                    """;
+
                 await using var connection = CreateConnection();
                 await connection.OpenAsync(cancellationToken);
 
@@ -186,7 +197,14 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 var schemaTargets = await connection.QueryAsync<SchemaTargetRow>(
                     new CommandDefinition(schemaTargetsSql, new { Id = id }, cancellationToken: cancellationToken));
 
-                return Result.Success<Contract?>(row.ToDomain(eventTypes, schemaTargets.Select(s => s.ToDomain())));
+                var filterRules = await connection.QueryAsync<FilterRuleRow>(
+                    new CommandDefinition(filterRulesSql, new { Id = id }, cancellationToken: cancellationToken));
+
+                return Result.Success<Contract?>(
+                    row.ToDomain(
+                        eventTypes,
+                        schemaTargets.Select(s => s.ToDomain()),
+                        BuildFilter(filterRules)));
             }
             catch (Exception ex)
             {
@@ -224,6 +242,13 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     WHERE contract_id = ANY(@Ids);
                     """;
 
+                const string filterRulesSql = """
+                    SELECT contract_id, scope, rule_order, selector, operator, value, values_json::text AS values_json
+                    FROM contract_filter_rules
+                    WHERE contract_id = ANY(@Ids)
+                    ORDER BY scope ASC, rule_order ASC;
+                    """;
+
                 var offset = (page - 1) * pageSize;
 
                 await using var connection = CreateConnection();
@@ -245,6 +270,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
 
                 var eventTypesByContract = new Dictionary<Guid, List<string>>();
                 var schemaTargetsByContract = new Dictionary<Guid, List<ContractSchemaTarget>>();
+                var filtersByContract = new Dictionary<Guid, ContractFilter?>();
                 if (ids.Count > 0)
                 {
                     var etRows = await connection.QueryAsync<EventTypeRow>(new CommandDefinition(
@@ -277,6 +303,16 @@ namespace KairoServer.Infastructure.Persistence.Postgres
 
                         list.Add(st.ToDomain());
                     }
+
+                    var filterRows = await connection.QueryAsync<FilterRuleRow>(new CommandDefinition(
+                        filterRulesSql,
+                        new { Ids = ids.ToArray() },
+                        cancellationToken: cancellationToken));
+
+                    foreach (var group in filterRows.GroupBy(r => r.contract_id))
+                    {
+                        filtersByContract[group.Key] = BuildFilter(group);
+                    }
                 }
 
                 var materialized = new List<Contract>(rowList.Count);
@@ -284,7 +320,11 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 {
                     eventTypesByContract.TryGetValue(r.id, out var etList);
                     schemaTargetsByContract.TryGetValue(r.id, out var stList);
-                    materialized.Add(r.ToDomain(etList ?? new List<string>(), stList ?? new List<ContractSchemaTarget>()));
+                    filtersByContract.TryGetValue(r.id, out var filter);
+                    materialized.Add(r.ToDomain(
+                        etList ?? new List<string>(),
+                        stList ?? new List<ContractSchemaTarget>(),
+                        filter));
                 }
 
                 return Result.Success(
@@ -318,6 +358,13 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                       AND cet.event_type = @EventType;
                     """;
 
+                const string filterRulesSql = """
+                    SELECT contract_id, scope, rule_order, selector, operator, value, values_json::text AS values_json
+                    FROM contract_filter_rules
+                    WHERE contract_id = ANY(@Ids)
+                    ORDER BY scope ASC, rule_order ASC;
+                    """;
+
                 await using var connection = CreateConnection();
                 await connection.OpenAsync(cancellationToken);
 
@@ -327,13 +374,31 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         new { EventType = eventType },
                         cancellationToken: cancellationToken));
 
-                var matches = rows
+                var rowList = rows.ToList();
+                var ids = rowList.Select(r => r.ContractId).Distinct().ToArray();
+                var filtersByContract = new Dictionary<Guid, ContractFilter?>();
+
+                if (ids.Length > 0)
+                {
+                    var filterRows = await connection.QueryAsync<FilterRuleRow>(new CommandDefinition(
+                        filterRulesSql,
+                        new { Ids = ids },
+                        cancellationToken: cancellationToken));
+
+                    foreach (var group in filterRows.GroupBy(r => r.contract_id))
+                    {
+                        filtersByContract[group.Key] = BuildFilter(group);
+                    }
+                }
+
+                var matches = rowList
                     .Select(r => new ContractMatch(
                         r.ContractId,
                         r.CustomerId,
                         new Destination(
                             Enum.Parse<DestinationType>(r.DestinationType),
-                            r.DestinationConfig)))
+                            r.DestinationConfig),
+                        filtersByContract.TryGetValue(r.ContractId, out var filter) ? filter : null))
                     .ToList();
 
                 return Result.Success<IReadOnlyList<ContractMatch>>(matches);
@@ -362,6 +427,60 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 await connection.ExecuteAsync(new CommandDefinition(
                     sql,
                     new { ContractId = contract.Id, EventType = et },
+                    transaction,
+                    cancellationToken: cancellationToken));
+            }
+        }
+
+        private static async Task InsertFilterRulesAsync(
+            System.Data.IDbConnection connection,
+            System.Data.IDbTransaction transaction,
+            Contract contract,
+            CancellationToken cancellationToken)
+        {
+            if (contract.Filter is null || !contract.Filter.HasRules)
+                return;
+
+            const string sql = """
+                INSERT INTO contract_filter_rules
+                (contract_id, scope, rule_order, selector, operator, value, values_json)
+                VALUES (@ContractId, @Scope, @RuleOrder, @Selector, @Operator, @Value, CAST(@ValuesJson AS jsonb));
+                """;
+
+            var metadataIndex = 0;
+            foreach (var rule in contract.Filter.MetadataRules)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        ContractId = contract.Id,
+                        Scope = "metadata",
+                        RuleOrder = metadataIndex++,
+                        rule.Selector,
+                        Operator = rule.Operator.ToString(),
+                        rule.Value,
+                        ValuesJson = JsonSerializer.Serialize(rule.Values)
+                    },
+                    transaction,
+                    cancellationToken: cancellationToken));
+            }
+
+            var payloadIndex = 0;
+            foreach (var rule in contract.Filter.PayloadRules)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        ContractId = contract.Id,
+                        Scope = "payload",
+                        RuleOrder = payloadIndex++,
+                        rule.Selector,
+                        Operator = rule.Operator.ToString(),
+                        rule.Value,
+                        ValuesJson = JsonSerializer.Serialize(rule.Values)
+                    },
                     transaction,
                     cancellationToken: cancellationToken));
             }
@@ -413,6 +532,48 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 cancellationToken: cancellationToken));
         }
 
+        private static async Task DeleteFilterRulesAsync(
+            System.Data.IDbConnection connection,
+            System.Data.IDbTransaction transaction,
+            Guid contractId,
+            CancellationToken cancellationToken)
+        {
+            const string sql = """
+                DELETE FROM contract_filter_rules
+                WHERE contract_id = @ContractId;
+                """;
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                sql,
+                new { ContractId = contractId },
+                transaction,
+                cancellationToken: cancellationToken));
+        }
+
+        private static ContractFilter? BuildFilter(IEnumerable<FilterRuleRow> rows)
+        {
+            var metadata = new List<ContractFilterRule>();
+            var payload = new List<ContractFilterRule>();
+
+            foreach (var row in rows)
+            {
+                var rule = row.ToDomain();
+                if (row.scope == "metadata")
+                {
+                    metadata.Add(rule);
+                }
+                else if (row.scope == "payload")
+                {
+                    payload.Add(rule);
+                }
+            }
+
+            if (metadata.Count == 0 && payload.Count == 0)
+                return null;
+
+            return new ContractFilter(metadata, payload);
+        }
+
         private NpgsqlConnection CreateConnection() =>
             (NpgsqlConnection)_connectionFactory.CreateConnection();
 
@@ -428,12 +589,21 @@ namespace KairoServer.Infastructure.Persistence.Postgres
 
             public Contract ToDomain(
                 IEnumerable<string> eventTypes,
-                IEnumerable<ContractSchemaTarget> schemaTargets)
+                IEnumerable<ContractSchemaTarget> schemaTargets,
+                ContractFilter? filter)
             {
                 var type = Enum.Parse<DestinationType>(destination_type, ignoreCase: true);
                 var destination = new Destination(type, destination_config);
                 return Contract.Rehydrate(
-                    id, customer_id, enabled, eventTypes, schemaTargets, destination, created_at, updated_at);
+                    id,
+                    customer_id,
+                    enabled,
+                    eventTypes,
+                    schemaTargets,
+                    filter,
+                    destination,
+                    created_at,
+                    updated_at);
             }
         }
 
@@ -450,12 +620,21 @@ namespace KairoServer.Infastructure.Persistence.Postgres
 
             public Contract ToDomain(
                 IEnumerable<string> eventTypes,
-                IEnumerable<ContractSchemaTarget> schemaTargets)
+                IEnumerable<ContractSchemaTarget> schemaTargets,
+                ContractFilter? filter)
             {
                 var type = Enum.Parse<DestinationType>(destination_type, ignoreCase: true);
                 var destination = new Destination(type, destination_config);
                 return Contract.Rehydrate(
-                    id, customer_id, enabled, eventTypes, schemaTargets, destination, created_at, updated_at);
+                    id,
+                    customer_id,
+                    enabled,
+                    eventTypes,
+                    schemaTargets,
+                    filter,
+                    destination,
+                    created_at,
+                    updated_at);
             }
         }
 
@@ -473,6 +652,27 @@ namespace KairoServer.Infastructure.Persistence.Postgres
 
             public ContractSchemaTarget ToDomain() =>
                 new(event_type, schema_version);
+        }
+
+        private sealed class FilterRuleRow
+        {
+            public Guid contract_id { get; set; }
+            public string scope { get; set; } = string.Empty;
+            public int rule_order { get; set; }
+            public string selector { get; set; } = string.Empty;
+            public string @operator { get; set; } = string.Empty;
+            public string? value { get; set; }
+            public string values_json { get; set; } = "[]";
+
+            public ContractFilterRule ToDomain()
+            {
+                var values = JsonSerializer.Deserialize<string[]>(values_json) ?? Array.Empty<string>();
+                return new ContractFilterRule(
+                    selector,
+                    Enum.Parse<ContractFilterOperator>(@operator, ignoreCase: true),
+                    value,
+                    values);
+            }
         }
     }
 }

@@ -9,6 +9,7 @@ namespace KairoServer.Contracts.CustomerContracts
         bool Enabled,
         IReadOnlyCollection<string> EventTypes,
         IReadOnlyCollection<ContractSchemaTargetView> SchemaTargets,
+        ContractFilterView? Filter,
         DestinationType DestinationType,
         DateTimeOffset CreatedAt);
 }

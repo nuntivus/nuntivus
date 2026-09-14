@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -99,6 +100,10 @@ namespace KairoServer.Application.Contracts
                 }
             }
 
+            var filterValidation = ValidateFilter(request.Filter);
+            if (filterValidation.IsFailure)
+                return Result<ContractCreated>.Fail(filterValidation.Errors);
+
             var destinationResult = _destinations.Build(request.Configuration);
             if (destinationResult.IsFailure)
                 return Result<ContractCreated>.Fail(destinationResult.Errors);
@@ -121,6 +126,7 @@ namespace KairoServer.Application.Contracts
                     request.CustomerId,
                     request.EventTypes,
                     domainSchemaTargets,
+                    request.Filter.ToDomain(),
                     destinationResult.Value,
                     now);
 
@@ -327,10 +333,77 @@ namespace KairoServer.Application.Contracts
                 contract.Enabled,
                 new System.Collections.Generic.List<string>(contract.EventTypes),
                 ContractMapping.ToSchemaTargetViews(contract.SchemaTargets),
+                ContractMapping.ToFilterView(contract.Filter),
                 ContractMapping.MapDestinationType(contract.Destination.Type),
                 redactedConfig.Value,
                 contract.CreatedAt,
                 contract.UpdatedAt));
+        }
+
+        private static Result ValidateFilter(ContractFilterRequest? filter)
+        {
+            if (filter is null)
+                return Result.Success();
+
+            var metadataRules = filter.MetadataRules ?? Array.Empty<ContractFilterRuleRequest>();
+            var payloadRules = filter.PayloadRules ?? Array.Empty<ContractFilterRuleRequest>();
+
+            if (metadataRules.Count > ContractValidation.MaxFilterRulesPerScope)
+                return Result.Failure(Error.Validation(
+                    $"At most {ContractValidation.MaxFilterRulesPerScope} metadata filter rules are allowed."));
+
+            if (payloadRules.Count > ContractValidation.MaxFilterRulesPerScope)
+                return Result.Failure(Error.Validation(
+                    $"At most {ContractValidation.MaxFilterRulesPerScope} payload filter rules are allowed."));
+
+            var metadataValidation = ValidateFilterRules(metadataRules, "metadata");
+            if (metadataValidation.IsFailure)
+                return metadataValidation;
+
+            return ValidateFilterRules(payloadRules, "payload");
+        }
+
+        private static Result ValidateFilterRules(
+            IReadOnlyCollection<ContractFilterRuleRequest> rules,
+            string scope)
+        {
+            foreach (var rule in rules)
+            {
+                if (!ContractValidation.IsValidFilterSelector(rule.Selector))
+                    return Result.Failure(Error.Validation(
+                        $"Invalid {scope} filter selector '{rule.Selector}'. Use dot-separated keys only."));
+
+                if (!ContractValidation.IsValidFilterOperator(rule.Operator))
+                    return Result.Failure(Error.Validation(
+                        $"Invalid {scope} filter operator '{rule.Operator}'."));
+
+                if (ContractValidation.IsSetOperator(rule.Operator))
+                {
+                    var values = rule.Values ?? Array.Empty<string>();
+                    if (values.Count == 0)
+                        return Result.Failure(Error.Validation(
+                            $"{scope} filter '{rule.Selector}' requires one or more values for operator '{rule.Operator}'."));
+
+                    if (values.Any(v => string.IsNullOrWhiteSpace(v) || v.Length > ContractValidation.FilterValueMaxLength))
+                        return Result.Failure(Error.Validation(
+                            $"{scope} filter '{rule.Selector}' has invalid values."));
+
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(rule.Value) || rule.Value.Length > ContractValidation.FilterValueMaxLength)
+                    return Result.Failure(Error.Validation(
+                        $"{scope} filter '{rule.Selector}' requires a non-empty value for operator '{rule.Operator}'."));
+
+                if (ContractValidation.IsStringOperator(rule.Operator)
+                    && (rule.Values?.Count ?? 0) > 0)
+                {
+                    return Result.Failure(Error.Validation(
+                        $"{scope} filter '{rule.Selector}' must not define 'values' for operator '{rule.Operator}'."));
+                }
+            }
+
+            return Result.Success();
         }
     }
 }

@@ -57,13 +57,18 @@ namespace KairoServer.IntegrationTests
             return id;
         }
 
-        private async Task<Guid> SeedContractAsync(string customerId, string[] eventTypes, bool enabled = true)
+        private async Task<Guid> SeedContractAsync(
+            string customerId,
+            string[] eventTypes,
+            bool enabled = true,
+            ContractFilter? filter = null)
         {
             var now = DateTimeOffset.UtcNow;
             var contract = Contract.Create(
                 customerId,
                 eventTypes,
                 schemaTargets: null,
+                filter,
                 new Destination(DestinationType.Http, "{\"Url\":\"https://x.example.com\"}"),
                 now);
             if (!enabled) contract.Disable(now);
@@ -79,7 +84,10 @@ namespace KairoServer.IntegrationTests
             return contract.Id;
         }
 
-        private async Task<Event> SeedEventAsync(string type, string payload = "{\"k\":\"v\"}")
+        private async Task<Event> SeedEventAsync(
+            string type,
+            string payload = "{\"k\":\"v\"}",
+            string? metadata = null)
         {
             var @event = Event.Create(
                 idempotencyKey: Guid.NewGuid().ToString(),
@@ -87,7 +95,7 @@ namespace KairoServer.IntegrationTests
                 sourceId: Guid.NewGuid().ToString(),
                 occurredAt: DateTimeOffset.UtcNow,
                 payload: payload,
-                metadata: (string?)null);
+                metadata: metadata);
 
             await using var scope = _services.CreateAsyncScope();
             var repo = scope.ServiceProvider.GetRequiredService<IEventRepository>();
@@ -222,6 +230,80 @@ namespace KairoServer.IntegrationTests
             result.EnsureSuccess();
             Assert.Equal(2, result.Value.InsertedDeliveries);
             Assert.Equal(2, await CountDeliveriesAsync(@event.Id));
+        }
+
+        [Fact]
+        public async Task Applies_metadata_and_payload_filters_after_event_type_match()
+        {
+            await SeedCustomerAsync("acme");
+            await SeedContractAsync(
+                "acme",
+                new[] { "orders.created" },
+                filter: new ContractFilter(
+                    metadataRules: new[]
+                    {
+                        new ContractFilterRule("tenant", ContractFilterOperator.Equals, "acme", null)
+                    },
+                    payloadRules: new[]
+                    {
+                        new ContractFilterRule("order.amount", ContractFilterOperator.GreaterThanOrEqual, "100", null)
+                    }));
+
+            var @event = await SeedEventAsync(
+                "orders.created",
+                payload: "{\"order\":{\"amount\":150}}",
+                metadata: "{\"tenant\":\"acme\"}");
+
+            var matcher = _services.GetRequiredService<IContractMatcherService>();
+            var result = await matcher.MatchAsync(
+                new EventAccepted(@event.Id, @event.Type, @event.SourceId, @event.OccurredAt),
+                CancellationToken.None);
+
+            result.EnsureSuccess();
+            Assert.Equal(1, result.Value.MatchedContracts);
+            Assert.Equal(1, await CountDeliveriesAsync(@event.Id));
+        }
+
+        [Fact]
+        public async Task Missing_payload_path_or_type_mismatch_results_in_non_match()
+        {
+            await SeedCustomerAsync("acme");
+            await SeedContractAsync(
+                "acme",
+                new[] { "orders.created" },
+                filter: new ContractFilter(
+                    metadataRules: Array.Empty<ContractFilterRule>(),
+                    payloadRules: new[]
+                    {
+                        new ContractFilterRule("order.amount", ContractFilterOperator.GreaterThan, "100", null)
+                    }));
+
+            var missingPathEvent = await SeedEventAsync(
+                "orders.created",
+                payload: "{\"order\":{\"total\":150}}",
+                metadata: null);
+
+            var typeMismatchEvent = await SeedEventAsync(
+                "orders.created",
+                payload: "{\"order\":{\"amount\":\"high\"}}",
+                metadata: null);
+
+            var matcher = _services.GetRequiredService<IContractMatcherService>();
+
+            var first = await matcher.MatchAsync(
+                new EventAccepted(missingPathEvent.Id, missingPathEvent.Type, missingPathEvent.SourceId, missingPathEvent.OccurredAt),
+                CancellationToken.None);
+
+            var second = await matcher.MatchAsync(
+                new EventAccepted(typeMismatchEvent.Id, typeMismatchEvent.Type, typeMismatchEvent.SourceId, typeMismatchEvent.OccurredAt),
+                CancellationToken.None);
+
+            first.EnsureSuccess();
+            second.EnsureSuccess();
+            Assert.Equal(0, first.Value.MatchedContracts);
+            Assert.Equal(0, second.Value.MatchedContracts);
+            Assert.Equal(0, await CountDeliveriesAsync(missingPathEvent.Id));
+            Assert.Equal(0, await CountDeliveriesAsync(typeMismatchEvent.Id));
         }
 
         [Fact]

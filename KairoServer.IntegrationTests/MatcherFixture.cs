@@ -114,6 +114,7 @@ namespace KairoServer.IntegrationTests
             services.AddScoped<IDeliveryRepository, PostgresDeliveryRepository>();
             services.AddScoped<IOutboxRepository, PostgresOutboxRepository>();
             services.AddSingleton<IOutboxReader, PostgresOutboxReader>();
+            services.AddSingleton<IContractFilterEvaluator, ContractFilterEvaluator>();
             services.AddScoped<IContractMatcherService, ContractMatcherService>();
 
             var natsOption = new NatsOption
@@ -161,6 +162,7 @@ namespace KairoServer.IntegrationTests
                          "006_create_delivery_attempts.sql",
                          "007_create_event_replays.sql",
                          "008_create_event_definitions.sql",
+                         "009_create_contract_filters.sql",
                      })
             {
                 var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

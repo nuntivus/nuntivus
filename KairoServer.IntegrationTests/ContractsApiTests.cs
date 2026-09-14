@@ -117,6 +117,85 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Create_with_filter_persists_rules_and_returns_filter()
+        {
+            await CreateCustomerAsync("acme");
+
+            var req = new CreateContractRequest(
+                "acme",
+                new[] { "orders.created" },
+                new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("none")),
+                Filter: new ContractFilterRequest(
+                    MetadataRules: new[]
+                    {
+                        new ContractFilterRuleRequest("tenant", ContractFilterOperator.Equals, Value: "acme"),
+                    },
+                    PayloadRules: new[]
+                    {
+                        new ContractFilterRuleRequest("order.amount", ContractFilterOperator.GreaterThan, Value: "100"),
+                    }));
+
+            var createResp = await _client.PostAsJsonAsync("/v1/contracts", req);
+
+            Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
+            var created = await createResp.Content.ReadFromJsonAsync<ContractCreated>();
+            Assert.NotNull(created);
+            Assert.NotNull(created!.Filter);
+            Assert.Single(created.Filter!.MetadataRules);
+            Assert.Single(created.Filter.PayloadRules);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var count = await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM contract_filter_rules WHERE contract_id = @id;",
+                new { id = created.Id });
+            Assert.Equal(2, count);
+        }
+
+        [Fact]
+        public async Task Create_with_invalid_filter_selector_returns_400()
+        {
+            await CreateCustomerAsync("acme");
+
+            var req = new CreateContractRequest(
+                "acme",
+                new[] { "orders.created" },
+                new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("none")),
+                Filter: new ContractFilterRequest(
+                    PayloadRules: new[]
+                    {
+                        new ContractFilterRuleRequest("order[*].id", ContractFilterOperator.Equals, Value: "x")
+                    }));
+
+            var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
+
+        [Fact]
+        public async Task Create_with_set_operator_without_values_returns_400()
+        {
+            await CreateCustomerAsync("acme");
+
+            var req = new CreateContractRequest(
+                "acme",
+                new[] { "orders.created" },
+                new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("none")),
+                Filter: new ContractFilterRequest(
+                    PayloadRules: new[]
+                    {
+                        new ContractFilterRuleRequest("order.status", ContractFilterOperator.In, Value: null, Values: Array.Empty<string>())
+                    }));
+
+            var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
+
+        [Fact]
         public async Task Create_with_schema_targets_persists_targets()
         {
             await CreateCustomerAsync("acme");

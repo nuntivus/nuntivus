@@ -21,6 +21,7 @@ namespace KairoServer.Domain.Contracts
         public Destination Destination { get; private set; }
         public IReadOnlyCollection<string> EventTypes => _eventTypes;
         public IReadOnlyCollection<ContractSchemaTarget> SchemaTargets => _schemaTargets;
+        public ContractFilter? Filter { get; }
         public DateTimeOffset CreatedAt { get; }
         public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -30,6 +31,7 @@ namespace KairoServer.Domain.Contracts
             bool enabled,
             IEnumerable<string> eventTypes,
             IEnumerable<ContractSchemaTarget> schemaTargets,
+            ContractFilter? filter,
             Destination destination,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt)
@@ -39,6 +41,9 @@ namespace KairoServer.Domain.Contracts
             Enabled = enabled;
             _eventTypes = new HashSet<string>(eventTypes, StringComparer.Ordinal);
             _schemaTargets = new List<ContractSchemaTarget>(schemaTargets);
+            Filter = filter is null
+                ? null
+                : new ContractFilter(filter.MetadataRules, filter.PayloadRules);
             Destination = destination;
             CreatedAt = createdAt;
             UpdatedAt = updatedAt;
@@ -48,6 +53,7 @@ namespace KairoServer.Domain.Contracts
             string customerId,
             IEnumerable<string> eventTypes,
             IEnumerable<ContractSchemaTarget>? schemaTargets,
+            ContractFilter? filter,
             Destination destination,
             DateTimeOffset now)
         {
@@ -95,6 +101,7 @@ namespace KairoServer.Domain.Contracts
                 enabled: true,
                 materialized,
                 materializedSchemaTargets,
+                filter,
                 destination,
                 createdAt: now,
                 updatedAt: now);
@@ -110,6 +117,7 @@ namespace KairoServer.Domain.Contracts
             bool enabled,
             IEnumerable<string> eventTypes,
             IEnumerable<ContractSchemaTarget>? schemaTargets,
+            ContractFilter? filter,
             Destination destination,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt) =>
@@ -119,6 +127,7 @@ namespace KairoServer.Domain.Contracts
                 enabled,
                 eventTypes,
                 schemaTargets ?? Array.Empty<ContractSchemaTarget>(),
+                filter,
                 destination,
                 createdAt,
                 updatedAt);

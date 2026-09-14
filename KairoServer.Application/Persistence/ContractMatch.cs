@@ -13,5 +13,6 @@ namespace KairoServer.Application.Persistence
     public sealed record ContractMatch(
         Guid ContractId,
         string CustomerId,
-        Destination Destination);
+        Destination Destination,
+        ContractFilter? Filter);
 }

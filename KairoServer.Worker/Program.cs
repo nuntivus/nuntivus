@@ -60,6 +60,7 @@ builder.Services.AddScoped<ICustomerRepository>(sp => new CachedCustomerReposito
 
 builder.Services.AddScoped<IDeliveryRepository, PostgresDeliveryRepository>();
 
+builder.Services.AddSingleton<IContractFilterEvaluator, ContractFilterEvaluator>();
 builder.Services.AddScoped<IContractMatcherService, ContractMatcherService>();
 
 // Delivery dispatcher pipeline options.
