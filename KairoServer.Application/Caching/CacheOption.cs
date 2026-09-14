@@ -24,5 +24,7 @@ namespace KairoServer.Application.Caching
         public const string EventsById = "events_by_id";
         public const string EventReplays = "event_replays";
         public const string CustomersById = "customers_by_id";
+        public const string EventDefinitionsByType = "event_definitions_by_type";
+        public const string EventDefinitionsList = "event_definitions_list";
     }
 }

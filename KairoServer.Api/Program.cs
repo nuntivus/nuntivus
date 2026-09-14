@@ -53,7 +53,14 @@ builder.Services.AddScoped<IContractRepository>(sp => new CachedContractReposito
     sp.GetRequiredService<ICacheStore>(),
     sp.GetRequiredService<CacheOption>()));
 
+builder.Services.AddScoped<PostgresEventDefinitionRepository>();
+builder.Services.AddScoped<IEventDefinitionRepository>(sp => new CachedEventDefinitionRepository(
+    sp.GetRequiredService<PostgresEventDefinitionRepository>(),
+    sp.GetRequiredService<ICacheStore>(),
+    sp.GetRequiredService<CacheOption>()));
+
 builder.Services.AddScoped<IEventService, EventService>();
+builder.Services.AddScoped<IEventDefinitionService, EventDefinitionService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IDeliveryRecoveryService, DeliveryRecoveryService>();
