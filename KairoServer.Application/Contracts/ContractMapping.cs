@@ -20,6 +20,7 @@ namespace KairoServer.Application.Contracts
                 ToSchemaTargetViews(c.SchemaTargets),
                 ToFilterView(c.Filter),
                 ToTransformationView(c.Transformation),
+                ToRateLimitConfig(c.RateLimit),
                 MapDestinationType(c.Destination.Type),
                 c.Destination.Configuration,
                 c.CreatedAt,
@@ -34,6 +35,7 @@ namespace KairoServer.Application.Contracts
                 ToSchemaTargetViews(c.SchemaTargets),
                 ToFilterView(c.Filter),
                 ToTransformationView(c.Transformation),
+                ToRateLimitConfig(c.RateLimit),
                 MapDestinationType(c.Destination.Type),
                 c.CreatedAt);
 
@@ -70,6 +72,16 @@ namespace KairoServer.Application.Contracts
 
             return new ContractPayloadTransformation(transformation.Version, mappings);
         }
+
+        public static ContractRateLimit? ToDomain(this ContractRateLimitConfig? rateLimit) =>
+            rateLimit is null
+                ? null
+                : ContractRateLimit.Create(rateLimit.PerSecond, rateLimit.PerMinute, rateLimit.Burst);
+
+        public static ContractRateLimitConfig? ToRateLimitConfig(ContractRateLimit? rateLimit) =>
+            rateLimit is null
+                ? null
+                : new ContractRateLimitConfig(rateLimit.PerSecond, rateLimit.PerMinute, rateLimit.Burst);
 
         public static System.Collections.Generic.IReadOnlyCollection<ContractSchemaTargetView> ToSchemaTargetViews(
             System.Collections.Generic.IEnumerable<ContractSchemaTarget> targets)

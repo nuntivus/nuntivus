@@ -40,6 +40,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         destination_type,
                         destination_config,
                         transformation_config,
+                        rate_limit_per_second,
+                        rate_limit_per_minute,
+                        rate_limit_burst,
                         created_at,
                         updated_at
                     )
@@ -51,6 +54,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         @DestinationType,
                         @DestinationConfig::jsonb,
                         CAST(@TransformationConfig AS jsonb),
+                        @RateLimitPerSecond,
+                        @RateLimitPerMinute,
+                        @RateLimitBurst,
                         @CreatedAt,
                         @UpdatedAt
                     );
@@ -69,6 +75,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         DestinationType = contract.Destination.Type.ToString(),
                         DestinationConfig = contract.Destination.Configuration,
                         TransformationConfig = SerializeTransformation(contract.Transformation),
+                        RateLimitPerSecond = contract.RateLimit?.PerSecond,
+                        RateLimitPerMinute = contract.RateLimit?.PerMinute,
+                        RateLimitBurst = contract.RateLimit?.Burst,
                         contract.CreatedAt,
                         contract.UpdatedAt
                     },
@@ -108,6 +117,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         destination_type = @DestinationType,
                         destination_config = @DestinationConfig::jsonb,
                         transformation_config = CAST(@TransformationConfig AS jsonb),
+                        rate_limit_per_second = @RateLimitPerSecond,
+                        rate_limit_per_minute = @RateLimitPerMinute,
+                        rate_limit_burst = @RateLimitBurst,
                         updated_at = @UpdatedAt
                     WHERE id = @Id;
                     """;
@@ -128,6 +140,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         DestinationType = contract.Destination.Type.ToString(),
                         DestinationConfig = contract.Destination.Configuration,
                         TransformationConfig = SerializeTransformation(contract.Transformation),
+                        RateLimitPerSecond = contract.RateLimit?.PerSecond,
+                        RateLimitPerMinute = contract.RateLimit?.PerMinute,
+                        RateLimitBurst = contract.RateLimit?.Burst,
                         contract.UpdatedAt
                     },
                     transaction,
@@ -164,6 +179,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             {
                 const string sql = """
                     SELECT id, customer_id, enabled, destination_type, destination_config, transformation_config::text AS transformation_config,
+                           rate_limit_per_second, rate_limit_per_minute, rate_limit_burst,
                            created_at, updated_at
                     FROM contracts
                     WHERE id = @Id
@@ -227,6 +243,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             {
                 const string sql = """
                     SELECT id, customer_id, enabled, destination_type, destination_config, transformation_config::text AS transformation_config,
+                           rate_limit_per_second, rate_limit_per_minute, rate_limit_burst,
                            created_at, updated_at,
                            COUNT(*) OVER() AS total_count
                     FROM contracts
@@ -355,7 +372,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                            c.customer_id        AS CustomerId,
                            c.destination_type   AS DestinationType,
                            c.destination_config AS DestinationConfig,
-                           c.transformation_config::text AS TransformationConfig
+                           c.transformation_config::text AS TransformationConfig,
+                           c.rate_limit_per_second AS RateLimitPerSecond,
+                           c.rate_limit_per_minute AS RateLimitPerMinute,
+                           c.rate_limit_burst      AS RateLimitBurst
                     FROM contracts c
                     INNER JOIN contract_event_types cet ON cet.contract_id = c.id
                     INNER JOIN customers cu             ON cu.id = c.customer_id
@@ -374,7 +394,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 await using var connection = CreateConnection();
                 await connection.OpenAsync(cancellationToken);
 
-                var rows = await connection.QueryAsync<(Guid ContractId, string CustomerId, string DestinationType, string DestinationConfig, string? TransformationConfig)>(
+                var rows = await connection.QueryAsync<(Guid ContractId, string CustomerId, string DestinationType, string DestinationConfig, string? TransformationConfig, int? RateLimitPerSecond, int? RateLimitPerMinute, int? RateLimitBurst)>(
                     new CommandDefinition(
                         sql,
                         new { EventType = eventType },
@@ -405,7 +425,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                             Enum.Parse<DestinationType>(r.DestinationType),
                             r.DestinationConfig),
                         filtersByContract.TryGetValue(r.ContractId, out var filter) ? filter : null,
-                        DeserializeTransformation(r.TransformationConfig)))
+                        DeserializeTransformation(r.TransformationConfig),
+                        ContractRateLimit.Create(r.RateLimitPerSecond, r.RateLimitPerMinute, r.RateLimitBurst)))
                     .ToList();
 
                 return Result.Success<IReadOnlyList<ContractMatch>>(matches);
@@ -608,6 +629,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public string destination_type { get; set; } = string.Empty;
             public string destination_config { get; set; } = string.Empty;
             public string? transformation_config { get; set; }
+            public int? rate_limit_per_second { get; set; }
+            public int? rate_limit_per_minute { get; set; }
+            public int? rate_limit_burst { get; set; }
             public DateTimeOffset created_at { get; set; }
             public DateTimeOffset updated_at { get; set; }
 
@@ -628,7 +652,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     destination,
                     created_at,
                     updated_at,
-                    DeserializeTransformation(transformation_config));
+                    DeserializeTransformation(transformation_config),
+                    ContractRateLimit.Create(rate_limit_per_second, rate_limit_per_minute, rate_limit_burst));
             }
         }
 
@@ -640,6 +665,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public string destination_type { get; set; } = string.Empty;
             public string destination_config { get; set; } = string.Empty;
             public string? transformation_config { get; set; }
+            public int? rate_limit_per_second { get; set; }
+            public int? rate_limit_per_minute { get; set; }
+            public int? rate_limit_burst { get; set; }
             public DateTimeOffset created_at { get; set; }
             public DateTimeOffset updated_at { get; set; }
             public long total_count { get; set; }
@@ -661,7 +689,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     destination,
                     created_at,
                     updated_at,
-                    DeserializeTransformation(transformation_config));
+                    DeserializeTransformation(transformation_config),
+                    ContractRateLimit.Create(rate_limit_per_second, rate_limit_per_minute, rate_limit_burst));
             }
         }
 

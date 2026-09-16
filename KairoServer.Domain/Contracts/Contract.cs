@@ -23,6 +23,7 @@ namespace KairoServer.Domain.Contracts
         public IReadOnlyCollection<ContractSchemaTarget> SchemaTargets => _schemaTargets;
         public ContractFilter? Filter { get; }
         public ContractPayloadTransformation? Transformation { get; }
+        public ContractRateLimit? RateLimit { get; }
         public DateTimeOffset CreatedAt { get; }
         public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -34,6 +35,7 @@ namespace KairoServer.Domain.Contracts
             IEnumerable<ContractSchemaTarget> schemaTargets,
             ContractFilter? filter,
             ContractPayloadTransformation? transformation,
+            ContractRateLimit? rateLimit,
             Destination destination,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt)
@@ -51,6 +53,7 @@ namespace KairoServer.Domain.Contracts
                 : new ContractPayloadTransformation(
                     transformation.Version,
                     transformation.FieldMappings);
+            RateLimit = rateLimit;
             Destination = destination;
             CreatedAt = createdAt;
             UpdatedAt = updatedAt;
@@ -63,7 +66,8 @@ namespace KairoServer.Domain.Contracts
             ContractFilter? filter,
             Destination destination,
             DateTimeOffset now,
-            ContractPayloadTransformation? transformation = null)
+            ContractPayloadTransformation? transformation = null,
+            ContractRateLimit? rateLimit = null)
         {
             if (string.IsNullOrWhiteSpace(customerId))
                 throw new ArgumentException("Customer id cannot be null or whitespace.", nameof(customerId));
@@ -111,6 +115,7 @@ namespace KairoServer.Domain.Contracts
                 materializedSchemaTargets,
                 filter,
                 transformation,
+                rateLimit,
                 destination,
                 createdAt: now,
                 updatedAt: now);
@@ -130,7 +135,8 @@ namespace KairoServer.Domain.Contracts
             Destination destination,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt,
-            ContractPayloadTransformation? transformation = null) =>
+            ContractPayloadTransformation? transformation = null,
+            ContractRateLimit? rateLimit = null) =>
             new(
                 id,
                 customerId,
@@ -139,6 +145,7 @@ namespace KairoServer.Domain.Contracts
                 schemaTargets ?? Array.Empty<ContractSchemaTarget>(),
                 filter,
                 transformation,
+                rateLimit,
                 destination,
                 createdAt,
                 updatedAt);

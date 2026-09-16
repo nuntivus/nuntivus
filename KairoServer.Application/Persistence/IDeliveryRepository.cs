@@ -64,6 +64,13 @@ namespace KairoServer.Application.Persistence
             int page,
             int pageSize,
             CancellationToken cancellationToken);
+
+        Task<Result<bool>> ScheduleNextAttemptAsync(
+            Guid deliveryId,
+            DateTimeOffset expectedUpdatedAt,
+            DateTimeOffset nextAttemptAt,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken);
     }
 }
 

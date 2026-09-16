@@ -11,6 +11,7 @@ namespace KairoServer.Contracts.CustomerContracts
         IReadOnlyCollection<ContractSchemaTargetView> SchemaTargets,
         ContractFilterView? Filter,
     ContractPayloadTransformationView? Transformation,
+    ContractRateLimitConfig? RateLimit,
         DestinationType DestinationType,
         string DestinationConfiguration,
         DateTimeOffset CreatedAt,

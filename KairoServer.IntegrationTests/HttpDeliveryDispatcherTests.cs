@@ -280,6 +280,75 @@ namespace KairoServer.IntegrationTests
             Assert.Empty(_server.Received);
         }
 
+        [Fact]
+        public async Task Dispatch_rate_limit_is_enforced_across_parallel_workers()
+        {
+            var seeded = await SeedDeliveriesForContractAsync(
+                _server.Url,
+                2,
+                new ContractRateLimit(PerSecond: 1, PerMinute: null, Burst: 1));
+
+            _server.Enqueue(Respond(HttpStatusCode.OK, "ok"));
+            _server.Enqueue(Respond(HttpStatusCode.OK, "ok"));
+
+            var firstWorker = BuildDispatcher();
+            var secondWorker = BuildDispatcher();
+
+            var firstTask = firstWorker.DispatchAsync(seeded.DeliveryIds[0], CancellationToken.None);
+            var secondTask = secondWorker.DispatchAsync(seeded.DeliveryIds[1], CancellationToken.None);
+            await Task.WhenAll(firstTask, secondTask);
+
+            firstTask.Result.EnsureSuccess();
+            secondTask.Result.EnsureSuccess();
+
+            var outcomes = new[] { firstTask.Result.Value, secondTask.Result.Value };
+            Assert.Contains(DeliveryDispatchOutcome.Delivered, outcomes);
+            Assert.Contains(DeliveryDispatchOutcome.Skipped, outcomes);
+
+            var first = await ReadDeliveryAsync(seeded.DeliveryIds[0]);
+            var second = await ReadDeliveryAsync(seeded.DeliveryIds[1]);
+            var states = new[] { first, second };
+
+            Assert.Equal(1, states.Count(s => s.status == "Delivered"));
+            Assert.Equal(1, states.Count(s => s.status == "Pending" && s.next_attempt_at is not null));
+            Assert.Single(_server.Received);
+        }
+
+        [Fact]
+        public async Task Dispatch_throttled_contract_does_not_starve_other_contract()
+        {
+            var throttled = await SeedDeliveriesForContractAsync(
+                _server.Url,
+                2,
+                new ContractRateLimit(PerSecond: 1, PerMinute: null, Burst: 1));
+            var unthrottled = await SeedDeliveriesForContractAsync(_server.Url, 1, rateLimit: null);
+
+            _server.Enqueue(Respond(HttpStatusCode.OK, "ok"));
+            _server.Enqueue(Respond(HttpStatusCode.OK, "ok"));
+
+            var dispatcher = BuildDispatcher();
+
+            var firstThrottled = await dispatcher.DispatchAsync(throttled.DeliveryIds[0], CancellationToken.None);
+            var secondThrottled = await dispatcher.DispatchAsync(throttled.DeliveryIds[1], CancellationToken.None);
+            var otherContract = await dispatcher.DispatchAsync(unthrottled.DeliveryIds[0], CancellationToken.None);
+
+            firstThrottled.EnsureSuccess();
+            secondThrottled.EnsureSuccess();
+            otherContract.EnsureSuccess();
+
+            Assert.Equal(DeliveryDispatchOutcome.Delivered, firstThrottled.Value);
+            Assert.Equal(DeliveryDispatchOutcome.Skipped, secondThrottled.Value);
+            Assert.Equal(DeliveryDispatchOutcome.Delivered, otherContract.Value);
+
+            var throttledDeferred = await ReadDeliveryAsync(throttled.DeliveryIds[1]);
+            var unthrottledDelivered = await ReadDeliveryAsync(unthrottled.DeliveryIds[0]);
+
+            Assert.Equal("Pending", throttledDeferred.status);
+            Assert.NotNull(throttledDeferred.next_attempt_at);
+            Assert.Equal("Delivered", unthrottledDelivered.status);
+            Assert.Equal(2, _server.Received.Count);
+        }
+
         // ---- helpers ---------------------------------------------------------
 
         private IDeliveryDispatcherService BuildDispatcher(DeliveryDispatcherOption? options = null)
@@ -292,6 +361,8 @@ namespace KairoServer.IntegrationTests
                 new PostgresDatabaseConnectionFactory(_fx.ConnectionString));
             services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
             services.AddScoped<IDeliveryRepository, PostgresDeliveryRepository>();
+            services.AddScoped<IContractDeliveryRateLimiter, PostgresContractDeliveryRateLimiter>();
+            services.AddSingleton<IDeliveryDispatcherMetrics, MeterDeliveryDispatcherMetrics>();
 
             services.AddHttpClient(HttpDeliveryExecutor.HttpClientName);
             services.AddSingleton<ISecretResolver, NullSecretResolver>();
@@ -311,7 +382,10 @@ namespace KairoServer.IntegrationTests
             return sp.CreateScope().ServiceProvider.GetRequiredService<IDeliveryDispatcherService>();
         }
 
-        private async Task<(Guid deliveryId, Guid eventId)> SeedDeliveryAsync(string url, string? transformationConfiguration = null)
+        private async Task<(Guid deliveryId, Guid eventId)> SeedDeliveryAsync(
+            string url,
+            string? transformationConfiguration = null,
+            ContractRateLimit? rateLimit = null)
         {
             var customerId = "cust-" + Guid.NewGuid().ToString("N")[..6];
             var contractId = Guid.NewGuid();
@@ -324,14 +398,24 @@ namespace KairoServer.IntegrationTests
                 "INSERT INTO customers(id, name, enabled, created_at, updated_at) VALUES (@id, @id, TRUE, @now, @now);",
                 new { id = customerId, now });
             await conn.ExecuteAsync("""
-                INSERT INTO contracts(id, customer_id, enabled, destination_type, destination_config, created_at, updated_at)
-                VALUES (@id, @cid, TRUE, 'Http', @cfg::jsonb, @now, @now);
+                INSERT INTO contracts(
+                    id, customer_id, enabled, destination_type, destination_config,
+                    rate_limit_per_second, rate_limit_per_minute, rate_limit_burst,
+                    created_at, updated_at)
+                VALUES (
+                    @id, @cid, TRUE, 'Http', @cfg::jsonb,
+                    @perSecond, @perMinute, @burst,
+                    @now, @now);
                 """,
                 new { id = contractId, cid = customerId, cfg = JsonSerializer.Serialize(new HttpDestinationConfig(
                     url,
                     new HttpAuthentication("none"),
                     Headers: null,
-                    TimeoutSeconds: 5)), now });
+                    TimeoutSeconds: 5)),
+                    perSecond = rateLimit?.PerSecond,
+                    perMinute = rateLimit?.PerMinute,
+                    burst = rateLimit?.Burst,
+                    now });
             await conn.ExecuteAsync("""
                 INSERT INTO events(id, type, idempotency_key, source_id, occurred_at, received_at, metadata, payload)
                 VALUES (@id, 'orders.created', @idem, @src, @now, @now, '{}'::jsonb, '{}'::jsonb);
@@ -346,7 +430,7 @@ namespace KairoServer.IntegrationTests
 
             var delivery = Delivery.CreatePending(
                 eventId, contractId, customerId, "orders.created",
-                "{\"orderId\":\"o-1\"}", destination, now, transformationConfiguration);
+                "{\"orderId\":\"o-1\"}", destination, now, transformationConfiguration, rateLimit);
 
             var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
             using var uow = new PostgresUnitOfWork(factory);
@@ -356,6 +440,87 @@ namespace KairoServer.IntegrationTests
             uow.Commit();
 
             return (delivery.Id, eventId);
+        }
+
+        private async Task<(Guid ContractId, string CustomerId, List<Guid> DeliveryIds)> SeedDeliveriesForContractAsync(
+            string url,
+            int count,
+            ContractRateLimit? rateLimit)
+        {
+            var customerId = "cust-" + Guid.NewGuid().ToString("N")[..6];
+            var contractId = Guid.NewGuid();
+            var now = DateTimeOffset.UtcNow;
+
+            await using var conn = new NpgsqlConnection(_fx.ConnectionString);
+            await conn.OpenAsync();
+            await conn.ExecuteAsync(
+                "INSERT INTO customers(id, name, enabled, created_at, updated_at) VALUES (@id, @id, TRUE, @now, @now);",
+                new { id = customerId, now });
+
+            await conn.ExecuteAsync("""
+                INSERT INTO contracts(
+                    id, customer_id, enabled, destination_type, destination_config,
+                    rate_limit_per_second, rate_limit_per_minute, rate_limit_burst,
+                    created_at, updated_at)
+                VALUES (
+                    @id, @cid, TRUE, 'Http', @cfg::jsonb,
+                    @perSecond, @perMinute, @burst,
+                    @now, @now);
+                """,
+                new
+                {
+                    id = contractId,
+                    cid = customerId,
+                    cfg = JsonSerializer.Serialize(new HttpDestinationConfig(
+                        url,
+                        new HttpAuthentication("none"),
+                        Headers: null,
+                        TimeoutSeconds: 5)),
+                    perSecond = rateLimit?.PerSecond,
+                    perMinute = rateLimit?.PerMinute,
+                    burst = rateLimit?.Burst,
+                    now
+                });
+
+            var destination = new Destination(KairoServer.Domain.Contracts.DestinationType.Http, JsonSerializer.Serialize(new HttpDestinationConfig(
+                url,
+                new HttpAuthentication("none"),
+                Headers: null,
+                TimeoutSeconds: 5)));
+
+            var deliveryIds = new List<Guid>(count);
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            var repo = new PostgresDeliveryRepository(factory);
+            using var uow = new PostgresUnitOfWork(factory);
+            uow.Begin(true);
+
+            for (var i = 0; i < count; i++)
+            {
+                var eventId = Guid.NewGuid();
+                var timestamp = now.AddMilliseconds(i + 1);
+                await conn.ExecuteAsync("""
+                    INSERT INTO events(id, type, idempotency_key, source_id, occurred_at, received_at, metadata, payload)
+                    VALUES (@id, 'orders.created', @idem, @src, @ts, @ts, '{}'::jsonb, '{}'::jsonb);
+                    """,
+                    new { id = eventId, idem = Guid.NewGuid().ToString("N"), src = Guid.NewGuid(), ts = timestamp });
+
+                var delivery = Delivery.CreatePending(
+                    eventId,
+                    contractId,
+                    customerId,
+                    "orders.created",
+                    "{\"orderId\":\"o-1\"}",
+                    destination,
+                    timestamp,
+                    transformationConfiguration: null,
+                    rateLimit: rateLimit);
+
+                (await repo.InsertPendingAsync(new[] { delivery }, uow, CancellationToken.None)).EnsureSuccess();
+                deliveryIds.Add(delivery.Id);
+            }
+
+            uow.Commit();
+            return (contractId, customerId, deliveryIds);
         }
 
         private async Task<(string status, int attempt_count, string? last_error, DateTimeOffset? next_attempt_at)>

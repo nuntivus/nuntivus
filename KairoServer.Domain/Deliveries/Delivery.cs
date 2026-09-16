@@ -21,6 +21,7 @@ namespace KairoServer.Domain.Deliveries
         public string EventType { get; }
         public string Payload { get; }
         public string? TransformationConfiguration { get; }
+        public ContractRateLimit? RateLimit { get; }
         public DestinationType DestinationType { get; }
         public string DestinationConfiguration { get; }
         public DeliveryStatus Status { get; private set; }
@@ -38,6 +39,7 @@ namespace KairoServer.Domain.Deliveries
             string eventType,
             string payload,
             string? transformationConfiguration,
+            ContractRateLimit? rateLimit,
             DestinationType destinationType,
             string destinationConfiguration,
             DeliveryStatus status,
@@ -54,6 +56,7 @@ namespace KairoServer.Domain.Deliveries
             EventType = eventType;
             Payload = payload;
             TransformationConfiguration = transformationConfiguration;
+            RateLimit = rateLimit;
             DestinationType = destinationType;
             DestinationConfiguration = destinationConfiguration;
             Status = status;
@@ -72,7 +75,8 @@ namespace KairoServer.Domain.Deliveries
             string payload,
             Destination destination,
             DateTimeOffset now,
-            string? transformationConfiguration = null)
+            string? transformationConfiguration = null,
+            ContractRateLimit? rateLimit = null)
         {
             if (eventId == Guid.Empty)
                 throw new ArgumentException("EventId cannot be empty.", nameof(eventId));
@@ -92,6 +96,7 @@ namespace KairoServer.Domain.Deliveries
                 eventType,
                 payload,
                 transformationConfiguration,
+                rateLimit,
                 destination.Type,
                 destination.Configuration,
                 DeliveryStatus.Pending,
@@ -213,6 +218,7 @@ namespace KairoServer.Domain.Deliveries
             string eventType,
             string payload,
             string? transformationConfiguration,
+            ContractRateLimit? rateLimit,
             DestinationType destinationType,
             string destinationConfiguration,
             DeliveryStatus status,
@@ -222,7 +228,7 @@ namespace KairoServer.Domain.Deliveries
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt) =>
             new(id, eventId, contractId, customerId, eventType, payload,
-                transformationConfiguration, destinationType, destinationConfiguration, status,
+                transformationConfiguration, rateLimit, destinationType, destinationConfiguration, status,
                 attemptCount, lastError, nextAttemptAt, createdAt, updatedAt);
 
         public static Delivery Rehydrate(
@@ -248,6 +254,7 @@ namespace KairoServer.Domain.Deliveries
                 eventType,
                 payload,
                 transformationConfiguration: null,
+                rateLimit: null,
                 destinationType,
                 destinationConfiguration,
                 status,

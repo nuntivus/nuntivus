@@ -154,6 +154,42 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Create_with_rate_limit_persists_and_returns_rate_limit()
+        {
+            await CreateCustomerAsync("acme");
+
+            var req = new CreateContractRequest(
+                "acme",
+                new[] { "orders.created" },
+                new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("none")),
+                RateLimit: new ContractRateLimitConfig(
+                    PerSecond: 5,
+                    PerMinute: 120,
+                    Burst: 10));
+
+            var createResp = await _client.PostAsJsonAsync("/v1/contracts", req);
+
+            Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
+            var created = await createResp.Content.ReadFromJsonAsync<ContractCreated>();
+            Assert.NotNull(created);
+            Assert.NotNull(created!.RateLimit);
+            Assert.Equal(5, created.RateLimit!.PerSecond);
+            Assert.Equal(120, created.RateLimit.PerMinute);
+            Assert.Equal(10, created.RateLimit.Burst);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var row = await conn.QuerySingleAsync<(int? PerSecond, int? PerMinute, int? Burst)>(
+                "SELECT rate_limit_per_second AS PerSecond, rate_limit_per_minute AS PerMinute, rate_limit_burst AS Burst FROM contracts WHERE id = @id;",
+                new { id = created.Id });
+
+            Assert.Equal(5, row.PerSecond);
+            Assert.Equal(120, row.PerMinute);
+            Assert.Equal(10, row.Burst);
+        }
+
+        [Fact]
         public async Task Create_with_transformation_persists_and_returns_transformation()
         {
             await CreateCustomerAsync("acme");

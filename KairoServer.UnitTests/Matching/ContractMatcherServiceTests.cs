@@ -125,6 +125,12 @@ namespace KairoServer.UnitTests.Matching
 
             public Task<Result<PagedResult<Delivery>>> ListDeadAsync(int page, int pageSize, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(PagedResult<Delivery>.Create(Array.Empty<Delivery>(), page, pageSize, 0)));
+
+            public Task<Result<DeliveryRateLimitPermit>> TryAcquireRateLimitPermitAsync(Guid contractId, ContractRateLimit rateLimit, DateTimeOffset now, IUnitOfWork uow, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(DeliveryRateLimitPermit.Allow()));
+
+            public Task<Result<bool>> ScheduleNextAttemptAsync(Guid deliveryId, DateTimeOffset expectedUpdatedAt, DateTimeOffset nextAttemptAt, IUnitOfWork uow, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(true));
         }
 
         private sealed class FakeOutboxRepository : IOutboxRepository

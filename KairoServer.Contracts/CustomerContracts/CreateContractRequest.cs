@@ -13,5 +13,6 @@ namespace KairoServer.Contracts.CustomerContracts
         DestinationConfig Configuration,
         IReadOnlyCollection<ContractSchemaTargetRequest>? SchemaTargets = null,
     ContractFilterRequest? Filter = null,
-    ContractPayloadTransformationRequest? Transformation = null);
+    ContractPayloadTransformationRequest? Transformation = null,
+    ContractRateLimitConfig? RateLimit = null);
 }

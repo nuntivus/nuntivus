@@ -20,6 +20,9 @@ namespace KairoServer.Application.Contracts
         public const int MaxEventTypesPerContract = 100;
         public const int MaxFilterRulesPerScope = 50;
         public const int MaxTransformationMappings = 100;
+        public const int MaxRateLimitPerSecond = 1_000_000;
+        public const int MaxRateLimitPerMinute = 60_000_000;
+        public const int MaxRateLimitBurst = 10_000_000;
         public const int FilterSelectorMaxLength = 200;
         public const int FilterValueMaxLength = 500;
 

@@ -19,6 +19,8 @@ namespace KairoServer.Application.Deliveries.Execution
     public sealed class DeliveryDispatcherService : IDeliveryDispatcherService
     {
         private readonly IDeliveryRepository _deliveries;
+        private readonly IContractDeliveryRateLimiter _rateLimiter;
+        private readonly IDeliveryDispatcherMetrics _metrics;
         private readonly IDeliveryExecutorDispatcher _executors;
         private readonly IDeliveryPayloadTransformer _payloadTransformer;
         private readonly IUnitOfWork _unitOfWork;
@@ -27,6 +29,8 @@ namespace KairoServer.Application.Deliveries.Execution
 
         public DeliveryDispatcherService(
             IDeliveryRepository deliveries,
+            IContractDeliveryRateLimiter rateLimiter,
+            IDeliveryDispatcherMetrics metrics,
             IDeliveryExecutorDispatcher executors,
             IDeliveryPayloadTransformer payloadTransformer,
             IUnitOfWork unitOfWork,
@@ -34,6 +38,8 @@ namespace KairoServer.Application.Deliveries.Execution
             DeliveryDispatcherOption? options = null)
         {
             _deliveries = deliveries ?? throw new ArgumentNullException(nameof(deliveries));
+            _rateLimiter = rateLimiter ?? throw new ArgumentNullException(nameof(rateLimiter));
+            _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
             _executors = executors ?? throw new ArgumentNullException(nameof(executors));
             _payloadTransformer = payloadTransformer ?? throw new ArgumentNullException(nameof(payloadTransformer));
             _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
@@ -80,6 +86,17 @@ namespace KairoServer.Application.Deliveries.Execution
                 _logger.Information(
                     "Delivery {DeliveryId} retry deferred until {NextAttemptAt}; skipping early execution.",
                     delivery.Id, nextAttemptAt);
+                await _metrics.TrackDispatchOutcomeAsync("retry_deferred", cancellationToken);
+                return Result.Success(DeliveryDispatchOutcome.Skipped);
+            }
+
+            var rateLimitDecision = await TryApplyRateLimitAsync(delivery, expectedUpdatedAt, now, cancellationToken);
+            if (rateLimitDecision.IsFailure)
+                return Result.Failure<DeliveryDispatchOutcome>(rateLimitDecision.Error!);
+
+            if (!rateLimitDecision.Value)
+            {
+                await _metrics.TrackDispatchOutcomeAsync("throttled", cancellationToken);
                 return Result.Success(DeliveryDispatchOutcome.Skipped);
             }
 
@@ -179,6 +196,7 @@ namespace KairoServer.Application.Deliveries.Execution
                     _logger.Warning(
                         "Concurrent update detected for delivery {DeliveryId}; skipping duplicate dispatch result.",
                         delivery.Id);
+                    await _metrics.TrackDispatchOutcomeAsync("concurrency_skipped", cancellationToken);
                     return Result.Success(DeliveryDispatchOutcome.Skipped);
                 }
 
@@ -197,6 +215,7 @@ namespace KairoServer.Application.Deliveries.Execution
                 _logger.Information(
                     "Delivered {DeliveryId} (event {EventId}) on attempt {Attempt}.",
                     delivery.Id, delivery.EventId, attemptNumber);
+                await _metrics.TrackDispatchOutcomeAsync("delivered", cancellationToken);
                 return Result.Success(DeliveryDispatchOutcome.Delivered);
             }
 
@@ -205,13 +224,75 @@ namespace KairoServer.Application.Deliveries.Execution
                 _logger.Warning(
                     "Delivery {DeliveryId} exhausted (attempt {Attempt}, category {Category}): {Error}.",
                     delivery.Id, attemptNumber, execution.Category, execution.Error);
+                await _metrics.TrackDispatchOutcomeAsync("failed_terminal", cancellationToken);
                 return Result.Success(DeliveryDispatchOutcome.FailedTerminal);
             }
 
             _logger.Warning(
                 "Delivery {DeliveryId} failed attempt {Attempt} ({Category}); retry at {RetryAt}: {Error}.",
                 delivery.Id, attemptNumber, execution.Category, retry, execution.Error);
+            await _metrics.TrackDispatchOutcomeAsync("failed_retry", cancellationToken);
             return Result.Success(DeliveryDispatchOutcome.FailedRetry);
+        }
+
+        private async Task<Result<bool>> TryApplyRateLimitAsync(
+            Delivery delivery,
+            DateTimeOffset expectedUpdatedAt,
+            DateTimeOffset now,
+            CancellationToken cancellationToken)
+        {
+            if (delivery.RateLimit is null || !delivery.RateLimit.IsEnabled)
+                return Result.Success(true);
+
+            _unitOfWork.Begin(true);
+            try
+            {
+                var permitResult = await _rateLimiter.TryAcquirePermitAsync(
+                    delivery.ContractId,
+                    delivery.RateLimit,
+                    now,
+                    cancellationToken);
+                permitResult.EnsureSuccess();
+
+                if (permitResult.Value.Granted)
+                {
+                    _unitOfWork.Commit();
+                    await _metrics.TrackRateLimitDecisionAsync("granted", cancellationToken);
+                    return Result.Success(true);
+                }
+
+                var nextAllowedAt = permitResult.Value.NextAllowedAt ?? now.AddSeconds(1);
+                var scheduleResult = await _deliveries.ScheduleNextAttemptAsync(
+                    delivery.Id,
+                    expectedUpdatedAt,
+                    nextAllowedAt,
+                    _unitOfWork,
+                    cancellationToken);
+                scheduleResult.EnsureSuccess();
+
+                if (!scheduleResult.Value)
+                {
+                    _unitOfWork.Rollback();
+                    await _metrics.TrackRateLimitDecisionAsync("stale", cancellationToken);
+                    return Result.Success(false);
+                }
+
+                _unitOfWork.Commit();
+                var delay = nextAllowedAt - now;
+                await _metrics.TrackRateLimitDelayAsync(delay, cancellationToken);
+                await _metrics.TrackRateLimitDecisionAsync("throttled", cancellationToken);
+                _logger.Information(
+                    "Delivery {DeliveryId} delayed by rate limiter until {NextAttemptAt} (contract {ContractId}).",
+                    delivery.Id,
+                    nextAllowedAt,
+                    delivery.ContractId);
+                return Result.Success(false);
+            }
+            catch (Exception ex)
+            {
+                _unitOfWork.Rollback();
+                return Result.Failure<bool>(ex);
+            }
         }
 
         private (DateTimeOffset now, DateTimeOffset? nextAttempt) ClassifyRetry(

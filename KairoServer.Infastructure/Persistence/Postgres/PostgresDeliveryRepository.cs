@@ -44,6 +44,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         event_type,
                         payload,
                         transformation_config,
+                        rate_limit_per_second,
+                        rate_limit_per_minute,
+                        rate_limit_burst,
                         destination_type,
                         destination_config,
                         status,
@@ -62,6 +65,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         @EventType,
                         CAST(@Payload AS jsonb),
                         CAST(@TransformationConfiguration AS jsonb),
+                        @RateLimitPerSecond,
+                        @RateLimitPerMinute,
+                        @RateLimitBurst,
                         @DestinationType,
                         CAST(@DestinationConfiguration AS jsonb),
                         @Status,
@@ -91,6 +97,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                             delivery.EventType,
                             delivery.Payload,
                             delivery.TransformationConfiguration,
+                            RateLimitPerSecond = delivery.RateLimit?.PerSecond,
+                            RateLimitPerMinute = delivery.RateLimit?.PerMinute,
+                            RateLimitBurst = delivery.RateLimit?.Burst,
                             DestinationType = delivery.DestinationType.ToString(),
                             delivery.DestinationConfiguration,
                             Status = delivery.Status.ToString(),
@@ -111,6 +120,53 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             catch (Exception ex)
             {
                 return Result.Failure<int>(ex);
+            }
+        }
+
+        public async Task<Result<bool>> ScheduleNextAttemptAsync(
+            Guid deliveryId,
+            DateTimeOffset expectedUpdatedAt,
+            DateTimeOffset nextAttemptAt,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (!uow.IsTransactionOpen)
+                    throw new InvalidOperationException("Transaction is not open.");
+
+                const string sql = """
+                    UPDATE deliveries
+                    SET next_attempt_at = CASE
+                        WHEN next_attempt_at IS NULL OR next_attempt_at < @NextAttemptAt
+                            THEN @NextAttemptAt
+                        ELSE next_attempt_at
+                    END,
+                    updated_at = @UpdatedAt
+                    WHERE id = @Id
+                      AND updated_at = @ExpectedUpdatedAt
+                      AND status IN (@PendingStatus, @FailedStatus);
+                    """;
+
+                var rows = await uow.GetConnection()!.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        Id = deliveryId,
+                        NextAttemptAt = nextAttemptAt,
+                        UpdatedAt = DateTimeOffset.UtcNow,
+                        ExpectedUpdatedAt = expectedUpdatedAt,
+                        PendingStatus = DeliveryStatus.Pending.ToString(),
+                        FailedStatus = DeliveryStatus.Failed.ToString(),
+                    },
+                    uow.GetTransaction(),
+                    cancellationToken: cancellationToken));
+
+                return Result.Success(rows == 1);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<bool>(ex);
             }
         }
 
@@ -186,6 +242,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         event_type          AS EventType,
                         payload::text       AS Payload,
                         transformation_config::text AS TransformationConfig,
+                        rate_limit_per_second AS RateLimitPerSecond,
+                        rate_limit_per_minute AS RateLimitPerMinute,
+                        rate_limit_burst      AS RateLimitBurst,
                         destination_type    AS DestinationType,
                         destination_config::text AS DestinationConfig,
                         status,
@@ -242,6 +301,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         event_type          AS EventType,
                         payload::text       AS Payload,
                         transformation_config::text AS TransformationConfig,
+                        rate_limit_per_second AS RateLimitPerSecond,
+                        rate_limit_per_minute AS RateLimitPerMinute,
+                        rate_limit_burst      AS RateLimitBurst,
                         destination_type    AS DestinationType,
                         destination_config::text AS DestinationConfig,
                         status,
@@ -407,6 +469,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public string EventType { get; set; } = string.Empty;
             public string Payload { get; set; } = string.Empty;
             public string? TransformationConfig { get; set; }
+            public int? RateLimitPerSecond { get; set; }
+            public int? RateLimitPerMinute { get; set; }
+            public int? RateLimitBurst { get; set; }
             public string DestinationType { get; set; } = string.Empty;
             public string DestinationConfig { get; set; } = string.Empty;
             public string Status { get; set; } = string.Empty;
@@ -426,6 +491,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 row.EventType,
                 row.Payload,
                 row.TransformationConfig,
+                ContractRateLimit.Create(row.RateLimitPerSecond, row.RateLimitPerMinute, row.RateLimitBurst),
                 Enum.Parse<DestinationType>(row.DestinationType),
                 row.DestinationConfig,
                 Enum.Parse<DeliveryStatus>(row.Status),
@@ -447,5 +513,6 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public DateTimeOffset StartedAt { get; set; }
             public DateTimeOffset CompletedAt { get; set; }
         }
+
     }
 }

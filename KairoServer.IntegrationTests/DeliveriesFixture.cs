@@ -60,6 +60,7 @@ namespace KairoServer.IntegrationTests
                 "008_create_event_definitions.sql",
                 "009_create_contract_filters.sql",
                 "010_add_contract_payload_transformations.sql",
+                "011_add_delivery_rate_limits.sql",
             })
             {
                 var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

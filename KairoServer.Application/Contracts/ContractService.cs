@@ -108,6 +108,10 @@ namespace KairoServer.Application.Contracts
             if (transformationValidation.IsFailure)
                 return Result<ContractCreated>.Fail(transformationValidation.Errors);
 
+            var rateLimitValidation = ValidateRateLimit(request.RateLimit);
+            if (rateLimitValidation.IsFailure)
+                return Result<ContractCreated>.Fail(rateLimitValidation.Errors);
+
             var destinationResult = _destinations.Build(request.Configuration);
             if (destinationResult.IsFailure)
                 return Result<ContractCreated>.Fail(destinationResult.Errors);
@@ -133,7 +137,8 @@ namespace KairoServer.Application.Contracts
                     request.Filter.ToDomain(),
                     destinationResult.Value,
                     now,
-                    request.Transformation.ToDomain());
+                    request.Transformation.ToDomain(),
+                    request.RateLimit.ToDomain());
 
                 _unitOfWork.Begin(true);
                 var insert = await _repository.InsertAsync(contract, _unitOfWork, cancellationToken);
@@ -340,10 +345,34 @@ namespace KairoServer.Application.Contracts
                 ContractMapping.ToSchemaTargetViews(contract.SchemaTargets),
                 ContractMapping.ToFilterView(contract.Filter),
                 ContractMapping.ToTransformationView(contract.Transformation),
+                ContractMapping.ToRateLimitConfig(contract.RateLimit),
                 ContractMapping.MapDestinationType(contract.Destination.Type),
                 redactedConfig.Value,
                 contract.CreatedAt,
                 contract.UpdatedAt));
+        }
+
+        private static Result ValidateRateLimit(ContractRateLimitConfig? rateLimit)
+        {
+            if (rateLimit is null)
+                return Result.Success();
+
+            if (rateLimit.PerSecond is null && rateLimit.PerMinute is null)
+                return Result.Failure(Error.Validation("rateLimit must set perSecond or perMinute."));
+
+            if (rateLimit.PerSecond is <= 0 or > ContractValidation.MaxRateLimitPerSecond)
+                return Result.Failure(Error.Validation(
+                    $"rateLimit.perSecond must be between 1 and {ContractValidation.MaxRateLimitPerSecond}."));
+
+            if (rateLimit.PerMinute is <= 0 or > ContractValidation.MaxRateLimitPerMinute)
+                return Result.Failure(Error.Validation(
+                    $"rateLimit.perMinute must be between 1 and {ContractValidation.MaxRateLimitPerMinute}."));
+
+            if (rateLimit.Burst is <= 0 or > ContractValidation.MaxRateLimitBurst)
+                return Result.Failure(Error.Validation(
+                    $"rateLimit.burst must be between 1 and {ContractValidation.MaxRateLimitBurst} when provided."));
+
+            return Result.Success();
         }
 
         private static Result ValidateFilter(ContractFilterRequest? filter)

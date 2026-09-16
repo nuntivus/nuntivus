@@ -15,5 +15,6 @@ namespace KairoServer.Application.Persistence
         string CustomerId,
         Destination Destination,
         ContractFilter? Filter,
-        ContractPayloadTransformation? Transformation = null);
+        ContractPayloadTransformation? Transformation = null,
+        ContractRateLimit? RateLimit = null);
 }
