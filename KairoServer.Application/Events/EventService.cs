@@ -121,7 +121,8 @@ namespace KairoServer.Application.Events
                 var sourceResult = await _eventRepository.GetByIdAsync(eventId, cancellationToken);
                 var source = sourceResult.EnsureValue();
                 if (source is null)
-                    return Result.Failure<ReplayEventResult>(Error.NotFound($"Event '{eventId}' was not found."));
+                    return Result.Failure<ReplayEventResult>(Error.NotFound(
+                        $"Event '{eventId}' was not found. Replay is only available while source events are retained."));
 
                 var now = DateTimeOffset.UtcNow;
                 var replayMetadata = source.Metadata is null

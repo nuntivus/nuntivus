@@ -166,6 +166,7 @@ namespace KairoServer.IntegrationTests
                          "010_add_contract_payload_transformations.sql",
                          "011_add_delivery_rate_limits.sql",
                          "012_add_delivery_ordering.sql",
+                         "013_add_retention_cleanup_indexes.sql",
                      })
             {
                 var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

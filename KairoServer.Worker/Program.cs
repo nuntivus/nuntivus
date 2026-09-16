@@ -5,6 +5,7 @@ using KairoServer.Application.Matching;
 using KairoServer.Application.Messaging;
 using KairoServer.Application.Observability;
 using KairoServer.Application.Persistence;
+using KairoServer.Application.Retention;
 using KairoServer.Infastructure.Caching;
 using KairoServer.Infastructure.Deliveries;
 using KairoServer.Infastructure.Deliveries.Http;
@@ -15,6 +16,7 @@ using KairoServer.Infastructure.Persistence.Postgres;
 using KairoServer.Worker.Deliveries;
 using KairoServer.Worker.Matching;
 using KairoServer.Worker.Outbox;
+using KairoServer.Worker.Retention;
 using NATS.Client.Core;
 using NATS.Client.JetStream;
 using OpenTelemetry.Metrics;
@@ -61,6 +63,7 @@ builder.Services.AddSingleton<IDatabaseConnectionFactory>(
     _ => new PostgresDatabaseConnectionFactory(postgresConnectionString));
 
 builder.Services.AddSingleton<IOutboxReader, PostgresOutboxReader>();
+builder.Services.AddSingleton<IRetentionCleanupRepository, PostgresRetentionCleanupRepository>();
 
 // Caching (in-memory, 60s TTL by default; configurable via "Cache" section).
 var cacheOption = builder.Configuration.GetSection("Cache").Get<CacheOption>() ?? new CacheOption();
@@ -115,6 +118,11 @@ builder.Services.AddSingleton(destinationCredentialOption);
 
 builder.Services.AddScoped<IDeliveryDispatcherService, DeliveryDispatcherService>();
 builder.Services.AddScoped<IDeliveryRecoveryService, DeliveryRecoveryService>();
+builder.Services.AddScoped<IRetentionCleanupService, RetentionCleanupService>();
+
+var retentionCleanupOption = builder.Configuration.GetSection("RetentionCleanup").Get<RetentionCleanupOption>()
+    ?? new RetentionCleanupOption();
+builder.Services.AddSingleton(retentionCleanupOption);
 
 // NATS / JetStream
 var natsOption = builder.Configuration.GetSection("Nats").Get<NatsOption>()
@@ -160,6 +168,7 @@ builder.Services.AddHostedService<NatsJetStreamBootstrapper>();
 builder.Services.AddHostedService<OutboxPublisherWorker>();
 builder.Services.AddHostedService<ContractMatcherWorker>();
 builder.Services.AddHostedService<DeliveryDispatcherWorker>();
+builder.Services.AddHostedService<RetentionCleanupWorker>();
 
 var host = builder.Build();
 host.Run();
