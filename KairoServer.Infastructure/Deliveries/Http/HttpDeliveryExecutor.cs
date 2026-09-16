@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -7,6 +9,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Deliveries.Execution;
+using KairoServer.Application.Observability;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.CustomerContracts;
 using DomainDestinationType = KairoServer.Domain.Contracts.DestinationType;
@@ -56,6 +59,12 @@ namespace KairoServer.Infastructure.Deliveries.Http
         {
             ArgumentNullException.ThrowIfNull(request);
 
+            using var activity = KairoTelemetry.ActivitySource.StartActivity("delivery.http.execute", ActivityKind.Client);
+            activity?.SetTag(KairoTelemetry.DeliveryIdTag, request.DeliveryId.ToString("D"));
+            activity?.SetTag(KairoTelemetry.EventIdTag, request.EventId.ToString("D"));
+            activity?.SetTag(KairoTelemetry.ContractIdTag, request.ContractId.ToString("D"));
+            activity?.SetTag(KairoTelemetry.CustomerIdTag, request.CustomerId);
+
             HttpDestinationConfig config;
             try
             {
@@ -84,6 +93,8 @@ namespace KairoServer.Infastructure.Deliveries.Http
 
             httpRequest.Headers.TryAddWithoutValidation("X-Kairo-Delivery-Id", request.DeliveryId.ToString());
             httpRequest.Headers.TryAddWithoutValidation("X-Kairo-Event-Id", request.EventId.ToString());
+            httpRequest.Headers.TryAddWithoutValidation("X-Kairo-Contract-Id", request.ContractId.ToString());
+            httpRequest.Headers.TryAddWithoutValidation("X-Kairo-Customer-Id", request.CustomerId);
             httpRequest.Headers.TryAddWithoutValidation("X-Kairo-Event-Type", request.EventType);
             httpRequest.Headers.TryAddWithoutValidation("X-Kairo-Attempt", request.AttemptNumber.ToString());
 
@@ -122,8 +133,13 @@ namespace KairoServer.Infastructure.Deliveries.Http
 
             try
             {
+                var startedAt = Stopwatch.GetTimestamp();
                 using var response = await client.SendAsync(httpRequest, linkedCts.Token);
-                return await ClassifyResponseAsync(response, request, linkedCts.Token);
+                var elapsed = Stopwatch.GetElapsedTime(startedAt);
+                activity?.SetTag("kairo.destination.latency.ms", elapsed.TotalMilliseconds);
+                var result = await ClassifyResponseAsync(response, request, elapsed, linkedCts.Token);
+                activity?.SetTag(KairoTelemetry.OutcomeTag, result.Succeeded ? "delivered" : "failed");
+                return result;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -131,6 +147,7 @@ namespace KairoServer.Infastructure.Deliveries.Http
             }
             catch (OperationCanceledException)
             {
+                activity?.SetTag(KairoTelemetry.OutcomeTag, "timeout");
                 return DeliveryExecutionResult.Failure(
                     DeliveryFailureCategory.Timeout,
                     $"HTTP request timed out after {timeout.TotalSeconds}s.");
@@ -140,6 +157,7 @@ namespace KairoServer.Infastructure.Deliveries.Http
                 _logger.Warning(
                     "HTTP delivery {DeliveryId} transport error: {Error}",
                     request.DeliveryId, ex.Message);
+                activity?.SetTag(KairoTelemetry.OutcomeTag, "transport_error");
                 return DeliveryExecutionResult.Failure(
                     DeliveryFailureCategory.Transient,
                     $"HTTP transport error: {ex.Message}");
@@ -265,12 +283,14 @@ namespace KairoServer.Infastructure.Deliveries.Http
         private static async Task<DeliveryExecutionResult> ClassifyResponseAsync(
             HttpResponseMessage response,
             DeliveryExecutionRequest request,
+            TimeSpan destinationLatency,
             CancellationToken cancellationToken)
         {
             var statusCode = (int)response.StatusCode;
             var meta = new System.Collections.Generic.Dictionary<string, string>
             {
                 ["httpStatus"] = statusCode.ToString(),
+                ["destinationLatencyMs"] = destinationLatency.TotalMilliseconds.ToString("F3", CultureInfo.InvariantCulture),
             };
 
             if (response.IsSuccessStatusCode)

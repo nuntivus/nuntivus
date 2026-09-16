@@ -3,6 +3,7 @@ using KairoServer.Application.Deliveries.Execution;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Matching;
 using KairoServer.Application.Messaging;
+using KairoServer.Application.Observability;
 using KairoServer.Application.Persistence;
 using KairoServer.Infastructure.Caching;
 using KairoServer.Infastructure.Deliveries;
@@ -16,11 +17,41 @@ using KairoServer.Worker.Matching;
 using KairoServer.Worker.Outbox;
 using NATS.Client.Core;
 using NATS.Client.JetStream;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = Host.CreateApplicationBuilder(args);
 
 // Logging
 builder.AddKairoLogging();
+
+var serviceName = "kairo-worker";
+var serviceVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";
+var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService(serviceName: serviceName, serviceVersion: serviceVersion))
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddSource(KairoTelemetry.ActivitySourceName)
+            .AddHttpClientInstrumentation();
+
+        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
+        }
+    })
+    .WithMetrics(metrics =>
+    {
+        metrics.AddMeter(KairoTelemetry.MeterName);
+
+        if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+        {
+            metrics.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
+        }
+    });
 
 // Persistence
 var postgresConnectionString = builder.Configuration.GetConnectionString("Postgres")

@@ -1,14 +1,17 @@
 using System;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Deliveries.Execution;
+using KairoServer.Application.Observability;
 using KairoServer.Application.Persistence;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.Deliveries;
 using KairoServer.Domain.Deliveries;
 using KairoServer.Infastructure.Messaging.Nats;
+using KairoServer.Worker.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NATS.Client.JetStream;
@@ -106,6 +109,9 @@ namespace KairoServer.Worker.Deliveries
 
         private async Task ProcessMessageAsync(NatsJSMsg<byte[]> msg, CancellationToken cancellationToken)
         {
+            using var activity = KairoTelemetry.ActivitySource.StartActivity("delivery.consume", ActivityKind.Consumer);
+            activity?.SetTag(KairoTelemetry.WorkerTag, "delivery-dispatcher");
+
             DeliveryReady? ready;
             try
             {
@@ -114,6 +120,7 @@ namespace KairoServer.Worker.Deliveries
                 {
                     _logger.Warning("Received empty delivery.ready message; terminating.");
                     await msg.AckTerminateAsync(cancellationToken: cancellationToken);
+                    TrackDeliveryWorkerOutcome("empty");
                     return;
                 }
                 ready = JsonSerializer.Deserialize<DeliveryReady>(json);
@@ -122,6 +129,7 @@ namespace KairoServer.Worker.Deliveries
             {
                 _logger.Error(ex, "Failed to deserialize delivery.ready payload; terminating message.");
                 await msg.AckTerminateAsync(cancellationToken: cancellationToken);
+                TrackDeliveryWorkerOutcome("invalid_payload");
                 return;
             }
 
@@ -129,8 +137,15 @@ namespace KairoServer.Worker.Deliveries
             {
                 _logger.Warning("delivery.ready payload invalid; terminating message.");
                 await msg.AckTerminateAsync(cancellationToken: cancellationToken);
+                TrackDeliveryWorkerOutcome("null_payload");
                 return;
             }
+
+            activity?.SetTag(KairoTelemetry.DeliveryIdTag, ready.DeliveryId.ToString("D"));
+            activity?.SetTag(KairoTelemetry.EventIdTag, ready.EventId.ToString("D"));
+            activity?.SetTag(KairoTelemetry.ContractIdTag, ready.ContractId.ToString("D"));
+            activity?.SetTag(KairoTelemetry.CustomerIdTag, ready.CustomerId);
+            WorkerMetrics.TrackJetStreamConsumerLag(DateTimeOffset.UtcNow - ready.OccurredAt, "delivery-dispatcher");
 
             try
             {
@@ -152,11 +167,17 @@ namespace KairoServer.Worker.Deliveries
                         if (!delayed)
                         {
                             await msg.AckAsync(cancellationToken: cancellationToken);
+                            TrackDeliveryWorkerOutcome("acked");
+                        }
+                        else
+                        {
+                            TrackDeliveryWorkerOutcome("retry_delayed");
                         }
                     }
                     else
                     {
                         await msg.AckAsync(cancellationToken: cancellationToken);
+                        TrackDeliveryWorkerOutcome("acked");
                     }
                 }
                 else
@@ -165,12 +186,14 @@ namespace KairoServer.Worker.Deliveries
                         "Dispatcher failed for delivery {DeliveryId}: {Error}. NAK for redelivery.",
                         ready.DeliveryId, result.Error);
                     await msg.NakAsync(delay: _deliveryOptions.NakDelay, cancellationToken: cancellationToken);
+                    TrackDeliveryWorkerOutcome("dispatcher_error");
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 try { await msg.NakAsync(delay: _deliveryOptions.NakDelay, cancellationToken: CancellationToken.None); }
                 catch { /* best-effort */ }
+                TrackDeliveryWorkerOutcome("cancelled");
                 throw;
             }
             catch (Exception ex)
@@ -179,6 +202,13 @@ namespace KairoServer.Worker.Deliveries
                     "Unexpected error dispatching delivery {DeliveryId}. NAK for redelivery.",
                     ready.DeliveryId);
                 await msg.NakAsync(delay: _deliveryOptions.NakDelay, cancellationToken: cancellationToken);
+                TrackDeliveryWorkerOutcome("error");
+            }
+
+            void TrackDeliveryWorkerOutcome(string outcome)
+            {
+                activity?.SetTag(KairoTelemetry.OutcomeTag, outcome);
+                WorkerMetrics.TrackWorkerProcessed("delivery-dispatcher", outcome);
             }
         }
 

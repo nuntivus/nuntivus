@@ -1,12 +1,15 @@
 using System;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Matching;
+using KairoServer.Application.Observability;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.Events;
 using KairoServer.Infastructure.Messaging.Nats;
+using KairoServer.Worker.Observability;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NATS.Client.JetStream;
@@ -108,6 +111,10 @@ namespace KairoServer.Worker.Matching
 
         private async Task ProcessMessageAsync(NatsJSMsg<byte[]> msg, CancellationToken cancellationToken)
         {
+            using var activity = KairoTelemetry.ActivitySource.StartActivity("matcher.consume", ActivityKind.Consumer);
+            activity?.SetTag(KairoTelemetry.WorkerTag, "contract-matcher");
+            var stopwatch = Stopwatch.StartNew();
+
             EventAccepted? accepted;
             try
             {
@@ -119,6 +126,7 @@ namespace KairoServer.Worker.Matching
                 {
                     _logger.Warning("Received empty event.accepted message; discarding (term).");
                     await msg.AckTerminateAsync(cancellationToken: cancellationToken);
+                    TrackMatcherOutcome("empty");
                     return;
                 }
 
@@ -128,6 +136,7 @@ namespace KairoServer.Worker.Matching
             {
                 _logger.Error(ex, "Failed to deserialize event.accepted payload; terminating message.");
                 await msg.AckTerminateAsync(cancellationToken: cancellationToken);
+                TrackMatcherOutcome("invalid_payload");
                 return;
             }
 
@@ -135,8 +144,12 @@ namespace KairoServer.Worker.Matching
             {
                 _logger.Warning("event.accepted deserialized to null; terminating message.");
                 await msg.AckTerminateAsync(cancellationToken: cancellationToken);
+                TrackMatcherOutcome("null_payload");
                 return;
             }
+
+            activity?.SetTag(KairoTelemetry.EventIdTag, accepted.EventId.ToString("D"));
+            WorkerMetrics.TrackJetStreamConsumerLag(DateTimeOffset.UtcNow - accepted.OccurredAt, "contract-matcher");
 
             try
             {
@@ -148,6 +161,7 @@ namespace KairoServer.Worker.Matching
                 if (result.IsSuccess)
                 {
                     await msg.AckAsync(cancellationToken: cancellationToken);
+                    TrackMatcherOutcome("matched");
                 }
                 else
                 {
@@ -155,6 +169,7 @@ namespace KairoServer.Worker.Matching
                         "Matcher failed for event {EventId}: {Error}. NAK for redelivery.",
                         accepted.EventId, result.Error);
                     await msg.NakAsync(delay: _matcherOptions.NakDelay, cancellationToken: cancellationToken);
+                    TrackMatcherOutcome("retry");
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -162,6 +177,7 @@ namespace KairoServer.Worker.Matching
                 // Let JetStream redeliver on shutdown.
                 try { await msg.NakAsync(delay: _matcherOptions.NakDelay, cancellationToken: CancellationToken.None); }
                 catch { /* best-effort */ }
+                TrackMatcherOutcome("cancelled");
                 throw;
             }
             catch (Exception ex)
@@ -171,6 +187,14 @@ namespace KairoServer.Worker.Matching
                     accepted.EventId);
                 try { await msg.NakAsync(delay: _matcherOptions.NakDelay, cancellationToken: cancellationToken); }
                 catch { /* best-effort */ }
+                TrackMatcherOutcome("error");
+            }
+
+            void TrackMatcherOutcome(string outcome)
+            {
+                activity?.SetTag(KairoTelemetry.OutcomeTag, outcome);
+                WorkerMetrics.TrackWorkerProcessed("contract-matcher", outcome);
+                WorkerMetrics.TrackMatcherLatency(stopwatch.Elapsed, outcome);
             }
         }
     }

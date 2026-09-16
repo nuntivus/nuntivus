@@ -1,9 +1,11 @@
 ﻿using KairoServer.Application.Messaging;
+using KairoServer.Application.Observability;
 using KairoServer.Application.Persistence;
 using KairoServer.Common.Logging;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Worker.Observability;
 
 namespace KairoServer.Worker.Outbox
 {
@@ -47,8 +49,13 @@ namespace KairoServer.Worker.Outbox
 
                     foreach (var message in messages)
                     {
+                        using var activity = KairoTelemetry.ActivitySource.StartActivity("outbox.publish");
+                        activity?.SetTag(KairoTelemetry.EventIdTag, message.EventId.ToString("D"));
+
                         try
                         {
+                            WorkerMetrics.TrackOutboxLag(DateTimeOffset.UtcNow - message.CreatedAt, message.Type);
+
                             var publishResult = await _publisher.PublishAsync(
                                 message.Type,
                                 message.Payload,
@@ -68,6 +75,10 @@ namespace KairoServer.Worker.Outbox
                                 message.Id,
                                 message.EventId,
                                 message.Type);
+
+                            WorkerMetrics.TrackIngestionThroughput(message.Type);
+                            WorkerMetrics.TrackWorkerProcessed("outbox-publisher", "published");
+                            activity?.SetTag(KairoTelemetry.OutcomeTag, "published");
                         }
                         catch (Exception ex)
                         {
@@ -84,6 +95,8 @@ namespace KairoServer.Worker.Outbox
                                 stoppingToken);
 
                             incrementAttemptResult.EnsureSuccess();
+                            WorkerMetrics.TrackWorkerProcessed("outbox-publisher", "retry");
+                            activity?.SetTag(KairoTelemetry.OutcomeTag, "retry");
                         }
                     }
 

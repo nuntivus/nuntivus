@@ -1,6 +1,8 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Observability;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Common.Logging;
@@ -54,6 +56,9 @@ namespace KairoServer.Application.Deliveries.Execution
             Guid deliveryId,
             CancellationToken cancellationToken)
         {
+            using var activity = KairoTelemetry.ActivitySource.StartActivity("delivery.dispatch", ActivityKind.Internal);
+            activity?.SetTag(KairoTelemetry.DeliveryIdTag, deliveryId.ToString("D"));
+
             var loadResult = await _deliveries.GetByIdAsync(deliveryId, cancellationToken);
             if (loadResult.IsFailure)
                 return Result.Failure<DeliveryDispatchOutcome>(loadResult.Error!);
@@ -64,6 +69,10 @@ namespace KairoServer.Application.Deliveries.Execution
                 _logger.Warning("Delivery {DeliveryId} not found; treating as no-op.", deliveryId);
                 return Result.Success(DeliveryDispatchOutcome.NotFound);
             }
+
+            activity?.SetTag(KairoTelemetry.EventIdTag, delivery.EventId.ToString("D"));
+            activity?.SetTag(KairoTelemetry.ContractIdTag, delivery.ContractId.ToString("D"));
+            activity?.SetTag(KairoTelemetry.CustomerIdTag, delivery.CustomerId);
 
             if (delivery.Status is DeliveryStatus.Delivered)
             {
@@ -89,7 +98,13 @@ namespace KairoServer.Application.Deliveries.Execution
                 _logger.Information(
                     "Delivery {DeliveryId} retry deferred until {NextAttemptAt}; skipping early execution.",
                     delivery.Id, nextAttemptAt);
-                await _metrics.TrackDispatchOutcomeAsync("retry_deferred", cancellationToken);
+                await _metrics.TrackDispatchOutcomeAsync(
+                    "retry_deferred",
+                    delivery.EventId,
+                    delivery.Id,
+                    delivery.ContractId,
+                    cancellationToken);
+                activity?.SetTag(KairoTelemetry.OutcomeTag, "retry_deferred");
                 return Result.Success(DeliveryDispatchOutcome.Skipped);
             }
 
@@ -99,7 +114,13 @@ namespace KairoServer.Application.Deliveries.Execution
 
             if (!rateLimitDecision.Value)
             {
-                await _metrics.TrackDispatchOutcomeAsync("throttled", cancellationToken);
+                await _metrics.TrackDispatchOutcomeAsync(
+                    "throttled",
+                    delivery.EventId,
+                    delivery.Id,
+                    delivery.ContractId,
+                    cancellationToken);
+                activity?.SetTag(KairoTelemetry.OutcomeTag, "throttled");
                 return Result.Success(DeliveryDispatchOutcome.Skipped);
             }
 
@@ -109,7 +130,13 @@ namespace KairoServer.Application.Deliveries.Execution
 
             if (!orderingDecision.Value)
             {
-                await _metrics.TrackDispatchOutcomeAsync("ordering_blocked", cancellationToken);
+                await _metrics.TrackDispatchOutcomeAsync(
+                    "ordering_blocked",
+                    delivery.EventId,
+                    delivery.Id,
+                    delivery.ContractId,
+                    cancellationToken);
+                activity?.SetTag(KairoTelemetry.OutcomeTag, "ordering_blocked");
                 return Result.Success(DeliveryDispatchOutcome.Skipped);
             }
 
@@ -209,7 +236,13 @@ namespace KairoServer.Application.Deliveries.Execution
                     _logger.Warning(
                         "Concurrent update detected for delivery {DeliveryId}; skipping duplicate dispatch result.",
                         delivery.Id);
-                    await _metrics.TrackDispatchOutcomeAsync("concurrency_skipped", cancellationToken);
+                    await _metrics.TrackDispatchOutcomeAsync(
+                        "concurrency_skipped",
+                        delivery.EventId,
+                        delivery.Id,
+                        delivery.ContractId,
+                        cancellationToken);
+                    activity?.SetTag(KairoTelemetry.OutcomeTag, "concurrency_skipped");
                     return Result.Success(DeliveryDispatchOutcome.Skipped);
                 }
 
@@ -232,7 +265,31 @@ namespace KairoServer.Application.Deliveries.Execution
                 _logger.Information(
                     "Delivered {DeliveryId} (event {EventId}) on attempt {Attempt}.",
                     delivery.Id, delivery.EventId, attemptNumber);
-                await _metrics.TrackDispatchOutcomeAsync("delivered", cancellationToken);
+                var dispatchLatency = completedAt - startedAt;
+                var deliveryLatency = completedAt - delivery.CreatedAt;
+
+                await _metrics.TrackDispatchLatencyAsync(
+                    dispatchLatency,
+                    "delivered",
+                    delivery.EventId,
+                    delivery.Id,
+                    delivery.ContractId,
+                    cancellationToken);
+                await _metrics.TrackDeliveryLatencyAsync(
+                    deliveryLatency,
+                    "delivered",
+                    delivery.EventId,
+                    delivery.Id,
+                    delivery.ContractId,
+                    cancellationToken);
+                await TryTrackDestinationLatencyAsync(delivery, execution, "delivered", cancellationToken);
+                await _metrics.TrackDispatchOutcomeAsync(
+                    "delivered",
+                    delivery.EventId,
+                    delivery.Id,
+                    delivery.ContractId,
+                    cancellationToken);
+                activity?.SetTag(KairoTelemetry.OutcomeTag, "delivered");
                 return Result.Success(DeliveryDispatchOutcome.Delivered);
             }
 
@@ -241,15 +298,98 @@ namespace KairoServer.Application.Deliveries.Execution
                 _logger.Warning(
                     "Delivery {DeliveryId} exhausted (attempt {Attempt}, category {Category}): {Error}.",
                     delivery.Id, attemptNumber, execution.Category, execution.Error);
-                await _metrics.TrackDispatchOutcomeAsync("failed_terminal", cancellationToken);
+                var dispatchLatency = completedAt - startedAt;
+                var deliveryLatency = completedAt - delivery.CreatedAt;
+
+                await _metrics.TrackDispatchLatencyAsync(
+                    dispatchLatency,
+                    "failed_terminal",
+                    delivery.EventId,
+                    delivery.Id,
+                    delivery.ContractId,
+                    cancellationToken);
+                await _metrics.TrackDeliveryLatencyAsync(
+                    deliveryLatency,
+                    "failed_terminal",
+                    delivery.EventId,
+                    delivery.Id,
+                    delivery.ContractId,
+                    cancellationToken);
+                await TryTrackDestinationLatencyAsync(delivery, execution, "failed_terminal", cancellationToken);
+                await _metrics.TrackDeadDeliveryCountAsync(
+                    delivery.EventId,
+                    delivery.Id,
+                    delivery.ContractId,
+                    cancellationToken);
+                await _metrics.TrackDispatchOutcomeAsync(
+                    "failed_terminal",
+                    delivery.EventId,
+                    delivery.Id,
+                    delivery.ContractId,
+                    cancellationToken);
+                activity?.SetTag(KairoTelemetry.OutcomeTag, "failed_terminal");
                 return Result.Success(DeliveryDispatchOutcome.FailedTerminal);
             }
 
             _logger.Warning(
                 "Delivery {DeliveryId} failed attempt {Attempt} ({Category}); retry at {RetryAt}: {Error}.",
                 delivery.Id, attemptNumber, execution.Category, retry, execution.Error);
-            await _metrics.TrackDispatchOutcomeAsync("failed_retry", cancellationToken);
+            var retryDispatchLatency = completedAt - startedAt;
+            var retryDeliveryLatency = completedAt - delivery.CreatedAt;
+
+            await _metrics.TrackDispatchLatencyAsync(
+                retryDispatchLatency,
+                "failed_retry",
+                delivery.EventId,
+                delivery.Id,
+                delivery.ContractId,
+                cancellationToken);
+            await _metrics.TrackDeliveryLatencyAsync(
+                retryDeliveryLatency,
+                "failed_retry",
+                delivery.EventId,
+                delivery.Id,
+                delivery.ContractId,
+                cancellationToken);
+            await TryTrackDestinationLatencyAsync(delivery, execution, "failed_retry", cancellationToken);
+            await _metrics.TrackRetryCountAsync(
+                delivery.EventId,
+                delivery.Id,
+                delivery.ContractId,
+                cancellationToken);
+            await _metrics.TrackDispatchOutcomeAsync(
+                "failed_retry",
+                delivery.EventId,
+                delivery.Id,
+                delivery.ContractId,
+                cancellationToken);
+            activity?.SetTag(KairoTelemetry.OutcomeTag, "failed_retry");
             return Result.Success(DeliveryDispatchOutcome.FailedRetry);
+        }
+
+        private async ValueTask TryTrackDestinationLatencyAsync(
+            Delivery delivery,
+            DeliveryExecutionResult execution,
+            string outcome,
+            CancellationToken cancellationToken)
+        {
+            if (execution.Metadata is null)
+                return;
+
+            if (!execution.Metadata.TryGetValue("destinationLatencyMs", out var rawValue))
+                return;
+
+            if (!double.TryParse(rawValue, out var destinationLatencyMs))
+                return;
+
+            await _metrics.TrackDestinationLatencyAsync(
+                delivery.DestinationType.ToString().ToLowerInvariant(),
+                TimeSpan.FromMilliseconds(destinationLatencyMs),
+                outcome,
+                delivery.EventId,
+                delivery.Id,
+                delivery.ContractId,
+                cancellationToken);
         }
 
         private async Task<Result<bool>> TryApplyOrderingAsync(
