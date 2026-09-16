@@ -286,7 +286,8 @@ namespace KairoServer.IntegrationTests
             var seeded = await SeedDeliveriesForContractAsync(
                 _server.Url,
                 2,
-                new ContractRateLimit(PerSecond: 1, PerMinute: null, Burst: 1));
+                new ContractRateLimit(PerSecond: 1, PerMinute: null, Burst: 1),
+                ordering: null);
 
             _server.Enqueue(Respond(HttpStatusCode.OK, "ok"));
             _server.Enqueue(Respond(HttpStatusCode.OK, "ok"));
@@ -320,8 +321,9 @@ namespace KairoServer.IntegrationTests
             var throttled = await SeedDeliveriesForContractAsync(
                 _server.Url,
                 2,
-                new ContractRateLimit(PerSecond: 1, PerMinute: null, Burst: 1));
-            var unthrottled = await SeedDeliveriesForContractAsync(_server.Url, 1, rateLimit: null);
+                new ContractRateLimit(PerSecond: 1, PerMinute: null, Burst: 1),
+                ordering: null);
+            var unthrottled = await SeedDeliveriesForContractAsync(_server.Url, 1, rateLimit: null, ordering: null);
 
             _server.Enqueue(Respond(HttpStatusCode.OK, "ok"));
             _server.Enqueue(Respond(HttpStatusCode.OK, "ok"));
@@ -349,6 +351,79 @@ namespace KairoServer.IntegrationTests
             Assert.Equal(2, _server.Received.Count);
         }
 
+        [Fact]
+        public async Task Dispatch_ordered_contract_blocks_later_delivery_while_head_is_in_flight_but_allows_other_contracts()
+        {
+            var ordered = await SeedDeliveriesForContractAsync(
+                _server.Url,
+                count: 2,
+                rateLimit: null,
+                ordering: ContractOrdering.Create());
+
+            var unrelated = await SeedDeliveriesForContractAsync(
+                _server.Url,
+                count: 1,
+                rateLimit: null,
+                ordering: null);
+
+            _server.Enqueue(RespondAfterDelay(HttpStatusCode.OK, "{\"ok\":true}", TimeSpan.FromMilliseconds(250)));
+            _server.Enqueue(Respond(HttpStatusCode.OK, "{\"ok\":true}"));
+
+            var firstWorker = BuildDispatcher();
+            var secondWorker = BuildDispatcher();
+
+            var firstTask = firstWorker.DispatchAsync(ordered.DeliveryIds[0], CancellationToken.None);
+            await Task.Delay(50);
+
+            var blockedSecond = await secondWorker.DispatchAsync(ordered.DeliveryIds[1], CancellationToken.None);
+            var unrelatedResult = await secondWorker.DispatchAsync(unrelated.DeliveryIds[0], CancellationToken.None);
+            var firstResult = await firstTask;
+
+            firstResult.EnsureSuccess();
+            blockedSecond.EnsureSuccess();
+            unrelatedResult.EnsureSuccess();
+
+            Assert.Equal(DeliveryDispatchOutcome.Delivered, firstResult.Value);
+            Assert.Equal(DeliveryDispatchOutcome.Skipped, blockedSecond.Value);
+            Assert.Equal(DeliveryDispatchOutcome.Delivered, unrelatedResult.Value);
+
+            var blockedRow = await ReadDeliveryAsync(ordered.DeliveryIds[1]);
+            Assert.Equal("Pending", blockedRow.status);
+            Assert.Equal(0, blockedRow.attempt_count);
+            Assert.Null(blockedRow.next_attempt_at);
+        }
+
+        [Fact]
+        public async Task Dispatch_ordered_contract_keeps_lane_blocked_by_retryable_failure()
+        {
+            var ordered = await SeedDeliveriesForContractAsync(
+                _server.Url,
+                count: 2,
+                rateLimit: null,
+                ordering: ContractOrdering.Create());
+
+            _server.Enqueue(Respond(HttpStatusCode.InternalServerError, "boom"));
+
+            var dispatcher = BuildDispatcher();
+
+            var first = await dispatcher.DispatchAsync(ordered.DeliveryIds[0], CancellationToken.None);
+            var second = await dispatcher.DispatchAsync(ordered.DeliveryIds[1], CancellationToken.None);
+
+            first.EnsureSuccess();
+            second.EnsureSuccess();
+
+            Assert.Equal(DeliveryDispatchOutcome.FailedRetry, first.Value);
+            Assert.Equal(DeliveryDispatchOutcome.Skipped, second.Value);
+
+            var failedHead = await ReadDeliveryAsync(ordered.DeliveryIds[0]);
+            var blockedFollower = await ReadDeliveryAsync(ordered.DeliveryIds[1]);
+
+            Assert.Equal("Failed", failedHead.status);
+            Assert.NotNull(failedHead.next_attempt_at);
+            Assert.Equal("Pending", blockedFollower.status);
+            Assert.Equal(0, blockedFollower.attempt_count);
+        }
+
         // ---- helpers ---------------------------------------------------------
 
         private IDeliveryDispatcherService BuildDispatcher(DeliveryDispatcherOption? options = null)
@@ -362,7 +437,12 @@ namespace KairoServer.IntegrationTests
             services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
             services.AddScoped<IDeliveryRepository, PostgresDeliveryRepository>();
             services.AddScoped<IContractDeliveryRateLimiter, PostgresContractDeliveryRateLimiter>();
+            services.AddScoped<IDeliveryOrderingCoordinator, PostgresDeliveryOrderingCoordinator>();
             services.AddSingleton<IDeliveryDispatcherMetrics, MeterDeliveryDispatcherMetrics>();
+            services.AddSingleton(new DeliveryOrderingOption
+            {
+                LeaseDuration = TimeSpan.FromSeconds(30)
+            });
 
             services.AddHttpClient(HttpDeliveryExecutor.HttpClientName);
             services.AddSingleton<ISecretResolver, NullSecretResolver>();
@@ -385,7 +465,8 @@ namespace KairoServer.IntegrationTests
         private async Task<(Guid deliveryId, Guid eventId)> SeedDeliveryAsync(
             string url,
             string? transformationConfiguration = null,
-            ContractRateLimit? rateLimit = null)
+            ContractRateLimit? rateLimit = null,
+            ContractOrdering? ordering = null)
         {
             var customerId = "cust-" + Guid.NewGuid().ToString("N")[..6];
             var contractId = Guid.NewGuid();
@@ -400,10 +481,12 @@ namespace KairoServer.IntegrationTests
             await conn.ExecuteAsync("""
                 INSERT INTO contracts(
                     id, customer_id, enabled, destination_type, destination_config,
+                    ordering_enabled, ordering_key_selector,
                     rate_limit_per_second, rate_limit_per_minute, rate_limit_burst,
                     created_at, updated_at)
                 VALUES (
                     @id, @cid, TRUE, 'Http', @cfg::jsonb,
+                    @orderingEnabled, @orderingKeySelector,
                     @perSecond, @perMinute, @burst,
                     @now, @now);
                 """,
@@ -415,6 +498,8 @@ namespace KairoServer.IntegrationTests
                     perSecond = rateLimit?.PerSecond,
                     perMinute = rateLimit?.PerMinute,
                     burst = rateLimit?.Burst,
+                    orderingEnabled = ordering is not null,
+                    orderingKeySelector = ordering?.KeySelector,
                     now });
             await conn.ExecuteAsync("""
                 INSERT INTO events(id, type, idempotency_key, source_id, occurred_at, received_at, metadata, payload)
@@ -430,7 +515,7 @@ namespace KairoServer.IntegrationTests
 
             var delivery = Delivery.CreatePending(
                 eventId, contractId, customerId, "orders.created",
-                "{\"orderId\":\"o-1\"}", destination, now, transformationConfiguration, rateLimit);
+                "{\"orderId\":\"o-1\"}", destination, now, transformationConfiguration, rateLimit, ordering);
 
             var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
             using var uow = new PostgresUnitOfWork(factory);
@@ -445,7 +530,8 @@ namespace KairoServer.IntegrationTests
         private async Task<(Guid ContractId, string CustomerId, List<Guid> DeliveryIds)> SeedDeliveriesForContractAsync(
             string url,
             int count,
-            ContractRateLimit? rateLimit)
+            ContractRateLimit? rateLimit,
+            ContractOrdering? ordering)
         {
             var customerId = "cust-" + Guid.NewGuid().ToString("N")[..6];
             var contractId = Guid.NewGuid();
@@ -460,10 +546,12 @@ namespace KairoServer.IntegrationTests
             await conn.ExecuteAsync("""
                 INSERT INTO contracts(
                     id, customer_id, enabled, destination_type, destination_config,
+                    ordering_enabled, ordering_key_selector,
                     rate_limit_per_second, rate_limit_per_minute, rate_limit_burst,
                     created_at, updated_at)
                 VALUES (
                     @id, @cid, TRUE, 'Http', @cfg::jsonb,
+                    @orderingEnabled, @orderingKeySelector,
                     @perSecond, @perMinute, @burst,
                     @now, @now);
                 """,
@@ -479,6 +567,8 @@ namespace KairoServer.IntegrationTests
                     perSecond = rateLimit?.PerSecond,
                     perMinute = rateLimit?.PerMinute,
                     burst = rateLimit?.Burst,
+                    orderingEnabled = ordering is not null,
+                    orderingKeySelector = ordering?.KeySelector,
                     now
                 });
 
@@ -513,7 +603,8 @@ namespace KairoServer.IntegrationTests
                     destination,
                     timestamp,
                     transformationConfiguration: null,
-                    rateLimit: rateLimit);
+                    rateLimit: rateLimit,
+                    ordering: ordering);
 
                 (await repo.InsertPendingAsync(new[] { delivery }, uow, CancellationToken.None)).EnsureSuccess();
                 deliveryIds.Add(delivery.Id);
@@ -556,6 +647,17 @@ namespace KairoServer.IntegrationTests
             ctx.Response.StatusCode = (int)status;
             ctx.Response.ContentType = "text/plain";
             ctx.Response.Headers.RetryAfter = ((int)retryAfter.TotalSeconds).ToString();
+            await ctx.Response.WriteAsync(body);
+        };
+
+        private static Func<HttpContext, Task> RespondAfterDelay(
+            HttpStatusCode status,
+            string body,
+            TimeSpan delay) => async ctx =>
+        {
+            await Task.Delay(delay);
+            ctx.Response.StatusCode = (int)status;
+            ctx.Response.ContentType = "text/plain";
             await ctx.Response.WriteAsync(body);
         };
 

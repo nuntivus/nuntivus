@@ -22,6 +22,8 @@ namespace KairoServer.Domain.Deliveries
         public string Payload { get; }
         public string? TransformationConfiguration { get; }
         public ContractRateLimit? RateLimit { get; }
+        public bool OrderingEnabled { get; }
+        public string? OrderingKey { get; }
         public DestinationType DestinationType { get; }
         public string DestinationConfiguration { get; }
         public DeliveryStatus Status { get; private set; }
@@ -40,6 +42,8 @@ namespace KairoServer.Domain.Deliveries
             string payload,
             string? transformationConfiguration,
             ContractRateLimit? rateLimit,
+            bool orderingEnabled,
+            string? orderingKey,
             DestinationType destinationType,
             string destinationConfiguration,
             DeliveryStatus status,
@@ -57,6 +61,8 @@ namespace KairoServer.Domain.Deliveries
             Payload = payload;
             TransformationConfiguration = transformationConfiguration;
             RateLimit = rateLimit;
+            OrderingEnabled = orderingEnabled;
+            OrderingKey = orderingKey;
             DestinationType = destinationType;
             DestinationConfiguration = destinationConfiguration;
             Status = status;
@@ -76,7 +82,8 @@ namespace KairoServer.Domain.Deliveries
             Destination destination,
             DateTimeOffset now,
             string? transformationConfiguration = null,
-            ContractRateLimit? rateLimit = null)
+            ContractRateLimit? rateLimit = null,
+            ContractOrdering? ordering = null)
         {
             if (eventId == Guid.Empty)
                 throw new ArgumentException("EventId cannot be empty.", nameof(eventId));
@@ -88,6 +95,8 @@ namespace KairoServer.Domain.Deliveries
             ArgumentException.ThrowIfNullOrWhiteSpace(payload);
             ArgumentNullException.ThrowIfNull(destination);
 
+            var orderingKey = ordering is null ? null : ResolveOrderingKey(contractId, ordering);
+
             return new Delivery(
                 UuidV7.Create(now),
                 eventId,
@@ -97,6 +106,8 @@ namespace KairoServer.Domain.Deliveries
                 payload,
                 transformationConfiguration,
                 rateLimit,
+                ordering is not null,
+                orderingKey,
                 destination.Type,
                 destination.Configuration,
                 DeliveryStatus.Pending,
@@ -105,6 +116,16 @@ namespace KairoServer.Domain.Deliveries
                 nextAttemptAt: null,
                 createdAt: now,
                 updatedAt: now);
+        }
+
+        private static string ResolveOrderingKey(Guid contractId, ContractOrdering ordering)
+        {
+            ArgumentNullException.ThrowIfNull(ordering);
+
+            if (contractId == Guid.Empty)
+                throw new ArgumentException("ContractId cannot be empty.", nameof(contractId));
+
+            return $"contract:{contractId:D}";
         }
 
         /// <summary>
@@ -219,6 +240,8 @@ namespace KairoServer.Domain.Deliveries
             string payload,
             string? transformationConfiguration,
             ContractRateLimit? rateLimit,
+            bool orderingEnabled,
+            string? orderingKey,
             DestinationType destinationType,
             string destinationConfiguration,
             DeliveryStatus status,
@@ -228,7 +251,7 @@ namespace KairoServer.Domain.Deliveries
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt) =>
             new(id, eventId, contractId, customerId, eventType, payload,
-                transformationConfiguration, rateLimit, destinationType, destinationConfiguration, status,
+                transformationConfiguration, rateLimit, orderingEnabled, orderingKey, destinationType, destinationConfiguration, status,
                 attemptCount, lastError, nextAttemptAt, createdAt, updatedAt);
 
         public static Delivery Rehydrate(
@@ -255,6 +278,8 @@ namespace KairoServer.Domain.Deliveries
                 payload,
                 transformationConfiguration: null,
                 rateLimit: null,
+                orderingEnabled: false,
+                orderingKey: null,
                 destinationType,
                 destinationConfiguration,
                 status,

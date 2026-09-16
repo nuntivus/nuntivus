@@ -21,6 +21,7 @@ namespace KairoServer.Application.Contracts
                 ToFilterView(c.Filter),
                 ToTransformationView(c.Transformation),
                 ToRateLimitConfig(c.RateLimit),
+                ToOrderingConfig(c.Ordering),
                 MapDestinationType(c.Destination.Type),
                 c.Destination.Configuration,
                 c.CreatedAt,
@@ -36,6 +37,7 @@ namespace KairoServer.Application.Contracts
                 ToFilterView(c.Filter),
                 ToTransformationView(c.Transformation),
                 ToRateLimitConfig(c.RateLimit),
+                ToOrderingConfig(c.Ordering),
                 MapDestinationType(c.Destination.Type),
                 c.CreatedAt);
 
@@ -82,6 +84,16 @@ namespace KairoServer.Application.Contracts
             rateLimit is null
                 ? null
                 : new ContractRateLimitConfig(rateLimit.PerSecond, rateLimit.PerMinute, rateLimit.Burst);
+
+        public static ContractOrdering? ToDomain(this ContractOrderingConfig? ordering) =>
+            ordering is null
+                ? null
+                : ContractOrdering.Create(ordering.KeySelector);
+
+        public static ContractOrderingConfig? ToOrderingConfig(ContractOrdering? ordering) =>
+            ordering is null
+                ? null
+                : new ContractOrderingConfig(ordering.KeySelector);
 
         public static System.Collections.Generic.IReadOnlyCollection<ContractSchemaTargetView> ToSchemaTargetViews(
             System.Collections.Generic.IEnumerable<ContractSchemaTarget> targets)

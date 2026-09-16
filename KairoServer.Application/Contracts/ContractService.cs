@@ -112,6 +112,10 @@ namespace KairoServer.Application.Contracts
             if (rateLimitValidation.IsFailure)
                 return Result<ContractCreated>.Fail(rateLimitValidation.Errors);
 
+            var orderingValidation = ValidateOrdering(request.Ordering);
+            if (orderingValidation.IsFailure)
+                return Result<ContractCreated>.Fail(orderingValidation.Errors);
+
             var destinationResult = _destinations.Build(request.Configuration);
             if (destinationResult.IsFailure)
                 return Result<ContractCreated>.Fail(destinationResult.Errors);
@@ -138,7 +142,8 @@ namespace KairoServer.Application.Contracts
                     destinationResult.Value,
                     now,
                     request.Transformation.ToDomain(),
-                    request.RateLimit.ToDomain());
+                    request.RateLimit.ToDomain(),
+                    request.Ordering.ToDomain());
 
                 _unitOfWork.Begin(true);
                 var insert = await _repository.InsertAsync(contract, _unitOfWork, cancellationToken);
@@ -346,10 +351,26 @@ namespace KairoServer.Application.Contracts
                 ContractMapping.ToFilterView(contract.Filter),
                 ContractMapping.ToTransformationView(contract.Transformation),
                 ContractMapping.ToRateLimitConfig(contract.RateLimit),
+                ContractMapping.ToOrderingConfig(contract.Ordering),
                 ContractMapping.MapDestinationType(contract.Destination.Type),
                 redactedConfig.Value,
                 contract.CreatedAt,
                 contract.UpdatedAt));
+        }
+
+        private static Result ValidateOrdering(ContractOrderingConfig? ordering)
+        {
+            if (ordering is null)
+                return Result.Success();
+
+            if (ordering.KeySelector is null)
+                return Result.Success();
+
+            if (!ContractValidation.IsValidFilterSelector(ordering.KeySelector))
+                return Result.Failure(Error.Validation(
+                    "ordering.keySelector is invalid. Use dot-separated keys only."));
+
+            return Result.Success();
         }
 
         private static Result ValidateRateLimit(ContractRateLimitConfig? rateLimit)

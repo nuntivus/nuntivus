@@ -20,6 +20,7 @@ namespace KairoServer.Application.Deliveries.Execution
     {
         private readonly IDeliveryRepository _deliveries;
         private readonly IContractDeliveryRateLimiter _rateLimiter;
+        private readonly IDeliveryOrderingCoordinator _orderingCoordinator;
         private readonly IDeliveryDispatcherMetrics _metrics;
         private readonly IDeliveryExecutorDispatcher _executors;
         private readonly IDeliveryPayloadTransformer _payloadTransformer;
@@ -30,6 +31,7 @@ namespace KairoServer.Application.Deliveries.Execution
         public DeliveryDispatcherService(
             IDeliveryRepository deliveries,
             IContractDeliveryRateLimiter rateLimiter,
+            IDeliveryOrderingCoordinator orderingCoordinator,
             IDeliveryDispatcherMetrics metrics,
             IDeliveryExecutorDispatcher executors,
             IDeliveryPayloadTransformer payloadTransformer,
@@ -39,6 +41,7 @@ namespace KairoServer.Application.Deliveries.Execution
         {
             _deliveries = deliveries ?? throw new ArgumentNullException(nameof(deliveries));
             _rateLimiter = rateLimiter ?? throw new ArgumentNullException(nameof(rateLimiter));
+            _orderingCoordinator = orderingCoordinator ?? throw new ArgumentNullException(nameof(orderingCoordinator));
             _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
             _executors = executors ?? throw new ArgumentNullException(nameof(executors));
             _payloadTransformer = payloadTransformer ?? throw new ArgumentNullException(nameof(payloadTransformer));
@@ -97,6 +100,16 @@ namespace KairoServer.Application.Deliveries.Execution
             if (!rateLimitDecision.Value)
             {
                 await _metrics.TrackDispatchOutcomeAsync("throttled", cancellationToken);
+                return Result.Success(DeliveryDispatchOutcome.Skipped);
+            }
+
+            var orderingDecision = await TryApplyOrderingAsync(delivery, cancellationToken);
+            if (orderingDecision.IsFailure)
+                return Result.Failure<DeliveryDispatchOutcome>(orderingDecision.Error!);
+
+            if (!orderingDecision.Value)
+            {
+                await _metrics.TrackDispatchOutcomeAsync("ordering_blocked", cancellationToken);
                 return Result.Success(DeliveryDispatchOutcome.Skipped);
             }
 
@@ -210,6 +223,10 @@ namespace KairoServer.Application.Deliveries.Execution
                 return Result.Failure<DeliveryDispatchOutcome>(ex);
             }
 
+            var orderingUpdate = await _orderingCoordinator.RecordOutcomeAsync(delivery, cancellationToken);
+            if (orderingUpdate.IsFailure)
+                return Result.Failure<DeliveryDispatchOutcome>(orderingUpdate.Error!);
+
             if (execution.Succeeded)
             {
                 _logger.Information(
@@ -233,6 +250,28 @@ namespace KairoServer.Application.Deliveries.Execution
                 delivery.Id, attemptNumber, execution.Category, retry, execution.Error);
             await _metrics.TrackDispatchOutcomeAsync("failed_retry", cancellationToken);
             return Result.Success(DeliveryDispatchOutcome.FailedRetry);
+        }
+
+        private async Task<Result<bool>> TryApplyOrderingAsync(
+            Delivery delivery,
+            CancellationToken cancellationToken)
+        {
+            if (!delivery.OrderingEnabled || string.IsNullOrWhiteSpace(delivery.OrderingKey))
+                return Result.Success(true);
+
+            var gateResult = await _orderingCoordinator.TryAcquireAsync(delivery, cancellationToken);
+            if (gateResult.IsFailure)
+                return Result.Failure<bool>(gateResult.Error!);
+
+            if (gateResult.Value.Granted)
+                return Result.Success(true);
+
+            _logger.Information(
+                "Delivery {DeliveryId} blocked by ordering key {OrderingKey}; waiting for prior delivery.",
+                delivery.Id,
+                delivery.OrderingKey);
+
+            return Result.Success(false);
         }
 
         private async Task<Result<bool>> TryApplyRateLimitAsync(

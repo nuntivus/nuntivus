@@ -24,6 +24,7 @@ namespace KairoServer.Domain.Contracts
         public ContractFilter? Filter { get; }
         public ContractPayloadTransformation? Transformation { get; }
         public ContractRateLimit? RateLimit { get; }
+        public ContractOrdering? Ordering { get; }
         public DateTimeOffset CreatedAt { get; }
         public DateTimeOffset UpdatedAt { get; private set; }
 
@@ -36,6 +37,7 @@ namespace KairoServer.Domain.Contracts
             ContractFilter? filter,
             ContractPayloadTransformation? transformation,
             ContractRateLimit? rateLimit,
+            ContractOrdering? ordering,
             Destination destination,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt)
@@ -54,6 +56,9 @@ namespace KairoServer.Domain.Contracts
                     transformation.Version,
                     transformation.FieldMappings);
             RateLimit = rateLimit;
+            Ordering = ordering is null
+                ? null
+                : ContractOrdering.Create(ordering.KeySelector);
             Destination = destination;
             CreatedAt = createdAt;
             UpdatedAt = updatedAt;
@@ -67,7 +72,8 @@ namespace KairoServer.Domain.Contracts
             Destination destination,
             DateTimeOffset now,
             ContractPayloadTransformation? transformation = null,
-            ContractRateLimit? rateLimit = null)
+            ContractRateLimit? rateLimit = null,
+            ContractOrdering? ordering = null)
         {
             if (string.IsNullOrWhiteSpace(customerId))
                 throw new ArgumentException("Customer id cannot be null or whitespace.", nameof(customerId));
@@ -116,6 +122,7 @@ namespace KairoServer.Domain.Contracts
                 filter,
                 transformation,
                 rateLimit,
+                ordering,
                 destination,
                 createdAt: now,
                 updatedAt: now);
@@ -136,7 +143,8 @@ namespace KairoServer.Domain.Contracts
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt,
             ContractPayloadTransformation? transformation = null,
-            ContractRateLimit? rateLimit = null) =>
+            ContractRateLimit? rateLimit = null,
+            ContractOrdering? ordering = null) =>
             new(
                 id,
                 customerId,
@@ -146,6 +154,7 @@ namespace KairoServer.Domain.Contracts
                 filter,
                 transformation,
                 rateLimit,
+                ordering,
                 destination,
                 createdAt,
                 updatedAt);

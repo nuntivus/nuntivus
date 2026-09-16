@@ -10,8 +10,9 @@ namespace KairoServer.Contracts.CustomerContracts
         IReadOnlyCollection<string> EventTypes,
         IReadOnlyCollection<ContractSchemaTargetView> SchemaTargets,
         ContractFilterView? Filter,
-    ContractPayloadTransformationView? Transformation,
-    ContractRateLimitConfig? RateLimit,
+        ContractPayloadTransformationView? Transformation,
+        ContractRateLimitConfig? RateLimit,
+        ContractOrderingConfig? Ordering,
         DestinationType DestinationType,
         DateTimeOffset CreatedAt);
 }

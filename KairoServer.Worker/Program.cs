@@ -74,6 +74,10 @@ var dispatcherOption = builder.Configuration.GetSection("DeliveryDispatcher").Ge
     ?? new DeliveryDispatcherOption();
 builder.Services.AddSingleton(dispatcherOption);
 
+var orderingOption = builder.Configuration.GetSection("DeliveryOrdering").Get<DeliveryOrderingOption>()
+    ?? new DeliveryOrderingOption();
+builder.Services.AddSingleton(orderingOption);
+
 var destinationCredentialOption = builder.Configuration.GetSection("DestinationCredentials").Get<DestinationCredentialOption>()
     ?? new DestinationCredentialOption();
 builder.Services.AddSingleton(destinationCredentialOption);

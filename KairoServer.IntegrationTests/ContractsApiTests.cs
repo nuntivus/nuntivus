@@ -190,6 +190,36 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Create_with_ordering_persists_and_returns_ordering_config()
+        {
+            await CreateCustomerAsync("acme");
+
+            var req = new CreateContractRequest(
+                "acme",
+                new[] { "orders.created" },
+                new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("none")),
+                Ordering: new ContractOrderingConfig("order.id"));
+
+            var createResp = await _client.PostAsJsonAsync("/v1/contracts", req);
+
+            Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
+            var created = await createResp.Content.ReadFromJsonAsync<ContractCreated>();
+            Assert.NotNull(created);
+            Assert.NotNull(created!.Ordering);
+            Assert.Equal("order.id", created.Ordering!.KeySelector);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var row = await conn.QuerySingleAsync<(bool OrderingEnabled, string? OrderingKeySelector)>(
+                "SELECT ordering_enabled AS OrderingEnabled, ordering_key_selector AS OrderingKeySelector FROM contracts WHERE id = @id;",
+                new { id = created.Id });
+
+            Assert.True(row.OrderingEnabled);
+            Assert.Equal("order.id", row.OrderingKeySelector);
+        }
+
+        [Fact]
         public async Task Create_with_transformation_persists_and_returns_transformation()
         {
             await CreateCustomerAsync("acme");

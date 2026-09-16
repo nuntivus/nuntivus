@@ -47,6 +47,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         rate_limit_per_second,
                         rate_limit_per_minute,
                         rate_limit_burst,
+                        ordering_enabled,
+                        ordering_key,
                         destination_type,
                         destination_config,
                         status,
@@ -68,6 +70,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         @RateLimitPerSecond,
                         @RateLimitPerMinute,
                         @RateLimitBurst,
+                        @OrderingEnabled,
+                        @OrderingKey,
                         @DestinationType,
                         CAST(@DestinationConfiguration AS jsonb),
                         @Status,
@@ -100,6 +104,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                             RateLimitPerSecond = delivery.RateLimit?.PerSecond,
                             RateLimitPerMinute = delivery.RateLimit?.PerMinute,
                             RateLimitBurst = delivery.RateLimit?.Burst,
+                            delivery.OrderingEnabled,
+                            delivery.OrderingKey,
                             DestinationType = delivery.DestinationType.ToString(),
                             delivery.DestinationConfiguration,
                             Status = delivery.Status.ToString(),
@@ -245,6 +251,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         rate_limit_per_second AS RateLimitPerSecond,
                         rate_limit_per_minute AS RateLimitPerMinute,
                         rate_limit_burst      AS RateLimitBurst,
+                        ordering_enabled      AS OrderingEnabled,
+                        ordering_key          AS OrderingKey,
                         destination_type    AS DestinationType,
                         destination_config::text AS DestinationConfig,
                         status,
@@ -304,6 +312,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         rate_limit_per_second AS RateLimitPerSecond,
                         rate_limit_per_minute AS RateLimitPerMinute,
                         rate_limit_burst      AS RateLimitBurst,
+                        ordering_enabled      AS OrderingEnabled,
+                        ordering_key          AS OrderingKey,
                         destination_type    AS DestinationType,
                         destination_config::text AS DestinationConfig,
                         status,
@@ -472,6 +482,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public int? RateLimitPerSecond { get; set; }
             public int? RateLimitPerMinute { get; set; }
             public int? RateLimitBurst { get; set; }
+            public bool OrderingEnabled { get; set; }
+            public string? OrderingKey { get; set; }
             public string DestinationType { get; set; } = string.Empty;
             public string DestinationConfig { get; set; } = string.Empty;
             public string Status { get; set; } = string.Empty;
@@ -492,6 +504,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 row.Payload,
                 row.TransformationConfig,
                 ContractRateLimit.Create(row.RateLimitPerSecond, row.RateLimitPerMinute, row.RateLimitBurst),
+                row.OrderingEnabled,
+                row.OrderingKey,
                 Enum.Parse<DestinationType>(row.DestinationType),
                 row.DestinationConfig,
                 Enum.Parse<DeliveryStatus>(row.Status),

@@ -117,7 +117,8 @@ namespace KairoServer.Application.Matching
                         match.Transformation is null
                             ? null
                             : JsonSerializer.Serialize(match.Transformation),
-                        match.RateLimit));
+                        match.RateLimit,
+                        match.Ordering));
                 }
 
                 _unitOfWork.Begin(true);

@@ -37,6 +37,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         id,
                         customer_id,
                         enabled,
+                        ordering_enabled,
+                        ordering_key_selector,
                         destination_type,
                         destination_config,
                         transformation_config,
@@ -51,6 +53,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         @Id,
                         @CustomerId,
                         @Enabled,
+                        @OrderingEnabled,
+                        @OrderingKeySelector,
                         @DestinationType,
                         @DestinationConfig::jsonb,
                         CAST(@TransformationConfig AS jsonb),
@@ -72,6 +76,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         contract.Id,
                         contract.CustomerId,
                         contract.Enabled,
+                        OrderingEnabled = contract.Ordering is not null,
+                        OrderingKeySelector = contract.Ordering?.KeySelector,
                         DestinationType = contract.Destination.Type.ToString(),
                         DestinationConfig = contract.Destination.Configuration,
                         TransformationConfig = SerializeTransformation(contract.Transformation),
@@ -114,6 +120,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 const string updateContract = """
                     UPDATE contracts
                     SET enabled = @Enabled,
+                        ordering_enabled = @OrderingEnabled,
+                        ordering_key_selector = @OrderingKeySelector,
                         destination_type = @DestinationType,
                         destination_config = @DestinationConfig::jsonb,
                         transformation_config = CAST(@TransformationConfig AS jsonb),
@@ -137,6 +145,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     {
                         contract.Id,
                         contract.Enabled,
+                        OrderingEnabled = contract.Ordering is not null,
+                        OrderingKeySelector = contract.Ordering?.KeySelector,
                         DestinationType = contract.Destination.Type.ToString(),
                         DestinationConfig = contract.Destination.Configuration,
                         TransformationConfig = SerializeTransformation(contract.Transformation),
@@ -178,7 +188,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             try
             {
                 const string sql = """
-                    SELECT id, customer_id, enabled, destination_type, destination_config, transformation_config::text AS transformation_config,
+                    SELECT id, customer_id, enabled, ordering_enabled, ordering_key_selector, destination_type, destination_config, transformation_config::text AS transformation_config,
                            rate_limit_per_second, rate_limit_per_minute, rate_limit_burst,
                            created_at, updated_at
                     FROM contracts
@@ -242,7 +252,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             try
             {
                 const string sql = """
-                    SELECT id, customer_id, enabled, destination_type, destination_config, transformation_config::text AS transformation_config,
+                    SELECT id, customer_id, enabled, ordering_enabled, ordering_key_selector, destination_type, destination_config, transformation_config::text AS transformation_config,
                            rate_limit_per_second, rate_limit_per_minute, rate_limit_burst,
                            created_at, updated_at,
                            COUNT(*) OVER() AS total_count
@@ -370,6 +380,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 const string sql = """
                     SELECT c.id                 AS ContractId,
                            c.customer_id        AS CustomerId,
+                           c.ordering_enabled   AS OrderingEnabled,
+                           c.ordering_key_selector AS OrderingKeySelector,
                            c.destination_type   AS DestinationType,
                            c.destination_config AS DestinationConfig,
                            c.transformation_config::text AS TransformationConfig,
@@ -394,7 +406,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 await using var connection = CreateConnection();
                 await connection.OpenAsync(cancellationToken);
 
-                var rows = await connection.QueryAsync<(Guid ContractId, string CustomerId, string DestinationType, string DestinationConfig, string? TransformationConfig, int? RateLimitPerSecond, int? RateLimitPerMinute, int? RateLimitBurst)>(
+                var rows = await connection.QueryAsync<(Guid ContractId, string CustomerId, bool OrderingEnabled, string? OrderingKeySelector, string DestinationType, string DestinationConfig, string? TransformationConfig, int? RateLimitPerSecond, int? RateLimitPerMinute, int? RateLimitBurst)>(
                     new CommandDefinition(
                         sql,
                         new { EventType = eventType },
@@ -426,7 +438,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                             r.DestinationConfig),
                         filtersByContract.TryGetValue(r.ContractId, out var filter) ? filter : null,
                         DeserializeTransformation(r.TransformationConfig),
-                        ContractRateLimit.Create(r.RateLimitPerSecond, r.RateLimitPerMinute, r.RateLimitBurst)))
+                        ContractRateLimit.Create(r.RateLimitPerSecond, r.RateLimitPerMinute, r.RateLimitBurst),
+                        r.OrderingEnabled ? ContractOrdering.Create(r.OrderingKeySelector) : null))
                     .ToList();
 
                 return Result.Success<IReadOnlyList<ContractMatch>>(matches);
@@ -626,6 +639,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public Guid id { get; set; }
             public string customer_id { get; set; } = string.Empty;
             public bool enabled { get; set; }
+            public bool ordering_enabled { get; set; }
+            public string? ordering_key_selector { get; set; }
             public string destination_type { get; set; } = string.Empty;
             public string destination_config { get; set; } = string.Empty;
             public string? transformation_config { get; set; }
@@ -653,7 +668,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     created_at,
                     updated_at,
                     DeserializeTransformation(transformation_config),
-                    ContractRateLimit.Create(rate_limit_per_second, rate_limit_per_minute, rate_limit_burst));
+                    ContractRateLimit.Create(rate_limit_per_second, rate_limit_per_minute, rate_limit_burst),
+                    ordering_enabled ? ContractOrdering.Create(ordering_key_selector) : null);
             }
         }
 
@@ -662,6 +678,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public Guid id { get; set; }
             public string customer_id { get; set; } = string.Empty;
             public bool enabled { get; set; }
+            public bool ordering_enabled { get; set; }
+            public string? ordering_key_selector { get; set; }
             public string destination_type { get; set; } = string.Empty;
             public string destination_config { get; set; } = string.Empty;
             public string? transformation_config { get; set; }
@@ -690,7 +708,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     created_at,
                     updated_at,
                     DeserializeTransformation(transformation_config),
-                    ContractRateLimit.Create(rate_limit_per_second, rate_limit_per_minute, rate_limit_burst));
+                    ContractRateLimit.Create(rate_limit_per_second, rate_limit_per_minute, rate_limit_burst),
+                    ordering_enabled ? ContractOrdering.Create(ordering_key_selector) : null);
             }
         }
 
