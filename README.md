@@ -1383,6 +1383,46 @@ Evolve
 
 ---
 
+# Idempotency Guarantees
+
+Kairo uses **at-least-once processing** across pipeline stages and enforces deterministic outcomes for duplicates.
+
+## Ingestion (`POST /events`)
+
+- Idempotency key scope: `(source_id, idempotency_key)`
+- Database guard: `events.uq_events_source_idempotency`
+- Duplicate behavior: returns the already persisted `eventId` and does not create a second outbox row.
+
+## Outbox -> JetStream
+
+- Publish dedup key: outbox message id (`outbox_messages.id`) passed as JetStream `MsgId`
+- Stream guard: JetStream duplicate window (`NatsOption.DuplicateWindow`)
+- Duplicate behavior:
+  - retrying the same outbox row is deduped by JetStream
+  - different outbox rows for the same event remain distinct and are both published
+
+## Contract Matcher
+
+- Delivery uniqueness: `deliveries (event_id, contract_id)`
+- Duplicate behavior: duplicate `event.accepted` processing inserts `0` deliveries and emits `0` new `delivery.ready` outbox rows.
+
+## Delivery Execution
+
+- Concurrency/idempotency guards:
+  - optimistic write guard on `deliveries.updated_at`
+  - unique delivery attempt key `(delivery_id, attempt_number)`
+  - terminal-state short-circuiting (`Delivered`, `Dead`, non-retryable `Failed`)
+
+## Retry / Manual Retry / Replay
+
+- Automatic retry: safe under duplicate redelivery via the same delivery-row and attempt guards.
+- Manual retry/requeue: repeat-safe operations; repeated requests converge to the same state.
+- Replay: keyed by `(source_event_id, replay_key)` and returns the original replayed event for duplicate replay requests.
+
+These guarantees provide repeat-safe behavior under retries, redeliveries, and operator replays without requiring exactly-once transport semantics.
+
+---
+
 # Status
 
 > [!WARNING]

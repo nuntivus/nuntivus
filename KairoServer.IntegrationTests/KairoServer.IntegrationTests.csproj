@@ -51,4 +51,16 @@
     <None Update="Migrations\006_create_delivery_attempts.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <Target Name="CopyRootMigrations" AfterTargets="Build">
+    <ItemGroup>
+      <RootMigrationFiles Include="..\001_create_events.sql;..\002_create_outbox_messages.sql;..\003_create_customers.sql;..\004_create_contracts.sql;..\005_create_deliveries.sql;..\007_create_event_replays.sql;..\008_create_event_definitions.sql;..\009_create_contract_filters.sql;..\010_add_contract_payload_transformations.sql;..\011_add_delivery_rate_limits.sql;..\012_add_delivery_ordering.sql;..\013_add_retention_cleanup_indexes.sql" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(OutDir)Migrations" />
+    <Copy
+      SourceFiles="@(RootMigrationFiles)"
+      DestinationFiles="@(RootMigrationFiles->'$(OutDir)Migrations\%(Filename)%(Extension)')"
+      SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

@@ -6,6 +6,8 @@ namespace KairoServer.UnitTests.Deliveries
 {
     public class DeliveryTests
     {
+        private static readonly DeliveryFactory DeliveryFactory = new();
+
         private static Destination NewDestination() =>
             new(DestinationType.Http, "{\"url\":\"https://example.test\"}");
 
@@ -15,7 +17,7 @@ namespace KairoServer.UnitTests.Deliveries
             var now = DateTimeOffset.UtcNow;
             var destination = NewDestination();
 
-            var delivery = Delivery.CreatePending(
+            var delivery = DeliveryFactory.CreatePending(
                 Guid.NewGuid(),
                 Guid.NewGuid(),
                 "cust-1",
@@ -38,7 +40,7 @@ namespace KairoServer.UnitTests.Deliveries
         public void CreatePending_Generates_UuidV7_Ids()
         {
             var now = DateTimeOffset.UtcNow;
-            var delivery = Delivery.CreatePending(
+            var delivery = DeliveryFactory.CreatePending(
                 Guid.NewGuid(), Guid.NewGuid(), "c", "t", "{}", NewDestination(), now);
 
             var bytes = delivery.Id.ToByteArray(bigEndian: true);
@@ -52,8 +54,8 @@ namespace KairoServer.UnitTests.Deliveries
         public void UuidV7_Ids_Are_Time_Ordered()
         {
             var t0 = DateTimeOffset.UtcNow;
-            var a = Delivery.CreatePending(Guid.NewGuid(), Guid.NewGuid(), "c", "t", "{}", NewDestination(), t0);
-            var b = Delivery.CreatePending(Guid.NewGuid(), Guid.NewGuid(), "c", "t", "{}", NewDestination(), t0.AddSeconds(1));
+            var a = DeliveryFactory.CreatePending(Guid.NewGuid(), Guid.NewGuid(), "c", "t", "{}", NewDestination(), t0);
+            var b = DeliveryFactory.CreatePending(Guid.NewGuid(), Guid.NewGuid(), "c", "t", "{}", NewDestination(), t0.AddSeconds(1));
 
             // First 6 timestamp bytes (big-endian) must be non-decreasing.
             var ab = a.Id.ToByteArray(bigEndian: true);
@@ -71,14 +73,14 @@ namespace KairoServer.UnitTests.Deliveries
         [Fact]
         public void CreatePending_Throws_On_Empty_EventId()
         {
-            Assert.Throws<ArgumentException>(() => Delivery.CreatePending(
+            Assert.Throws<ArgumentException>(() => DeliveryFactory.CreatePending(
                 Guid.Empty, Guid.NewGuid(), "c", "t", "{}", NewDestination(), DateTimeOffset.UtcNow));
         }
 
         [Fact]
         public void CreatePending_Throws_On_Null_Destination()
         {
-            Assert.Throws<ArgumentNullException>(() => Delivery.CreatePending(
+            Assert.Throws<ArgumentNullException>(() => DeliveryFactory.CreatePending(
                 Guid.NewGuid(), Guid.NewGuid(), "c", "t", "{}", null!, DateTimeOffset.UtcNow));
         }
 
@@ -202,7 +204,7 @@ namespace KairoServer.UnitTests.Deliveries
         private static Delivery NewPending(out DateTimeOffset now)
         {
             now = DateTimeOffset.UtcNow;
-            return Delivery.CreatePending(
+            return DeliveryFactory.CreatePending(
                 Guid.NewGuid(), Guid.NewGuid(), "cust-1", "orders.created", "{}", NewDestination(), now);
         }
     }

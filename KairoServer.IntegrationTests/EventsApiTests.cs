@@ -119,6 +119,43 @@ namespace KairoServer.IntegrationTests
             Assert.Contains("payload exceeds", error.Message, StringComparison.OrdinalIgnoreCase);
         }
 
+        [Fact]
+        public async Task Publish_same_source_and_idempotency_key_is_idempotent()
+        {
+            var source = Guid.NewGuid().ToString("D");
+            var idempotencyKey = "idem-publish-1";
+            var occurredAt = DateTimeOffset.UtcNow;
+
+            var first = await _client.PostAsJsonAsync(
+                "/events",
+                new PublishEventRequest(
+                    IdempotencyKey: idempotencyKey,
+                    Type: "orders.created",
+                    Source: source,
+                    Timestamp: occurredAt,
+                    Metadata: null,
+                    Payload: JsonDocument.Parse("{\"orderId\":\"o-42\"}").RootElement.Clone()));
+
+            var second = await _client.PostAsJsonAsync(
+                "/events",
+                new PublishEventRequest(
+                    IdempotencyKey: idempotencyKey,
+                    Type: "orders.created",
+                    Source: source,
+                    Timestamp: occurredAt,
+                    Metadata: null,
+                    Payload: JsonDocument.Parse("{\"orderId\":\"o-42\"}").RootElement.Clone()));
+
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+            var firstBody = await first.Content.ReadFromJsonAsync<PublishEventResponse>();
+            var secondBody = await second.Content.ReadFromJsonAsync<PublishEventResponse>();
+            Assert.NotNull(firstBody);
+            Assert.NotNull(secondBody);
+            Assert.Equal(firstBody!.Id, secondBody!.Id);
+        }
+
         private async Task<Guid> SeedEventAsync()
         {
             var id = Guid.NewGuid();

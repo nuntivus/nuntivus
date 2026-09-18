@@ -46,6 +46,7 @@ namespace KairoServer.UnitTests.Matching
                 new FakeEventRepository(@event),
                 new FakeContractRepository(contractMatch),
                 deliveries,
+                new DeliveryFactory(),
                 new FakeOutboxRepository(),
                 new FakeUnitOfWork(),
                 new ContractFilterEvaluator(),
@@ -70,6 +71,9 @@ namespace KairoServer.UnitTests.Matching
                 Task.FromResult(Result.Success());
 
             public Task<Result<Event?>> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success<Event?>(_event));
+
+            public Task<Result<Event?>> GetByIngestionKeyAsync(string sourceId, string idempotencyKey, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success<Event?>(_event));
 
             public Task<Result<EventReplay?>> GetReplayAsync(Guid sourceEventId, string replayKey, CancellationToken cancellationToken) =>

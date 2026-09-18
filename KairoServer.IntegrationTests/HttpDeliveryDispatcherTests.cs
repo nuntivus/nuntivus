@@ -37,6 +37,8 @@ namespace KairoServer.IntegrationTests
     [Collection(nameof(DeliveriesCollection))]
     public sealed class HttpDeliveryDispatcherTests : IAsyncLifetime
     {
+    private static readonly DeliveryFactory DeliveryFactory = new();
+
         private readonly DeliveriesFixture _fx;
         private FakeHttpServer _server = null!;
 
@@ -521,7 +523,7 @@ namespace KairoServer.IntegrationTests
                 Headers: null,
                 TimeoutSeconds: 5)));
 
-            var delivery = Delivery.CreatePending(
+            var delivery = DeliveryFactory.CreatePending(
                 eventId, contractId, customerId, "orders.created",
                 "{\"orderId\":\"o-1\"}", destination, now, transformationConfiguration, rateLimit, ordering);
 
@@ -602,7 +604,7 @@ namespace KairoServer.IntegrationTests
                     """,
                     new { id = eventId, idem = Guid.NewGuid().ToString("N"), src = Guid.NewGuid(), ts = timestamp });
 
-                var delivery = Delivery.CreatePending(
+                var delivery = DeliveryFactory.CreatePending(
                     eventId,
                     contractId,
                     customerId,

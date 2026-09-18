@@ -18,6 +18,7 @@ namespace KairoServer.Application.Matching
         private readonly IEventRepository _events;
         private readonly IContractRepository _contracts;
         private readonly IDeliveryRepository _deliveries;
+        private readonly IDeliveryFactory _deliveryFactory;
         private readonly IOutboxRepository _outbox;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IContractFilterEvaluator _filterEvaluator;
@@ -27,6 +28,7 @@ namespace KairoServer.Application.Matching
             IEventRepository events,
             IContractRepository contracts,
             IDeliveryRepository deliveries,
+            IDeliveryFactory deliveryFactory,
             IOutboxRepository outbox,
             IUnitOfWork unitOfWork,
             IContractFilterEvaluator filterEvaluator,
@@ -35,6 +37,7 @@ namespace KairoServer.Application.Matching
             _events = events;
             _contracts = contracts;
             _deliveries = deliveries;
+            _deliveryFactory = deliveryFactory;
             _outbox = outbox;
             _unitOfWork = unitOfWork;
             _filterEvaluator = filterEvaluator;
@@ -103,10 +106,13 @@ namespace KairoServer.Application.Matching
                 }
 
                 var now = DateTimeOffset.UtcNow;
-                var deliveries = new List<Delivery>(filteredMatches.Count);
+                var inserted = 0;
+
+                _unitOfWork.Begin(true);
+
                 foreach (var match in filteredMatches)
                 {
-                    deliveries.Add(Delivery.CreatePending(
+                    var delivery = _deliveryFactory.CreatePending(
                         authoritative.Id,
                         match.ContractId,
                         match.CustomerId,
@@ -118,17 +124,18 @@ namespace KairoServer.Application.Matching
                             ? null
                             : JsonSerializer.Serialize(match.Transformation),
                         match.RateLimit,
-                        match.Ordering));
-                }
+                        match.Ordering);
 
-                _unitOfWork.Begin(true);
+                    var insertResult = await _deliveries.InsertPendingAsync(
+                        new[] { delivery },
+                        _unitOfWork,
+                        cancellationToken);
+                    var insertedRows = insertResult.EnsureValue();
+                    if (insertedRows == 0)
+                        continue;
 
-                var insertResult = await _deliveries.InsertPendingAsync(
-                    deliveries, _unitOfWork, cancellationToken);
-                var inserted = insertResult.EnsureValue();
+                    inserted += insertedRows;
 
-                foreach (var delivery in deliveries)
-                {
                     var ready = new DeliveryReady(
                         delivery.Id,
                         delivery.EventId,

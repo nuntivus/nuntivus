@@ -10,6 +10,7 @@ using KairoServer.Application.Matching;
 using KairoServer.Application.Messaging;
 using KairoServer.Application.Persistence;
 using KairoServer.Common.Logging;
+using KairoServer.Domain.Deliveries;
 using KairoServer.Infastructure.Caching;
 using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Messaging.Nats;
@@ -112,6 +113,7 @@ namespace KairoServer.IntegrationTests
                 sp.GetRequiredService<CacheOption>()));
 
             services.AddScoped<IDeliveryRepository, PostgresDeliveryRepository>();
+            services.AddSingleton<IDeliveryFactory, DeliveryFactory>();
             services.AddScoped<IOutboxRepository, PostgresOutboxRepository>();
             services.AddSingleton<IOutboxReader, PostgresOutboxReader>();
             services.AddSingleton<IContractFilterEvaluator, ContractFilterEvaluator>();

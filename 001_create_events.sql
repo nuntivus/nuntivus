@@ -7,7 +7,8 @@ CREATE TABLE events
     occurred_at timestamptz NOT NULL,
     received_at timestamptz NOT NULL,
     metadata    jsonb       NOT NULL DEFAULT '{}'::jsonb,
-    payload     jsonb       NOT NULL
+    payload     jsonb       NOT NULL,
+    CONSTRAINT uq_events_source_idempotency UNIQUE (source_id, idempotency_key)
 );
 
 CREATE INDEX ix_events_type

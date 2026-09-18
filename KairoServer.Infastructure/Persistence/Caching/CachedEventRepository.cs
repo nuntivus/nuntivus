@@ -36,6 +36,12 @@ namespace KairoServer.Infastructure.Persistence.Caching
                 ct => _inner.GetByIdAsync(id, ct),
                 cancellationToken);
 
+        public Task<Result<Event?>> GetByIngestionKeyAsync(
+            string sourceId,
+            string idempotencyKey,
+            CancellationToken cancellationToken) =>
+            _inner.GetByIngestionKeyAsync(sourceId, idempotencyKey, cancellationToken);
+
         public Task<Result<EventReplay?>> GetReplayAsync(
             Guid sourceEventId,
             string replayKey,

@@ -13,6 +13,8 @@ namespace KairoServer.IntegrationTests
     [Collection(nameof(DeliveriesCollection))]
     public sealed class DeliveriesRepositoryTests : IAsyncLifetime
     {
+        private static readonly DeliveryFactory DeliveryFactory = new();
+
         private readonly DeliveriesFixture _fx;
 
         public DeliveriesRepositoryTests(DeliveriesFixture fx) => _fx = fx;
@@ -27,7 +29,7 @@ namespace KairoServer.IntegrationTests
             var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
             var now = DateTimeOffset.UtcNow;
 
-            var delivery = Delivery.CreatePending(
+            var delivery = DeliveryFactory.CreatePending(
                 eventId, contractId, customerId, "orders.created", "{\"a\":1}", destination, now);
 
             var inserted = await InsertAsync(delivery);
@@ -62,8 +64,8 @@ namespace KairoServer.IntegrationTests
             var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
             var now = DateTimeOffset.UtcNow;
 
-            var first = Delivery.CreatePending(eventId, contractId, customerId, "orders.created", "{}", destination, now);
-            var duplicate = Delivery.CreatePending(eventId, contractId, customerId, "orders.created", "{}", destination, now.AddSeconds(1));
+            var first = DeliveryFactory.CreatePending(eventId, contractId, customerId, "orders.created", "{}", destination, now);
+            var duplicate = DeliveryFactory.CreatePending(eventId, contractId, customerId, "orders.created", "{}", destination, now.AddSeconds(1));
 
             var inserted1 = await InsertAsync(first);
             var inserted2 = await InsertAsync(duplicate);
@@ -85,8 +87,8 @@ namespace KairoServer.IntegrationTests
             var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
             var t0 = DateTimeOffset.UtcNow;
 
-            var a = Delivery.CreatePending(eventId1, contractId, customerId, "orders.created", "{}", destination, t0);
-            var b = Delivery.CreatePending(eventId2, contractId, customerId, "orders.created", "{}", destination, t0.AddSeconds(1));
+            var a = DeliveryFactory.CreatePending(eventId1, contractId, customerId, "orders.created", "{}", destination, t0);
+            var b = DeliveryFactory.CreatePending(eventId2, contractId, customerId, "orders.created", "{}", destination, t0.AddSeconds(1));
 
             await InsertAsync(a);
             await InsertAsync(b);
@@ -105,8 +107,8 @@ namespace KairoServer.IntegrationTests
             var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
             var now = DateTimeOffset.UtcNow;
 
-            var deliveryA = Delivery.CreatePending(eventId1, contractId, customerId, "orders.created", "{}", destination, now);
-            var deliveryB = Delivery.CreatePending(eventId2, contractId, customerId, "orders.created", "{}", destination, now.AddSeconds(1));
+            var deliveryA = DeliveryFactory.CreatePending(eventId1, contractId, customerId, "orders.created", "{}", destination, now);
+            var deliveryB = DeliveryFactory.CreatePending(eventId2, contractId, customerId, "orders.created", "{}", destination, now.AddSeconds(1));
             await InsertAsync(deliveryA);
             await InsertAsync(deliveryB);
 
@@ -160,7 +162,7 @@ namespace KairoServer.IntegrationTests
             var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
             var now = DateTimeOffset.UtcNow;
 
-            var delivery = Delivery.CreatePending(eventId, contractId, customerId, "orders.created", "{}", destination, now);
+            var delivery = DeliveryFactory.CreatePending(eventId, contractId, customerId, "orders.created", "{}", destination, now);
             await InsertAsync(delivery);
 
             var first = DeliveryAttempt.Create(
@@ -200,8 +202,8 @@ namespace KairoServer.IntegrationTests
             var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
             var now = DateTimeOffset.UtcNow;
 
-            var dead = Delivery.CreatePending(eventId1, contractId, customerId, "orders.created", "{}", destination, now);
-            var alive = Delivery.CreatePending(eventId2, contractId, customerId, "orders.created", "{}", destination, now.AddSeconds(1));
+            var dead = DeliveryFactory.CreatePending(eventId1, contractId, customerId, "orders.created", "{}", destination, now);
+            var alive = DeliveryFactory.CreatePending(eventId2, contractId, customerId, "orders.created", "{}", destination, now.AddSeconds(1));
             await InsertAsync(dead);
             await InsertAsync(alive);
 

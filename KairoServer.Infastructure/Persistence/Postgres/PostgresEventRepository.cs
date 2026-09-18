@@ -44,7 +44,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         @SourceId,
                         @OccurredAt,
                         @ReceivedAt,
-                        CAST(@Metadata AS jsonb),
+                        COALESCE(CAST(@Metadata AS jsonb), '{}'::jsonb),
                         CAST(@Payload AS jsonb)
                     );
                     """;
@@ -60,7 +60,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                             @event.Id,
                             @event.IdempotencyKey,
                             @event.Type,
-                            @event.SourceId,
+                            SourceId = Guid.Parse(@event.SourceId),
                             @event.OccurredAt,
                             @event.ReceivedAt,
                             Metadata = @event.Metadata?.ToJson(),
@@ -72,9 +72,67 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 return Result.Success();
 
             }
+            catch (PostgresException pgEx) when (pgEx.SqlState == "23505")
+            {
+                return Result.Failure(Error.Conflict(
+                    $"Event with idempotency key '{@event.IdempotencyKey}' for source '{@event.SourceId}' already exists."));
+            }
             catch (Exception ex)
             {
                 return Result.Failure(ex);
+            }
+        }
+
+        public async Task<Result<Event?>> GetByIngestionKeyAsync(
+            string sourceId,
+            string idempotencyKey,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                    SELECT id, idempotency_key, type, CAST(source_id AS uuid) AS source_id, occurred_at, received_at,
+                           metadata::text AS metadata, payload::text AS payload
+                    FROM events
+                    WHERE source_id::text = @SourceId
+                      AND idempotency_key = @IdempotencyKey
+                    ORDER BY received_at
+                    LIMIT 1;
+                    """;
+
+                await using var connection = (NpgsqlConnection)_connectionFactory.CreateConnection();
+                await connection.OpenAsync(cancellationToken);
+
+                var row = await connection.QuerySingleOrDefaultAsync<EventRow>(
+                    new CommandDefinition(
+                        sql,
+                        new
+                        {
+                            SourceId = sourceId,
+                            IdempotencyKey = idempotencyKey
+                        },
+                        cancellationToken: cancellationToken));
+
+                if (row is null)
+                    return Result.Success<Event?>(null);
+
+                var metadata = row.metadata != null ? EventMetadata.Parse(row.metadata) : null;
+
+                var @event = Event.Rehydrate(
+                    row.id,
+                    row.idempotency_key,
+                    row.type,
+                    row.source_id.ToString(),
+                    row.occurred_at,
+                    row.received_at,
+                    row.payload,
+                    metadata);
+
+                return Result.Success<Event?>(@event);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<Event?>(ex);
             }
         }
 
@@ -179,7 +237,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             try
             {
                 const string sql = """
-                    SELECT id, idempotency_key, type, source_id, occurred_at, received_at,
+                    SELECT id, idempotency_key, type, CAST(source_id AS uuid) AS source_id, occurred_at, received_at,
                            metadata::text AS metadata, payload::text AS payload
                     FROM events
                     WHERE id = @Id

@@ -14,6 +14,7 @@ using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Persistence.Caching;
 using KairoServer.Infastructure.Persistence.Postgres;
 using KairoServer.Api.Common;
+using KairoServer.Domain.Deliveries;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Options;
@@ -139,6 +140,9 @@ builder.Services.AddScoped<IContractRepository>(sp => new CachedContractReposito
     sp.GetRequiredService<PostgresContractRepository>(),
     sp.GetRequiredService<ICacheStore>(),
     sp.GetRequiredService<CacheOption>()));
+
+builder.Services.AddScoped<IDeliveryRepository, PostgresDeliveryRepository>();
+builder.Services.AddSingleton<IDeliveryFactory, DeliveryFactory>();
 
 builder.Services.AddScoped<PostgresEventDefinitionRepository>();
 builder.Services.AddScoped<IEventDefinitionRepository>(sp => new CachedEventDefinitionRepository(

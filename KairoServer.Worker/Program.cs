@@ -8,6 +8,7 @@ using KairoServer.Application.Observability;
 using KairoServer.Application.Persistence;
 using KairoServer.Application.Retention;
 using KairoServer.Application.Security;
+using KairoServer.Domain.Deliveries;
 using KairoServer.Infastructure.Caching;
 using KairoServer.Infastructure.Configuration;
 using KairoServer.Infastructure.Deliveries;
@@ -205,6 +206,7 @@ builder.Services.AddScoped<ICustomerRepository>(sp => new CachedCustomerReposito
     sp.GetRequiredService<CacheOption>()));
 
 builder.Services.AddScoped<IDeliveryRepository, PostgresDeliveryRepository>();
+builder.Services.AddSingleton<IDeliveryFactory, DeliveryFactory>();
 builder.Services.AddScoped<IContractDeliveryRateLimiter, PostgresContractDeliveryRateLimiter>();
 builder.Services.AddSingleton<IDeliveryDispatcherMetrics, MeterDeliveryDispatcherMetrics>();
 

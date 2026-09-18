@@ -16,6 +16,8 @@ namespace KairoServer.IntegrationTests
     [Collection(nameof(DeliveriesCollection))]
     public sealed class DeliveryRecoveryServiceTests : IAsyncLifetime
     {
+        private static readonly DeliveryFactory DeliveryFactory = new();
+
         private readonly DeliveriesFixture _fx;
 
         public DeliveryRecoveryServiceTests(DeliveriesFixture fx) => _fx = fx;
@@ -95,7 +97,7 @@ namespace KairoServer.IntegrationTests
             var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
             var now = DateTimeOffset.UtcNow;
 
-            var delivery = Delivery.CreatePending(
+            var delivery = DeliveryFactory.CreatePending(
                 eventId, contractId, customerId, "orders.created", "{}", destination, now);
 
             var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);

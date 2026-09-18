@@ -24,6 +24,11 @@ namespace KairoServer.Application.Persistence
             Guid id,
             CancellationToken cancellationToken);
 
+        Task<Result<Event?>> GetByIngestionKeyAsync(
+            string sourceId,
+            string idempotencyKey,
+            CancellationToken cancellationToken);
+
         Task<Result<EventReplay?>> GetReplayAsync(
             Guid sourceEventId,
             string replayKey,

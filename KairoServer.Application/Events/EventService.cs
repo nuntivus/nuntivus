@@ -48,6 +48,21 @@ namespace KairoServer.Application.Events
             {
                 var now = DateTimeOffset.UtcNow;
 
+                var existing = await _eventRepository.GetByIngestionKeyAsync(
+                    sourceId,
+                    idempotencyKey,
+                    cancellationToken);
+                var existingEvent = existing.EnsureValue();
+                if (existingEvent is not null)
+                {
+                    _logger.Information(
+                        "Duplicate publish detected for source {Source} and idempotencyKey {IdempotencyKey}; returning existing event {EventId}.",
+                        sourceId,
+                        idempotencyKey,
+                        existingEvent.Id);
+                    return Result.Success(existingEvent.Id);
+                }
+
                 var @event = Event.Create(
                     idempotencyKey,
                     type,
@@ -71,6 +86,25 @@ namespace KairoServer.Application.Events
                 _unitOfWork.Begin(true);
 
                 var eventResult = await _eventRepository.InsertAsync(@event, _unitOfWork, cancellationToken);
+                if (eventResult.IsFailure && eventResult.Errors.Any(e => e.Code == "conflict"))
+                {
+                    _unitOfWork.Rollback();
+
+                    var existingResult = await _eventRepository.GetByIngestionKeyAsync(
+                        sourceId,
+                        idempotencyKey,
+                        cancellationToken);
+                    var existingDuplicate = existingResult.EnsureValue();
+                    if (existingDuplicate is not null)
+                    {
+                        _logger.Information(
+                            "Duplicate publish detected for source {Source} and idempotencyKey {IdempotencyKey}; returning existing event {EventId}.",
+                            sourceId,
+                            idempotencyKey,
+                            existingDuplicate.Id);
+                        return Result.Success(existingDuplicate.Id);
+                    }
+                }
                 eventResult.EnsureSuccess();
 
                 var outboxResult = await _outboxRepository.InsertAsync(outbox, _unitOfWork, cancellationToken);

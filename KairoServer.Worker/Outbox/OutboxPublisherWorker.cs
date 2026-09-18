@@ -59,7 +59,7 @@ namespace KairoServer.Worker.Outbox
                             var publishResult = await _publisher.PublishAsync(
                                 message.Type,
                                 message.Payload,
-                                message.EventId.ToString(),
+                                message.Id.ToString("D"),
                                 stoppingToken);
 
                             publishResult.EnsureSuccess();

@@ -37,6 +37,9 @@ namespace KairoServer.UnitTests.Events
             public Task<Result<Event?>> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success<Event?>(null));
 
+            public Task<Result<Event?>> GetByIngestionKeyAsync(string sourceId, string idempotencyKey, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success<Event?>(null));
+
             public Task<Result<EventReplay?>> GetReplayAsync(Guid sourceEventId, string replayKey, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success<EventReplay?>(null));
 

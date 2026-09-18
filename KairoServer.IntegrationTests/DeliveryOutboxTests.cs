@@ -257,6 +257,55 @@ namespace KairoServer.IntegrationTests
             Assert.Null(processedAt);
         }
 
+        [Fact]
+        public async Task Outbox_worker_does_not_collapse_distinct_messages_for_same_event()
+        {
+            var js = _services.GetRequiredService<INatsJSContext>();
+            var natsOption = _services.GetRequiredService<Infastructure.Messaging.Nats.NatsOption>();
+            await EnsureStreamAsync(js, natsOption);
+
+            var @event = await SeedEventAsync("orders.created", "{\"orderId\":\"shared-event\"}");
+            var subject = $"event.test.{Guid.NewGuid():N}";
+
+            var m1 = OutboxMessage.Create(@event.Id, subject, "{\"n\":1}", DateTimeOffset.UtcNow);
+            var m2 = OutboxMessage.Create(@event.Id, subject, "{\"n\":2}", DateTimeOffset.UtcNow);
+
+            await using (var scope = _services.CreateAsyncScope())
+            {
+                var repo = scope.ServiceProvider.GetRequiredService<IOutboxRepository>();
+                var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                uow.Begin(true);
+                (await repo.InsertAsync(m1, uow, CancellationToken.None)).EnsureSuccess();
+                (await repo.InsertAsync(m2, uow, CancellationToken.None)).EnsureSuccess();
+                uow.Commit();
+            }
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var worker = ActivatorUtilities.CreateInstance<OutboxPublisherWorker>(_services);
+            var runTask = worker.StartAsync(cts.Token);
+
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            while (DateTime.UtcNow < deadline)
+            {
+                await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+                var processed = await conn.ExecuteScalarAsync<int>(
+                    "SELECT COUNT(*) FROM outbox_messages WHERE id = ANY(@ids) AND processed_at IS NOT NULL",
+                    new { ids = new[] { m1.Id, m2.Id } });
+                if (processed == 2)
+                {
+                    break;
+                }
+
+                await Task.Delay(200);
+            }
+
+            await worker.StopAsync(CancellationToken.None);
+            await runTask;
+
+            var consumed = await FetchCountAsync(js, natsOption.Stream, subject, $"verify-{Guid.NewGuid():N}", expected: 2);
+            Assert.Equal(2, consumed);
+        }
+
         // ---- helpers ---------------------------------------------------------
 
         private static async Task EnsureStreamAsync(INatsJSContext js, Infastructure.Messaging.Nats.NatsOption options)
@@ -298,6 +347,33 @@ namespace KairoServer.IntegrationTests
                 return msg.Data;
             }
             return null;
+        }
+
+        private static async Task<int> FetchCountAsync(
+            INatsJSContext js,
+            string stream,
+            string filterSubject,
+            string durable,
+            int expected)
+        {
+            var consumer = await js.CreateOrUpdateConsumerAsync(
+                stream,
+                new ConsumerConfig(durable)
+                {
+                    FilterSubject = filterSubject,
+                    AckPolicy = ConsumerConfigAckPolicy.Explicit,
+                    DeliverPolicy = ConsumerConfigDeliverPolicy.All,
+                });
+
+            var count = 0;
+            var fetchOpts = new NatsJSFetchOpts { MaxMsgs = expected, Expires = TimeSpan.FromSeconds(5) };
+            await foreach (var msg in consumer.FetchAsync<byte[]>(fetchOpts))
+            {
+                await msg.AckAsync();
+                count++;
+            }
+
+            return count;
         }
     }
 }

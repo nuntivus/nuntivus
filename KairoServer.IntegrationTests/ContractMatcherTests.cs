@@ -15,6 +15,7 @@ using KairoServer.Contracts.Events;
 using KairoServer.Domain.Contracts;
 using KairoServer.Domain.Customers;
 using KairoServer.Domain.Events;
+using KairoServer.Domain.Outbox;
 using KairoServer.Worker.Matching;
 using Microsoft.Extensions.DependencyInjection;
 using NATS.Client.JetStream;
@@ -111,6 +112,14 @@ namespace KairoServer.IntegrationTests
             await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
             return await conn.ExecuteScalarAsync<long>(
                 "SELECT COUNT(*) FROM deliveries WHERE event_id = @id", new { id = eventId });
+        }
+
+        private async Task<long> CountDeliveryReadyOutboxAsync(Guid eventId)
+        {
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            return await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM outbox_messages WHERE event_id = @id AND type = @type",
+                new { id = eventId, type = OutboxMessageType.DeliveryReady });
         }
 
         // ---- service-level tests ---------------------------------------------
@@ -211,6 +220,7 @@ namespace KairoServer.IntegrationTests
             Assert.Equal(1, first.Value.InsertedDeliveries);
             Assert.Equal(0, second.Value.InsertedDeliveries);
             Assert.Equal(1, await CountDeliveriesAsync(@event.Id));
+            Assert.Equal(1, await CountDeliveryReadyOutboxAsync(@event.Id));
         }
 
         [Fact]
