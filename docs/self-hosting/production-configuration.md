@@ -30,8 +30,50 @@ Optional:
 - `KAIRO_OTLP_ENDPOINT`
 - `KAIRO_API_PORT`
 - `KAIRO_SHUTDOWN_TIMEOUT_SECONDS`
+- `KAIRO_DATABASE_CONNECTION_STRING` (alternative to compose-generated `ConnectionStrings__Postgres`)
 
-## 4. Persistence and volumes
+## 4. Standardized runtime configuration
+
+Kairo API and Worker now use typed configuration objects with startup validation.
+
+Primary sections:
+
+- `Database`
+- `Nats`
+- `Worker`
+- `Delivery`
+- `DeliveryDispatcher`
+- `DeliveryOrdering`
+- `RetentionCleanup`
+- `EndpointSecurity`
+- `DestinationCredentials`
+- `Cache`
+- `HostOptions`
+
+Validation is executed at startup and fails fast when required values are missing or invalid.
+
+### Environment variable mapping
+
+In addition to standard `.NET` key mapping (`Section__Property`), Kairo maps these `KAIRO_*` variables:
+
+- `KAIRO_DATABASE_CONNECTION_STRING` -> `Database:PostgresConnectionString`
+- `KAIRO_POSTGRES_CONNECTION_STRING` -> `Database:PostgresConnectionString`
+- `KAIRO_DESTINATION_CREDENTIALS_KEY` -> `DestinationCredentials:EncryptionKey`
+- `KAIRO_NATS_URL` -> `Nats:Url`
+- `KAIRO_NATS_STREAM` -> `Nats:Stream`
+- `KAIRO_NATS_SUBJECTS` -> `Nats:Subjects`
+- `KAIRO_OTLP_ENDPOINT` -> `OpenTelemetry:OtlpEndpoint`
+- `KAIRO_SHUTDOWN_TIMEOUT_SECONDS` -> `HostOptions:ShutdownTimeout`
+
+### Safe production defaults
+
+When running in `Production`, Kairo enforces safe HTTP destination defaults:
+
+- `EndpointSecurity:AllowHttpScheme=false`
+- `EndpointSecurity:AllowPrivateNetworkDestinations=false`
+- `EndpointSecurity:AllowRedirects=false`
+
+## 5. Persistence and volumes
 
 The production compose stack uses named volumes:
 
@@ -44,7 +86,7 @@ Verify they exist after startup:
 docker volume ls | grep kairo-
 ```
 
-## 5. Migration execution
+## 6. Migration execution
 
 `migrate` is a one-shot service in `docker-compose.prod.yml`.
 
@@ -57,14 +99,14 @@ Behavior:
 
 The API and worker start only after `migrate` completes successfully.
 
-## 6. Readiness and lifecycle
+## 7. Readiness and lifecycle
 
 - API readiness: `GET /health/ready`
 - API liveness: `GET /health/live`
 - API and worker graceful shutdown timeout: `HostOptions__ShutdownTimeout`
 - Compose `stop_grace_period` is set for API and worker
 
-## 7. Start and validate
+## 8. Start and validate
 
 ```bash
 docker compose --env-file .env -f docker-compose.prod.yml up -d --build
@@ -78,7 +120,7 @@ docker compose -f docker-compose.prod.yml logs migrate
 curl http://localhost:${KAIRO_API_PORT}/health/ready
 ```
 
-## 8. Security baseline
+## 9. Security baseline
 
 - Do not commit `.env` with secrets
 - Use unique credentials per environment

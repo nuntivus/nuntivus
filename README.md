@@ -1216,6 +1216,8 @@ Do not commit production secrets to `appsettings*.json`.
 
 Kairo requires `DestinationCredentials:EncryptionKey` (base64, exactly 32 bytes) for protected destination credentials.
 
+This setting is validated at startup for API and Worker.
+
 - Prefer environment variable `KAIRO_DESTINATION_CREDENTIALS_KEY` in production.
 - Rotate this key through your secret manager and rollout process.
 - Keep non-production keys isolated per environment.
@@ -1233,6 +1235,21 @@ Kairo requires `DestinationCredentials:EncryptionKey` (base64, exactly 32 bytes)
 - Configure exactly one auth mode: token, user/password, or creds file.
 - Store credentials outside the container image and mount/inject at runtime.
 - Rotate NATS credentials regularly and scope account permissions to required subjects only.
+
+## Configuration model and startup validation
+
+Kairo API and Worker use typed configuration sections (`Database`, `Nats`, `Worker`, `Delivery`, `DeliveryDispatcher`, `DeliveryOrdering`, `RetentionCleanup`, `EndpointSecurity`, `DestinationCredentials`, `Cache`, `HostOptions`) and validate them during startup.
+
+Supported `KAIRO_*` env mappings include:
+
+- `KAIRO_DATABASE_CONNECTION_STRING` -> `Database:PostgresConnectionString`
+- `KAIRO_POSTGRES_CONNECTION_STRING` -> `Database:PostgresConnectionString`
+- `KAIRO_DESTINATION_CREDENTIALS_KEY` -> `DestinationCredentials:EncryptionKey`
+- `KAIRO_NATS_URL` -> `Nats:Url`
+- `KAIRO_NATS_STREAM` -> `Nats:Stream`
+- `KAIRO_NATS_SUBJECTS` -> `Nats:Subjects`
+- `KAIRO_OTLP_ENDPOINT` -> `OpenTelemetry:OtlpEndpoint`
+- `KAIRO_SHUTDOWN_TIMEOUT_SECONDS` -> `HostOptions:ShutdownTimeout`
 
 ---
 

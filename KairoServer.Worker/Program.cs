@@ -9,16 +9,19 @@ using KairoServer.Application.Persistence;
 using KairoServer.Application.Retention;
 using KairoServer.Application.Security;
 using KairoServer.Infastructure.Caching;
+using KairoServer.Infastructure.Configuration;
 using KairoServer.Infastructure.Deliveries;
 using KairoServer.Infastructure.Deliveries.Http;
 using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Messaging.Nats;
 using KairoServer.Infastructure.Persistence.Caching;
 using KairoServer.Infastructure.Persistence.Postgres;
+using KairoServer.Worker.Configuration;
 using KairoServer.Worker.Deliveries;
 using KairoServer.Worker.Matching;
 using KairoServer.Worker.Outbox;
 using KairoServer.Worker.Retention;
+using Microsoft.Extensions.Options;
 using NATS.Client.Core;
 using NATS.Client.JetStream;
 using OpenTelemetry.Metrics;
@@ -27,13 +30,117 @@ using OpenTelemetry.Trace;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-var shutdownTimeout = builder.Configuration.GetValue<TimeSpan?>("HostOptions:ShutdownTimeout")
-    ?? TimeSpan.FromSeconds(30);
+builder.Configuration.AddKairoEnvironmentVariableMappings();
 
-builder.Services.Configure<HostOptions>(options =>
-{
-    options.ShutdownTimeout = shutdownTimeout;
-});
+builder.Services
+    .AddOptions<HostOptions>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.HostOptions))
+    .PostConfigure(options =>
+    {
+        if (options.ShutdownTimeout <= TimeSpan.Zero)
+        {
+            options.ShutdownTimeout = TimeSpan.FromSeconds(30);
+        }
+    })
+    .Validate(options => options.ShutdownTimeout > TimeSpan.Zero, "HostOptions:ShutdownTimeout must be greater than zero.")
+    .ValidateOnStart();
+
+builder.Services
+    .AddOptions<DatabaseOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.Database))
+    .PostConfigure(options =>
+    {
+        if (string.IsNullOrWhiteSpace(options.PostgresConnectionString))
+        {
+            options.PostgresConnectionString = builder.Configuration.GetConnectionString("Postgres");
+        }
+    })
+    .Validate(KairoConfigurationValidation.HasPostgresConnection, "Configure Database:PostgresConnectionString (or ConnectionStrings:Postgres).")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DatabaseOption>>().Value);
+
+builder.Services
+    .AddOptions<CacheOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.Cache))
+    .Validate(KairoConfigurationValidation.IsCacheTtlValid, "Cache:Ttl must be greater than zero.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<CacheOption>>().Value);
+
+builder.Services
+    .AddOptions<DeliveryOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.Delivery))
+    .Validate(WorkerConfigurationValidation.IsDeliveryConsumerValid, "Delivery configuration is invalid.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DeliveryOption>>().Value);
+
+builder.Services
+    .AddOptions<DeliveryDispatcherOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.DeliveryDispatcher))
+    .Validate(KairoConfigurationValidation.IsRetryPolicyValid, "DeliveryDispatcher retry configuration is invalid.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DeliveryDispatcherOption>>().Value);
+
+builder.Services
+    .AddOptions<DeliveryOrderingOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.DeliveryOrdering))
+    .Validate(KairoConfigurationValidation.IsOrderingValid, "DeliveryOrdering configuration is invalid.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DeliveryOrderingOption>>().Value);
+
+builder.Services
+    .AddOptions<DestinationCredentialOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.DestinationCredentials))
+    .Validate(KairoConfigurationValidation.IsDestinationCredentialKeyValid, "DestinationCredentials:EncryptionKey must be base64 and decode to 32 bytes.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DestinationCredentialOption>>().Value);
+
+builder.Services
+    .AddOptions<HttpDestinationSecurityOption>()
+    .Configure(options =>
+    {
+        var endpointSection = builder.Configuration.GetSection(KairoConfigurationSections.EndpointSecurity);
+        if (endpointSection.Exists())
+        {
+            endpointSection.Bind(options);
+        }
+        else
+        {
+            builder.Configuration.GetSection(KairoConfigurationSections.LegacyDestinationSecurity).Bind(options);
+        }
+
+        KairoConfigurationValidation.ApplySafeEndpointDefaults(options, builder.Environment.IsProduction());
+    })
+    .Validate(KairoConfigurationValidation.IsEndpointSecurityValid, "EndpointSecurity:MaxResponseBodyBytes must be greater than zero.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<HttpDestinationSecurityOption>>().Value);
+
+builder.Services
+    .AddOptions<RetentionCleanupOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.RetentionCleanup))
+    .Validate(KairoConfigurationValidation.IsRetentionValid, "RetentionCleanup configuration is invalid.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<RetentionCleanupOption>>().Value);
+
+builder.Services
+    .AddOptions<NatsOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.Nats))
+    .Validate(KairoConfigurationValidation.IsNatsSettingsValid, "Nats configuration is invalid. Configure URL/stream/timeouts and exactly one auth mode.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<NatsOption>>().Value);
+
+builder.Services
+    .AddOptions<MatcherOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.Matcher))
+    .Validate(WorkerConfigurationValidation.IsMatcherConsumerValid, "Matcher configuration is invalid.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<MatcherOption>>().Value);
+
+builder.Services
+    .AddOptions<WorkerRuntimeOption>()
+    .Bind(builder.Configuration.GetSection("Worker"))
+    .Validate(WorkerConfigurationValidation.IsRuntimeValid, "Worker configuration is invalid. Enable at least one hosted worker.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<WorkerRuntimeOption>>().Value);
 
 // Logging
 builder.AddKairoLogging();
@@ -66,18 +173,13 @@ builder.Services.AddOpenTelemetry()
     });
 
 // Persistence
-var postgresConnectionString = builder.Configuration.GetConnectionString("Postgres")
-    ?? throw new InvalidOperationException("Missing ConnectionStrings:Postgres configuration.");
-
 builder.Services.AddSingleton<IDatabaseConnectionFactory>(
-    _ => new PostgresDatabaseConnectionFactory(postgresConnectionString));
+    sp => new PostgresDatabaseConnectionFactory(
+        sp.GetRequiredService<DatabaseOption>().PostgresConnectionString!));
 
 builder.Services.AddSingleton<IOutboxReader, PostgresOutboxReader>();
 builder.Services.AddSingleton<IRetentionCleanupRepository, PostgresRetentionCleanupRepository>();
 
-// Caching (in-memory, 60s TTL by default; configurable via "Cache" section).
-var cacheOption = builder.Configuration.GetSection("Cache").Get<CacheOption>() ?? new CacheOption();
-builder.Services.AddSingleton(cacheOption);
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ICacheStore, InMemoryCacheStore>();
 
@@ -109,47 +211,13 @@ builder.Services.AddSingleton<IDeliveryDispatcherMetrics, MeterDeliveryDispatche
 builder.Services.AddSingleton<IContractFilterEvaluator, ContractFilterEvaluator>();
 builder.Services.AddScoped<IContractMatcherService, ContractMatcherService>();
 
-// Delivery dispatcher pipeline options.
-var deliveryOption = builder.Configuration.GetSection("Delivery").Get<DeliveryOption>()
-    ?? new DeliveryOption();
-builder.Services.AddSingleton(deliveryOption);
-
-var dispatcherOption = builder.Configuration.GetSection("DeliveryDispatcher").Get<DeliveryDispatcherOption>()
-    ?? new DeliveryDispatcherOption();
-builder.Services.AddSingleton(dispatcherOption);
-
-var orderingOption = builder.Configuration.GetSection("DeliveryOrdering").Get<DeliveryOrderingOption>()
-    ?? new DeliveryOrderingOption();
-builder.Services.AddSingleton(orderingOption);
-
-var destinationCredentialOption = builder.Configuration.GetSection("DestinationCredentials").Get<DestinationCredentialOption>()
-    ?? new DestinationCredentialOption();
-builder.Services.AddSingleton(destinationCredentialOption);
-
-var destinationSecurityOption = builder.Configuration.GetSection("EndpointSecurity").Get<HttpDestinationSecurityOption>()
-    ?? builder.Configuration.GetSection("DestinationSecurity").Get<HttpDestinationSecurityOption>()
-    ?? new HttpDestinationSecurityOption();
-builder.Services.AddSingleton(destinationSecurityOption);
 builder.Services.AddSingleton<IEndpointSecurityPolicy, EndpointSecurityPolicy>();
 
 builder.Services.AddScoped<IDeliveryDispatcherService, DeliveryDispatcherService>();
 builder.Services.AddScoped<IDeliveryRecoveryService, DeliveryRecoveryService>();
 builder.Services.AddScoped<IRetentionCleanupService, RetentionCleanupService>();
 
-var retentionCleanupOption = builder.Configuration.GetSection("RetentionCleanup").Get<RetentionCleanupOption>()
-    ?? new RetentionCleanupOption();
-builder.Services.AddSingleton(retentionCleanupOption);
-
 // NATS / JetStream
-var natsOption = builder.Configuration.GetSection("Nats").Get<NatsOption>()
-    ?? new NatsOption();
-ValidateNatsAuthentication(natsOption);
-builder.Services.AddSingleton(natsOption);
-
-var matcherOption = builder.Configuration.GetSection("Matcher").Get<MatcherOption>()
-    ?? new MatcherOption();
-builder.Services.AddSingleton(matcherOption);
-
 builder.Services.AddSingleton<INatsConnection>(sp =>
 {
     var options = sp.GetRequiredService<NatsOption>();
@@ -182,35 +250,26 @@ builder.Services.AddDeliveryExecution();
 builder.Services.AddHostedService<NatsJetStreamBootstrapper>();
 
 // Hosted workers
-builder.Services.AddHostedService<OutboxPublisherWorker>();
-builder.Services.AddHostedService<ContractMatcherWorker>();
-builder.Services.AddHostedService<DeliveryDispatcherWorker>();
-builder.Services.AddHostedService<RetentionCleanupWorker>();
+var workerRuntime = builder.Configuration.GetSection("Worker").Get<WorkerRuntimeOption>() ?? new WorkerRuntimeOption();
+if (workerRuntime.EnableOutboxPublisher)
+{
+    builder.Services.AddHostedService<OutboxPublisherWorker>();
+}
+
+if (workerRuntime.EnableContractMatcher)
+{
+    builder.Services.AddHostedService<ContractMatcherWorker>();
+}
+
+if (workerRuntime.EnableDeliveryDispatcher)
+{
+    builder.Services.AddHostedService<DeliveryDispatcherWorker>();
+}
+
+if (workerRuntime.EnableRetentionCleanup)
+{
+    builder.Services.AddHostedService<RetentionCleanupWorker>();
+}
 
 var host = builder.Build();
 host.Run();
-
-static void ValidateNatsAuthentication(NatsOption options)
-{
-    var hasToken = !string.IsNullOrWhiteSpace(options.Token);
-    var hasUser = !string.IsNullOrWhiteSpace(options.User);
-    var hasPassword = !string.IsNullOrWhiteSpace(options.Password);
-    var hasCredsFile = !string.IsNullOrWhiteSpace(options.CredsFile);
-
-    if (hasUser != hasPassword)
-    {
-        throw new InvalidOperationException(
-            "NATS authentication requires both Nats:User and Nats:Password when using username/password mode.");
-    }
-
-    var modes = 0;
-    if (hasToken) modes++;
-    if (hasUser && hasPassword) modes++;
-    if (hasCredsFile) modes++;
-
-    if (modes > 1)
-    {
-        throw new InvalidOperationException(
-            "NATS authentication is ambiguous. Configure only one mode: token, user/password, or credsFile.");
-    }
-}
