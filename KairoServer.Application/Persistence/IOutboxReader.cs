@@ -23,6 +23,9 @@ namespace KairoServer.Application.Persistence
         Task<Result> ReleaseClaimAfterFailureAsync(
             Guid id,
             string workerId,
+            DateTimeOffset failedAt,
+            DateTimeOffset nextAttemptAt,
+            string error,
             CancellationToken cancellationToken);
 
         Task<Result<int>> ReleaseExpiredClaimsAsync(

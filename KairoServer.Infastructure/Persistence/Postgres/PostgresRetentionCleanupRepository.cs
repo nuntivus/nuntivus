@@ -28,7 +28,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     FROM outbox_messages
                     WHERE processed_at IS NOT NULL
                       AND processed_at < @ProcessedBefore
-                    ORDER BY processed_at
+                      AND claimed_by IS NULL
+                    ORDER BY processed_at, id
                     LIMIT @BatchSize
                     FOR UPDATE SKIP LOCKED
                 ),

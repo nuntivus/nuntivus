@@ -15,6 +15,9 @@ namespace KairoServer.Domain.Outbox
         public DateTimeOffset CreatedAt { get; }
         public DateTimeOffset? ProcessedAt { get; private set; }
         public int AttemptCount { get; private set; }
+        public DateTimeOffset? LastFailedAt { get; private set; }
+        public DateTimeOffset? NextAttemptAt { get; private set; }
+        public string? LastError { get; private set; }
 
         private OutboxMessage(
             Guid id,
@@ -60,12 +63,18 @@ namespace KairoServer.Domain.Outbox
             string payload,
             DateTimeOffset createdAt,
             DateTimeOffset? processedAt,
-            int attemptCount)
+            int attemptCount,
+            DateTimeOffset? lastFailedAt = null,
+            DateTimeOffset? nextAttemptAt = null,
+            string? lastError = null)
         {
             return new OutboxMessage(id, eventId, type, payload, createdAt)
             {
                 ProcessedAt = processedAt,
                 AttemptCount = attemptCount,
+                LastFailedAt = lastFailedAt,
+                NextAttemptAt = nextAttemptAt,
+                LastError = lastError,
             };
         }
     }

@@ -13,6 +13,18 @@ namespace KairoServer.Worker.Observability
         private static readonly Histogram<double> OutboxLagMs =
             KairoTelemetry.Meter.CreateHistogram<double>("kairo.outbox.lag.ms");
 
+        private static readonly Counter<long> OutboxClaimedCounter =
+            KairoTelemetry.Meter.CreateCounter<long>("kairo.outbox.claimed.count");
+
+        private static readonly Counter<long> OutboxOutcomeCounter =
+            KairoTelemetry.Meter.CreateCounter<long>("kairo.outbox.outcome.count");
+
+        private static readonly Histogram<double> OutboxRetryDelayMs =
+            KairoTelemetry.Meter.CreateHistogram<double>("kairo.outbox.retry.delay.ms");
+
+        private static readonly Histogram<long> OutboxAttemptCount =
+            KairoTelemetry.Meter.CreateHistogram<long>("kairo.outbox.attempt.count");
+
         private static readonly Histogram<double> JetStreamConsumerLagMs =
             KairoTelemetry.Meter.CreateHistogram<double>("kairo.jetstream.consumer.lag.ms");
 
@@ -45,6 +57,45 @@ namespace KairoServer.Worker.Observability
             {
                 { "messageType", messageType },
             });
+        }
+
+        public static void TrackOutboxClaimed(int count, string worker)
+        {
+            if (count <= 0)
+                return;
+
+            OutboxClaimedCounter.Add(count, new TagList
+            {
+                { KairoTelemetry.WorkerTag, worker },
+            });
+        }
+
+        public static void TrackOutboxOutcome(string outcome, string messageType)
+        {
+            OutboxOutcomeCounter.Add(1, new TagList
+            {
+                { "outcome", outcome },
+                { "messageType", messageType },
+            });
+        }
+
+        public static void TrackOutboxRetry(TimeSpan delay, int attempt, string messageType)
+        {
+            if (delay >= TimeSpan.Zero)
+            {
+                OutboxRetryDelayMs.Record(delay.TotalMilliseconds, new TagList
+                {
+                    { "messageType", messageType },
+                });
+            }
+
+            if (attempt > 0)
+            {
+                OutboxAttemptCount.Record(attempt, new TagList
+                {
+                    { "messageType", messageType },
+                });
+            }
         }
 
         public static void TrackJetStreamConsumerLag(TimeSpan lag, string worker)

@@ -51,8 +51,13 @@ namespace KairoServer.Worker.Configuration
         public static bool IsOutboxValid(OutboxOption option)
             => option.BatchSize > 0
                && option.PollDelay > TimeSpan.Zero
+               && option.EmptyPollDelay > TimeSpan.Zero
                && option.MaxConcurrentPublishes > 0
-               && option.ClaimTtl > TimeSpan.Zero;
+               && option.ClaimWorkerCount > 0
+               && option.ClaimTtl > TimeSpan.Zero
+               && option.FailureBackoffBaseDelay > TimeSpan.Zero
+               && option.FailureBackoffMaxDelay >= option.FailureBackoffBaseDelay
+               && option.FailureBackoffJitterRatio is >= 0 and <= 1;
 
         public static bool IsDeliveryRecoveryValid(DeliveryRecoveryOption option)
             => option.RunInterval > TimeSpan.Zero

@@ -32,8 +32,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     SELECT id
                     FROM outbox_messages
                     WHERE processed_at IS NULL
+                      AND (next_attempt_at IS NULL OR next_attempt_at <= @Now)
                       AND (claim_expires_at IS NULL OR claim_expires_at <= @Now)
-                    ORDER BY created_at
+                    ORDER BY COALESCE(next_attempt_at, created_at), created_at, id
                     LIMIT @BatchSize
                     FOR UPDATE SKIP LOCKED
                 )
@@ -49,7 +50,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     o.payload::text AS Payload,
                     o.created_at    AS CreatedAt,
                     o.processed_at  AS ProcessedAt,
-                    o.attempt_count AS AttemptCount;
+                    o.attempt_count AS AttemptCount,
+                    o.last_failed_at AS LastFailedAt,
+                    o.next_attempt_at AS NextAttemptAt,
+                    o.last_error AS LastError;
                 """;
 
                 using var connection = _connectionFactory.CreateConnection();
@@ -76,7 +80,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         r.Payload,
                         r.CreatedAt,
                         r.ProcessedAt,
-                        r.AttemptCount))
+                        r.AttemptCount,
+                        r.LastFailedAt,
+                        r.NextAttemptAt,
+                        r.LastError))
                     .ToList());
 
             }
@@ -96,6 +103,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 const string sql = """
                 UPDATE outbox_messages
                 SET processed_at = @Now,
+                    next_attempt_at = NULL,
+                    last_failed_at = NULL,
+                    last_error = NULL,
                     claimed_by = NULL,
                     claim_expires_at = NULL
                 WHERE id = @Id
@@ -125,6 +135,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
         public async Task<Result> ReleaseClaimAfterFailureAsync(
             Guid id,
             string workerId,
+            DateTimeOffset failedAt,
+            DateTimeOffset nextAttemptAt,
+            string error,
             CancellationToken cancellationToken)
         {
             try
@@ -132,6 +145,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 const string sql = """
                 UPDATE outbox_messages
                 SET attempt_count = attempt_count + 1,
+                    last_failed_at = @FailedAt,
+                    next_attempt_at = @NextAttemptAt,
+                    last_error = @Error,
                     claimed_by = NULL,
                     claim_expires_at = NULL
                 WHERE id = @Id
@@ -144,7 +160,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 var rows = await connection.ExecuteAsync(
                     new CommandDefinition(
                         sql,
-                        new { Id = id, WorkerId = workerId },
+                        new { Id = id, WorkerId = workerId, FailedAt = failedAt, NextAttemptAt = nextAttemptAt, Error = error },
                         cancellationToken: cancellationToken));
 
                 if (rows == 0)
@@ -197,6 +213,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public required DateTimeOffset CreatedAt { get; set; }
             public DateTimeOffset? ProcessedAt { get; set; }
             public required int AttemptCount { get; set; }
+            public DateTimeOffset? LastFailedAt { get; set; }
+            public DateTimeOffset? NextAttemptAt { get; set; }
+            public string? LastError { get; set; }
         }
     }
 }

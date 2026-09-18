@@ -15,6 +15,9 @@
     <File Path="010_add_contract_payload_transformations.sql" />
     <File Path="011_add_delivery_rate_limits.sql" />
     <File Path="012_add_delivery_ordering.sql" />
+    <File Path="013_add_retention_cleanup_indexes.sql" />
+    <File Path="014_add_outbox_retry_metadata.sql" />
+    <File Path="015_add_outbox_claim_indexes.sql" />
     <File Path="KairoServer.IntegrationTests/Migrations/006_create_delivery_attempts.sql" />
   </Folder>
   <Folder Name="/Solution Items/">

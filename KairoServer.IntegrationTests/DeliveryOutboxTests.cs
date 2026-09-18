@@ -303,6 +303,58 @@ namespace KairoServer.IntegrationTests
                 "SELECT processed_at FROM outbox_messages WHERE id = @id",
                 new { id = badMessage.Id });
             Assert.Null(processedAt);
+
+            var failureState = await conn2.QuerySingleAsync<(DateTimeOffset? last_failed_at, DateTimeOffset? next_attempt_at, string? last_error)>(
+                "SELECT last_failed_at, next_attempt_at, last_error FROM outbox_messages WHERE id = @id",
+                new { id = badMessage.Id });
+
+            Assert.NotNull(failureState.last_failed_at);
+            Assert.NotNull(failureState.next_attempt_at);
+            Assert.True(failureState.next_attempt_at > failureState.last_failed_at);
+            Assert.False(string.IsNullOrWhiteSpace(failureState.last_error));
+        }
+
+        [Fact]
+        public async Task Outbox_worker_skips_rows_scheduled_for_future_retry()
+        {
+            var @event = await SeedEventAsync("orders.created");
+            var blocked = OutboxMessage.Create(
+                @event.Id,
+                type: "nomatch.subject",
+                payload: "{\"x\":2}",
+                createdAt: DateTimeOffset.UtcNow);
+
+            await using (var scope = _services.CreateAsyncScope())
+            {
+                var repo = scope.ServiceProvider.GetRequiredService<IOutboxRepository>();
+                var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                uow.Begin(true);
+                (await repo.InsertAsync(blocked, uow, CancellationToken.None)).EnsureSuccess();
+                uow.Commit();
+            }
+
+            var lockoutUntil = DateTimeOffset.UtcNow.AddMinutes(10);
+            await using (var conn = new NpgsqlConnection(_fixture.ConnectionString))
+            {
+                await conn.ExecuteAsync(
+                    "UPDATE outbox_messages SET next_attempt_at = @next WHERE id = @id",
+                    new { id = blocked.Id, next = lockoutUntil });
+            }
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            var worker = ActivatorUtilities.CreateInstance<OutboxPublisherWorker>(_services);
+            var runTask = worker.StartAsync(cts.Token);
+            await Task.Delay(1200);
+            await worker.StopAsync(CancellationToken.None);
+            await runTask;
+
+            await using var verify = new NpgsqlConnection(_fixture.ConnectionString);
+            var state = await verify.QuerySingleAsync<(int attempts, DateTimeOffset? processed_at)>(
+                "SELECT attempt_count AS attempts, processed_at FROM outbox_messages WHERE id = @id",
+                new { id = blocked.Id });
+
+            Assert.Equal(0, state.attempts);
+            Assert.Null(state.processed_at);
         }
 
         [Fact]
@@ -352,6 +404,87 @@ namespace KairoServer.IntegrationTests
 
             var consumed = await FetchCountAsync(js, natsOption.Stream, subject, $"verify-{Guid.NewGuid():N}", expected: 2);
             Assert.Equal(2, consumed);
+        }
+
+        [Fact]
+        public async Task Outbox_load_processes_messages_with_target_throughput()
+        {
+            if (!string.Equals(Environment.GetEnvironmentVariable("RUN_OUTBOX_LOAD_TESTS"), "1", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var js = _services.GetRequiredService<INatsJSContext>();
+            var natsOption = _services.GetRequiredService<Infastructure.Messaging.Nats.NatsOption>();
+            await EnsureStreamAsync(js, natsOption);
+
+            var messageCount = int.TryParse(Environment.GetEnvironmentVariable("OUTBOX_LOAD_MESSAGE_COUNT"), out var parsedCount)
+                ? Math.Max(50, parsedCount)
+                : 500;
+
+            var minThroughputPerSecond = double.TryParse(Environment.GetEnvironmentVariable("OUTBOX_LOAD_MIN_THROUGHPUT"), out var parsedThroughput)
+                ? Math.Max(1, parsedThroughput)
+                : 25d;
+
+            var deadlineSeconds = int.TryParse(Environment.GetEnvironmentVariable("OUTBOX_LOAD_DEADLINE_SECONDS"), out var parsedDeadline)
+                ? Math.Max(5, parsedDeadline)
+                : 30;
+
+            var @event = await SeedEventAsync("orders.created", "{\"load\":true}");
+            var subject = $"delivery.load.{Guid.NewGuid():N}";
+
+            await using (var scope = _services.CreateAsyncScope())
+            {
+                var repo = scope.ServiceProvider.GetRequiredService<IOutboxRepository>();
+                var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                uow.Begin(true);
+
+                for (var i = 0; i < messageCount; i++)
+                {
+                    var payload = JsonSerializer.Serialize(new { n = i, e = @event.Id });
+                    var message = OutboxMessage.Create(@event.Id, subject, payload, DateTimeOffset.UtcNow);
+                    (await repo.InsertAsync(message, uow, CancellationToken.None)).EnsureSuccess();
+                }
+
+                uow.Commit();
+            }
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(deadlineSeconds + 5));
+            var workerA = ActivatorUtilities.CreateInstance<OutboxPublisherWorker>(_services);
+            var workerB = ActivatorUtilities.CreateInstance<OutboxPublisherWorker>(_services);
+
+            var startedAt = DateTimeOffset.UtcNow;
+            var runA = workerA.StartAsync(cts.Token);
+            var runB = workerB.StartAsync(cts.Token);
+
+            var deadline = DateTime.UtcNow.AddSeconds(deadlineSeconds);
+            var processed = 0;
+            while (DateTime.UtcNow < deadline)
+            {
+                await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+                processed = await conn.ExecuteScalarAsync<int>(
+                    "SELECT COUNT(*) FROM outbox_messages WHERE type = @type AND processed_at IS NOT NULL",
+                    new { type = subject });
+
+                if (processed >= messageCount)
+                {
+                    break;
+                }
+
+                await Task.Delay(250);
+            }
+
+            var elapsed = DateTimeOffset.UtcNow - startedAt;
+
+            await Task.WhenAll(workerA.StopAsync(CancellationToken.None), workerB.StopAsync(CancellationToken.None));
+            await Task.WhenAll(runA, runB);
+
+            Assert.True(processed >= messageCount, $"Load target not reached in time. Processed={processed}, expected={messageCount}, deadline={deadlineSeconds}s.");
+
+            var throughput = processed / Math.Max(1d, elapsed.TotalSeconds);
+            Assert.True(
+                throughput >= minThroughputPerSecond,
+                $"Outbox throughput {throughput:F2}/s was below target {minThroughputPerSecond:F2}/s for {processed} messages in {elapsed.TotalSeconds:F2}s.");
         }
 
         // ---- helpers ---------------------------------------------------------

@@ -34,12 +34,32 @@ namespace KairoServer.Worker.Outbox
             CancellationToken stoppingToken)
         {
             _logger.Information(
-                "OutboxPublisherWorker started (worker {WorkerId}, batch {BatchSize}, parallel {Parallelism}, claim ttl {ClaimTtl}).",
+                "OutboxPublisherWorker started (worker {WorkerId}, claimers {Claimers}, batch {BatchSize}, publish parallel {Parallelism}, claim ttl {ClaimTtl}).",
                 _workerId,
+                _options.ClaimWorkerCount,
                 _options.BatchSize,
                 _options.MaxConcurrentPublishes,
                 _options.ClaimTtl);
 
+            using var throttle = new SemaphoreSlim(Math.Max(1, _options.MaxConcurrentPublishes));
+            var claimWorkers = new Task[Math.Max(1, _options.ClaimWorkerCount)];
+            for (var i = 0; i < claimWorkers.Length; i++)
+            {
+                claimWorkers[i] = RunClaimLoopAsync(i + 1, throttle, stoppingToken);
+            }
+
+            await Task.WhenAll(claimWorkers);
+
+            await ReleaseWorkerClaimsAsync();
+
+            _logger.Information("OutboxPublisherWorker stopped.");
+        }
+
+        private async Task RunClaimLoopAsync(
+            int claimerNumber,
+            SemaphoreSlim throttle,
+            CancellationToken stoppingToken)
+        {
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
@@ -53,21 +73,25 @@ namespace KairoServer.Worker.Outbox
 
                     if (messages.Count > 0)
                     {
-                        _logger.Debug("Fetched {Count} pending outbox message(s).", messages.Count);
+                        _logger.Debug("Claimer {ClaimerNumber} fetched {Count} pending outbox message(s).", claimerNumber, messages.Count);
+                        WorkerMetrics.TrackOutboxClaimed(messages.Count, "outbox-publisher");
                     }
 
-                    using var throttle = new SemaphoreSlim(Math.Max(1, _options.MaxConcurrentPublishes));
-                    var publishTasks = new Task[messages.Count];
+                    var batchResult = await ProcessBatchAsync(messages, throttle, stoppingToken);
 
-                    for (var i = 0; i < messages.Count; i++)
+                    if (messages.Count > 0)
                     {
-                        var message = messages[i];
-                        publishTasks[i] = ProcessMessageAsync(message, throttle, stoppingToken);
+                        _logger.Debug(
+                            "Claimer {ClaimerNumber} processed batch size {BatchSize} (published {Published}, retry {Retry}, failed {Failed}).",
+                            claimerNumber,
+                            messages.Count,
+                            batchResult.Published,
+                            batchResult.Retry,
+                            batchResult.Failed);
                     }
 
-                    await Task.WhenAll(publishTasks);
-
-                    await Task.Delay(_options.PollDelay, stoppingToken);
+                    var delay = messages.Count == 0 ? _options.EmptyPollDelay : _options.PollDelay;
+                    await Task.Delay(delay, stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {
@@ -75,17 +99,48 @@ namespace KairoServer.Worker.Outbox
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error(ex, "Unexpected error in OutboxPublisherWorker loop.");
+                    _logger.Error(ex, "Unexpected error in OutboxPublisherWorker claim loop {ClaimerNumber}.", claimerNumber);
                     await Task.Delay(_options.PollDelay, stoppingToken);
                 }
             }
-
-            await ReleaseWorkerClaimsAsync();
-
-            _logger.Information("OutboxPublisherWorker stopped.");
         }
 
-        private async Task ProcessMessageAsync(
+        private async Task<BatchResult> ProcessBatchAsync(
+            IReadOnlyList<Domain.Outbox.OutboxMessage> messages,
+            SemaphoreSlim throttle,
+            CancellationToken cancellationToken)
+        {
+            var publishTasks = new Task<PublishOutcome>[messages.Count];
+            for (var i = 0; i < messages.Count; i++)
+            {
+                publishTasks[i] = ProcessMessageAsync(messages[i], throttle, cancellationToken);
+            }
+
+            var outcomes = await Task.WhenAll(publishTasks);
+            var published = 0;
+            var retry = 0;
+            var failed = 0;
+
+            foreach (var outcome in outcomes)
+            {
+                switch (outcome)
+                {
+                    case PublishOutcome.Published:
+                        published++;
+                        break;
+                    case PublishOutcome.Retry:
+                        retry++;
+                        break;
+                    case PublishOutcome.Failed:
+                        failed++;
+                        break;
+                }
+            }
+
+            return new BatchResult(published, retry, failed);
+        }
+
+        private async Task<PublishOutcome> ProcessMessageAsync(
             Domain.Outbox.OutboxMessage message,
             SemaphoreSlim throttle,
             CancellationToken cancellationToken)
@@ -122,27 +177,59 @@ namespace KairoServer.Worker.Outbox
                         message.Type);
 
                     WorkerMetrics.TrackIngestionThroughput(message.Type);
+                    WorkerMetrics.TrackOutboxOutcome("published", message.Type);
                     WorkerMetrics.TrackWorkerProcessed("outbox-publisher", "published");
                     activity?.SetTag(KairoTelemetry.OutcomeTag, "published");
+                    return PublishOutcome.Published;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
+                    var failedAt = DateTimeOffset.UtcNow;
+                    var nextAttemptAt = CalculateNextAttemptAt(failedAt, message.AttemptCount);
+
                     _logger.Warning(
-                        "Failed to publish outbox message {OutboxId} (event {EventId}, type {Type}, attempt {Attempt}): {Error}. Releasing claim and incrementing attempt count.",
+                        "Failed to publish outbox message {OutboxId} (event {EventId}, type {Type}, attempt {Attempt}): {Error}. Releasing claim and scheduling retry for {NextAttemptAt}.",
                         message.Id,
                         message.EventId,
                         message.Type,
                         message.AttemptCount + 1,
-                        ex.Message);
+                        ex.Message,
+                        nextAttemptAt);
 
-                    var releaseResult = await _outbox.ReleaseClaimAfterFailureAsync(
-                        message.Id,
-                        _workerId,
-                        cancellationToken);
+                    try
+                    {
+                        var releaseResult = await _outbox.ReleaseClaimAfterFailureAsync(
+                            message.Id,
+                            _workerId,
+                            failedAt,
+                            nextAttemptAt,
+                            ex.Message,
+                            cancellationToken);
 
-                    releaseResult.EnsureSuccess();
-                    WorkerMetrics.TrackWorkerProcessed("outbox-publisher", "retry");
-                    activity?.SetTag(KairoTelemetry.OutcomeTag, "retry");
+                        releaseResult.EnsureSuccess();
+                        WorkerMetrics.TrackOutboxRetry(nextAttemptAt - failedAt, message.AttemptCount + 1, message.Type);
+                        WorkerMetrics.TrackOutboxOutcome("retry", message.Type);
+                        WorkerMetrics.TrackWorkerProcessed("outbox-publisher", "retry");
+                        activity?.SetTag(KairoTelemetry.OutcomeTag, "retry");
+                        return PublishOutcome.Retry;
+                    }
+                    catch (Exception releaseEx)
+                    {
+                        _logger.Error(
+                            releaseEx,
+                            "Failed to release and reschedule outbox message {OutboxId} for worker {WorkerId}.",
+                            message.Id,
+                            _workerId);
+
+                        WorkerMetrics.TrackWorkerProcessed("outbox-publisher", "failed");
+                        WorkerMetrics.TrackOutboxOutcome("failed", message.Type);
+                        activity?.SetTag(KairoTelemetry.OutcomeTag, "failed");
+                        return PublishOutcome.Failed;
+                    }
                 }
             }
             finally
@@ -174,6 +261,36 @@ namespace KairoServer.Worker.Outbox
             {
                 _logger.Warning("Failed to release outbox claims for worker {WorkerId}: {Error}", _workerId, ex.Message);
             }
+
+        }
+
+        private DateTimeOffset CalculateNextAttemptAt(DateTimeOffset failedAt, int attemptCount)
+        {
+            var cappedAttempt = Math.Clamp(attemptCount, 0, 30);
+            var exponent = Math.Pow(2, cappedAttempt);
+            var baseDelay = TimeSpan.FromMilliseconds(_options.FailureBackoffBaseDelay.TotalMilliseconds * exponent);
+            var maxDelay = _options.FailureBackoffMaxDelay;
+            var boundedDelay = baseDelay <= maxDelay ? baseDelay : maxDelay;
+
+            if (_options.FailureBackoffJitterRatio > 0)
+            {
+                var jitterSeconds = boundedDelay.TotalSeconds * _options.FailureBackoffJitterRatio;
+                var jitter = (Random.Shared.NextDouble() * 2d - 1d) * jitterSeconds;
+                boundedDelay = boundedDelay.Add(TimeSpan.FromSeconds(jitter));
+                if (boundedDelay < TimeSpan.Zero)
+                    boundedDelay = TimeSpan.Zero;
+            }
+
+            return failedAt.Add(boundedDelay);
+        }
+
+        private readonly record struct BatchResult(int Published, int Retry, int Failed);
+
+        private enum PublishOutcome
+        {
+            Published,
+            Retry,
+            Failed,
         }
     }
 }
