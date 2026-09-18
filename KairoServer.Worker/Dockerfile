@@ -2,8 +2,9 @@
 
 # This stage is used when running from VS in fast mode (Default for Debug configuration)
 FROM mcr.microsoft.com/dotnet/runtime:8.0 AS base
-USER $APP_UID
 WORKDIR /app
+USER $APP_UID
+ENV DOTNET_EnableDiagnostics=0
 
 
 # This stage is used to build the service project
@@ -11,6 +12,11 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["KairoServer.Worker/KairoServer.Worker.csproj", "KairoServer.Worker/"]
+COPY ["KairoServer.Application/KairoServer.Application.csproj", "KairoServer.Application/"]
+COPY ["KairoServer.Common/KairoServer.Common.csproj", "KairoServer.Common/"]
+COPY ["KairoServer.Contracts/KairoServer.Contracts.csproj", "KairoServer.Contracts/"]
+COPY ["KairoServer.Domain/KairoServer.Domain.csproj", "KairoServer.Domain/"]
+COPY ["KairoServer.Infastructure/KairoServer.Infastructure.csproj", "KairoServer.Infastructure/"]
 RUN dotnet restore "./KairoServer.Worker/KairoServer.Worker.csproj"
 COPY . .
 WORKDIR "/src/KairoServer.Worker"

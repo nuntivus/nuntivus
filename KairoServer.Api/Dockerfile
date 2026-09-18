@@ -2,10 +2,14 @@
 
 # This stage is used when running from VS in fast mode (Default for Debug configuration)
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-USER $APP_UID
 WORKDIR /app
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends wget \
+	&& rm -rf /var/lib/apt/lists/*
+USER $APP_UID
+ENV ASPNETCORE_URLS=http://+:8080
+ENV DOTNET_EnableDiagnostics=0
 EXPOSE 8080
-EXPOSE 8081
 
 
 # This stage is used to build the service project
@@ -13,6 +17,11 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["KairoServer.Api/KairoServer.Api.csproj", "KairoServer.Api/"]
+COPY ["KairoServer.Application/KairoServer.Application.csproj", "KairoServer.Application/"]
+COPY ["KairoServer.Common/KairoServer.Common.csproj", "KairoServer.Common/"]
+COPY ["KairoServer.Contracts/KairoServer.Contracts.csproj", "KairoServer.Contracts/"]
+COPY ["KairoServer.Domain/KairoServer.Domain.csproj", "KairoServer.Domain/"]
+COPY ["KairoServer.Infastructure/KairoServer.Infastructure.csproj", "KairoServer.Infastructure/"]
 RUN dotnet restore "./KairoServer.Api/KairoServer.Api.csproj"
 COPY . .
 WORKDIR "/src/KairoServer.Api"
@@ -27,4 +36,5 @@ RUN dotnet publish "./KairoServer.Api.csproj" -c $BUILD_CONFIGURATION -o /app/pu
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD wget -qO- http://localhost:8080/health/ready || exit 1
 ENTRYPOINT ["dotnet", "KairoServer.Api.dll"]

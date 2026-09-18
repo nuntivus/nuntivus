@@ -1182,6 +1182,15 @@ and should remain deployable with:
 docker compose up -d
 ```
 
+Production operations guides:
+
+- [Self-hosting operations index](docs/self-hosting/README.md)
+- [Production configuration guide](docs/self-hosting/production-configuration.md)
+- [Backup guide](docs/self-hosting/backup.md)
+- [Restore guide](docs/self-hosting/restore.md)
+- [Upgrade guide](docs/self-hosting/upgrade.md)
+- [Deployment examples](docs/self-hosting/deployment-examples.md)
+
 Small installations can run with a minimal number of processes.
 
 Larger installations can independently scale:

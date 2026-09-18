@@ -1,0 +1,130 @@
+services:
+  postgres:
+    image: ${KAIRO_POSTGRES_IMAGE}
+    container_name: kairo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${KAIRO_POSTGRES_DB}
+      POSTGRES_USER: ${KAIRO_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${KAIRO_POSTGRES_PASSWORD}
+    ports:
+      - "${KAIRO_POSTGRES_PORT}:5432"
+    volumes:
+      - kairo-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KAIRO_POSTGRES_USER} -d ${KAIRO_POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  nats:
+    image: ${KAIRO_NATS_IMAGE}
+    container_name: kairo-nats
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "${KAIRO_NATS_CLIENT_PORT}:4222"
+      - "${KAIRO_NATS_MONITOR_PORT}:8222"
+    volumes:
+      - kairo-nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migrate:
+    image: ${KAIRO_POSTGRES_IMAGE}
+    container_name: kairo-migrate
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${KAIRO_POSTGRES_PASSWORD}
+      KAIRO_POSTGRES_DB: ${KAIRO_POSTGRES_DB}
+      KAIRO_POSTGRES_USER: ${KAIRO_POSTGRES_USER}
+    volumes:
+      - ./:/migrations:ro
+    entrypoint: ["/bin/sh", "-ec"]
+    command: |
+      psql -h postgres -U "$KAIRO_POSTGRES_USER" -d "$KAIRO_POSTGRES_DB" -v ON_ERROR_STOP=1 <<'SQL'
+      CREATE TABLE IF NOT EXISTS schema_migrations
+      (
+          filename TEXT PRIMARY KEY,
+          applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      SQL
+
+      for file in /migrations/0*.sql; do
+        name="$(basename "$file")"
+        applied=$(psql -h postgres -U "$KAIRO_POSTGRES_USER" -d "$KAIRO_POSTGRES_DB" -tAc "SELECT 1 FROM schema_migrations WHERE filename='${name}'")
+        if [ "$applied" = "1" ]; then
+          echo "Skipping already-applied migration: $name"
+          continue
+        fi
+
+        echo "Applying migration: $name"
+        psql -h postgres -U "$KAIRO_POSTGRES_USER" -d "$KAIRO_POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$file"
+        psql -h postgres -U "$KAIRO_POSTGRES_USER" -d "$KAIRO_POSTGRES_DB" -v ON_ERROR_STOP=1 -c "INSERT INTO schema_migrations(filename) VALUES ('$name')"
+      done
+
+  api:
+    image: kairo-api:${KAIRO_IMAGE_TAG}
+    container_name: kairo-api
+    build:
+      context: .
+      dockerfile: KairoServer.Api/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${KAIRO_ENVIRONMENT}
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${KAIRO_POSTGRES_DB};Username=${KAIRO_POSTGRES_USER};Password=${KAIRO_POSTGRES_PASSWORD}
+      DestinationCredentials__EncryptionKey: ${KAIRO_DESTINATION_CREDENTIALS_KEY}
+      HostOptions__ShutdownTimeout: 00:00:${KAIRO_SHUTDOWN_TIMEOUT_SECONDS}
+    ports:
+      - "${KAIRO_API_PORT}:8080"
+    stop_grace_period: 40s
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  worker:
+    image: kairo-worker:${KAIRO_IMAGE_TAG}
+    container_name: kairo-worker
+    build:
+      context: .
+      dockerfile: KairoServer.Worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DOTNET_ENVIRONMENT: ${KAIRO_ENVIRONMENT}
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${KAIRO_POSTGRES_DB};Username=${KAIRO_POSTGRES_USER};Password=${KAIRO_POSTGRES_PASSWORD}
+      Nats__Url: ${KAIRO_NATS_URL}
+      Nats__Stream: ${KAIRO_NATS_STREAM}
+      Nats__Subjects__0: event.>
+      Nats__Subjects__1: delivery.>
+      DestinationCredentials__EncryptionKey: ${KAIRO_DESTINATION_CREDENTIALS_KEY}
+      OpenTelemetry__OtlpEndpoint: ${KAIRO_OTLP_ENDPOINT}
+      HostOptions__ShutdownTimeout: 00:00:${KAIRO_SHUTDOWN_TIMEOUT_SECONDS}
+    stop_grace_period: 40s
+
+volumes:
+  kairo-postgres-data:
+  kairo-nats-data:

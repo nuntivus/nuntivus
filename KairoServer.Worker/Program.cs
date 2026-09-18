@@ -27,6 +27,14 @@ using OpenTelemetry.Trace;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+var shutdownTimeout = builder.Configuration.GetValue<TimeSpan?>("HostOptions:ShutdownTimeout")
+    ?? TimeSpan.FromSeconds(30);
+
+builder.Services.Configure<HostOptions>(options =>
+{
+    options.ShutdownTimeout = shutdownTimeout;
+});
+
 // Logging
 builder.AddKairoLogging();
 
