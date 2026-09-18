@@ -21,32 +21,51 @@ namespace KairoServer.Infastructure.Persistence.Postgres
 
         public async Task<Result<IReadOnlyList<OutboxMessage>>> GetPendingAsync(
             int batchSize,
+            string workerId,
+            TimeSpan claimTtl,
             CancellationToken cancellationToken)
         {
             try
             {
                 const string sql = """
-                SELECT
-                    id            AS Id,
-                    event_id      AS EventId,
-                    type          AS Type,
-                    payload::text AS Payload,
-                    created_at    AS CreatedAt,
-                    processed_at  AS ProcessedAt,
-                    attempt_count AS AttemptCount
-                FROM outbox_messages
-                WHERE processed_at IS NULL
-                ORDER BY created_at
-                LIMIT @BatchSize
-                FOR UPDATE SKIP LOCKED;
+                WITH candidates AS (
+                    SELECT id
+                    FROM outbox_messages
+                    WHERE processed_at IS NULL
+                      AND (claim_expires_at IS NULL OR claim_expires_at <= @Now)
+                    ORDER BY created_at
+                    LIMIT @BatchSize
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE outbox_messages o
+                SET claimed_by = @WorkerId,
+                    claim_expires_at = @ClaimExpiresAt
+                FROM candidates c
+                WHERE o.id = c.id
+                RETURNING
+                    o.id            AS Id,
+                    o.event_id      AS EventId,
+                    o.type          AS Type,
+                    o.payload::text AS Payload,
+                    o.created_at    AS CreatedAt,
+                    o.processed_at  AS ProcessedAt,
+                    o.attempt_count AS AttemptCount;
                 """;
 
                 using var connection = _connectionFactory.CreateConnection();
 
+                var now = DateTimeOffset.UtcNow;
+
                 var rows = await connection.QueryAsync<OutboxRow>(
                     new CommandDefinition(
                         sql,
-                        new { BatchSize = batchSize },
+                        new
+                        {
+                            BatchSize = batchSize,
+                            WorkerId = workerId,
+                            Now = now,
+                            ClaimExpiresAt = now.Add(claimTtl),
+                        },
                         cancellationToken: cancellationToken));
 
                 return Result.Success<IReadOnlyList<OutboxMessage>>(rows
@@ -69,23 +88,31 @@ namespace KairoServer.Infastructure.Persistence.Postgres
 
         public async Task<Result> MarkProcessedAsync(
             Guid id,
+            string workerId,
             CancellationToken cancellationToken)
         {
             try
             {
                 const string sql = """
                 UPDATE outbox_messages
-                SET processed_at = NOW()
-                WHERE id = @Id;
+                SET processed_at = @Now,
+                    claimed_by = NULL,
+                    claim_expires_at = NULL
+                WHERE id = @Id
+                  AND processed_at IS NULL
+                  AND claimed_by = @WorkerId;
                 """;
 
                 using var connection = _connectionFactory.CreateConnection();
 
-                await connection.ExecuteAsync(
+                var rows = await connection.ExecuteAsync(
                     new CommandDefinition(
                         sql,
-                        new { Id = id },
+                        new { Id = id, WorkerId = workerId, Now = DateTimeOffset.UtcNow },
                         cancellationToken: cancellationToken));
+
+                if (rows == 0)
+                    return Result.Failure("outbox.claim", $"Outbox message '{id}' is not claimed by worker '{workerId}'.");
 
                 return Result.Success();
             }
@@ -95,31 +122,69 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
-        public async Task<Result> IncrementAttemptAsync(
+        public async Task<Result> ReleaseClaimAfterFailureAsync(
             Guid id,
+            string workerId,
             CancellationToken cancellationToken)
         {
             try
             {
                 const string sql = """
                 UPDATE outbox_messages
-                SET attempt_count = attempt_count + 1
-                WHERE id = @Id;
+                SET attempt_count = attempt_count + 1,
+                    claimed_by = NULL,
+                    claim_expires_at = NULL
+                WHERE id = @Id
+                  AND processed_at IS NULL
+                  AND claimed_by = @WorkerId;
                 """;
 
                 using var connection = _connectionFactory.CreateConnection();
 
-                await connection.ExecuteAsync(
+                var rows = await connection.ExecuteAsync(
                     new CommandDefinition(
                         sql,
-                        new { Id = id },
+                        new { Id = id, WorkerId = workerId },
                         cancellationToken: cancellationToken));
+
+                if (rows == 0)
+                    return Result.Failure("outbox.claim", $"Outbox message '{id}' is not claimed by worker '{workerId}'.");
 
                 return Result.Success();
             }
             catch (Exception ex)
             {
                 return Result.Failure(ex);
+            }
+        }
+
+        public async Task<Result<int>> ReleaseExpiredClaimsAsync(
+            string workerId,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                UPDATE outbox_messages
+                SET claimed_by = NULL,
+                    claim_expires_at = NULL
+                WHERE processed_at IS NULL
+                  AND claimed_by = @WorkerId;
+                """;
+
+                using var connection = _connectionFactory.CreateConnection();
+
+                var rows = await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        sql,
+                        new { WorkerId = workerId },
+                        cancellationToken: cancellationToken));
+
+                return Result.Success(rows);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<int>(ex);
             }
         }
 

@@ -7,6 +7,8 @@ CREATE TABLE outbox_messages
     created_at    timestamptz NOT NULL,
     processed_at  timestamptz NULL,
     attempt_count integer     NOT NULL DEFAULT 0,
+    claimed_by    text        NULL,
+    claim_expires_at timestamptz NULL,
     CONSTRAINT fk_outbox_messages_event
         FOREIGN KEY (event_id)
         REFERENCES events (id)

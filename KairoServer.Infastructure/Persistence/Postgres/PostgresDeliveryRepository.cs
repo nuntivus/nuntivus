@@ -129,6 +129,80 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        public async Task<Result<Delivery?>> TryClaimForDispatchAsync(
+            Guid deliveryId,
+            DateTimeOffset expectedUpdatedAt,
+            DateTimeOffset now,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                    UPDATE deliveries
+                    SET status = @InFlightStatus,
+                        attempt_count = attempt_count + 1,
+                        next_attempt_at = NULL,
+                        updated_at = @Now
+                    WHERE id = @Id
+                      AND updated_at = @ExpectedUpdatedAt
+                      AND (
+                            status = @PendingStatus
+                            OR (
+                                status = @FailedStatus
+                                AND next_attempt_at IS NOT NULL
+                                AND next_attempt_at <= @Now
+                            )
+                          )
+                    RETURNING
+                        id,
+                        event_id AS EventId,
+                        contract_id AS ContractId,
+                        customer_id AS CustomerId,
+                        event_type AS EventType,
+                        payload::text AS Payload,
+                        transformation_config::text AS TransformationConfig,
+                        rate_limit_per_second AS RateLimitPerSecond,
+                        rate_limit_per_minute AS RateLimitPerMinute,
+                        rate_limit_burst AS RateLimitBurst,
+                        ordering_enabled AS OrderingEnabled,
+                        ordering_key AS OrderingKey,
+                        destination_type AS DestinationType,
+                        destination_config::text AS DestinationConfig,
+                        status,
+                        attempt_count AS AttemptCount,
+                        last_error AS LastError,
+                        next_attempt_at AS NextAttemptAt,
+                        created_at AS CreatedAt,
+                        updated_at AS UpdatedAt;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                var row = await connection.QuerySingleOrDefaultAsync<DeliveryRow>(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        Id = deliveryId,
+                        ExpectedUpdatedAt = expectedUpdatedAt,
+                        Now = now,
+                        PendingStatus = DeliveryStatus.Pending.ToString(),
+                        FailedStatus = DeliveryStatus.Failed.ToString(),
+                        InFlightStatus = DeliveryStatus.InFlight.ToString(),
+                    },
+                    cancellationToken: cancellationToken));
+
+                if (row is null)
+                    return Result.Success<Delivery?>(null);
+
+                return Result.Success<Delivery?>(MapDelivery(row));
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<Delivery?>(ex);
+            }
+        }
+
         public async Task<Result<bool>> ScheduleNextAttemptAsync(
             Guid deliveryId,
             DateTimeOffset expectedUpdatedAt,
@@ -173,6 +247,60 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             catch (Exception ex)
             {
                 return Result.Failure<bool>(ex);
+            }
+        }
+
+        public async Task<Result<int>> RecoverStaleInFlightAsync(
+            DateTimeOffset staleBefore,
+            DateTimeOffset now,
+            int batchSize,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (batchSize <= 0)
+                    return Result.Success(0);
+
+                const string sql = """
+                    WITH candidates AS (
+                        SELECT id
+                        FROM deliveries
+                        WHERE status = @InFlightStatus
+                          AND updated_at < @StaleBefore
+                        ORDER BY updated_at ASC
+                        LIMIT @BatchSize
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE deliveries d
+                    SET status = @FailedStatus,
+                        last_error = @RecoveryError,
+                        next_attempt_at = @Now,
+                        updated_at = @Now
+                    FROM candidates c
+                    WHERE d.id = c.id;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                var rows = await connection.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        StaleBefore = staleBefore,
+                        BatchSize = batchSize,
+                        Now = now,
+                        InFlightStatus = DeliveryStatus.InFlight.ToString(),
+                        FailedStatus = DeliveryStatus.Failed.ToString(),
+                        RecoveryError = "Recovered stale in-flight delivery after worker interruption.",
+                    },
+                    cancellationToken: cancellationToken));
+
+                return Result.Success(rows);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<int>(ex);
             }
         }
 

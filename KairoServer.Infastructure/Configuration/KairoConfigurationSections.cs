@@ -10,8 +10,10 @@ namespace KairoServer.Infastructure.Configuration
         public const string EndpointSecurity = "EndpointSecurity";
         public const string LegacyDestinationSecurity = "DestinationSecurity";
         public const string Delivery = "Delivery";
+        public const string DeliveryRecovery = "DeliveryRecovery";
         public const string DeliveryDispatcher = "DeliveryDispatcher";
         public const string DeliveryOrdering = "DeliveryOrdering";
+        public const string Outbox = "Outbox";
         public const string RetentionCleanup = "RetentionCleanup";
         public const string Nats = "Nats";
         public const string Matcher = "Matcher";

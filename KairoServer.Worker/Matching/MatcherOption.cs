@@ -24,6 +24,11 @@ namespace KairoServer.Worker.Matching
         public int BatchSize { get; set; } = 32;
 
         /// <summary>
+        /// Maximum number of messages processed in parallel per worker instance.
+        /// </summary>
+        public int MaxConcurrentMessages { get; set; } = 8;
+
+        /// <summary>
         /// Maximum time a fetch waits for messages before returning empty.
         /// </summary>
         public TimeSpan FetchTimeout { get; set; } = TimeSpan.FromSeconds(5);

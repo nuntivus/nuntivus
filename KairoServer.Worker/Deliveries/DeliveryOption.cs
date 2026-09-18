@@ -12,6 +12,7 @@ namespace KairoServer.Worker.Deliveries
         public string DurableName { get; set; } = "delivery-dispatcher";
         public string FilterSubject { get; set; } = "delivery.ready";
         public int BatchSize { get; set; } = 32;
+        public int MaxConcurrentMessages { get; set; } = 8;
         public TimeSpan FetchTimeout { get; set; } = TimeSpan.FromSeconds(5);
         public TimeSpan NakDelay { get; set; } = TimeSpan.FromSeconds(2);
         public int MaxAckPending { get; set; } = 500;

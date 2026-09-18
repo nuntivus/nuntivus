@@ -185,6 +185,53 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Two_outbox_workers_do_not_double_publish_same_row()
+        {
+            await SeedCustomerAsync("acme");
+            await SeedContractAsync("acme", new[] { "orders.created" });
+            var @event = await SeedEventAsync("orders.created");
+
+            var js = _services.GetRequiredService<INatsJSContext>();
+            var natsOption = _services.GetRequiredService<Infastructure.Messaging.Nats.NatsOption>();
+            await EnsureStreamAsync(js, natsOption);
+
+            var matcher = _services.GetRequiredService<IContractMatcherService>();
+            (await matcher.MatchAsync(
+                new EventAccepted(@event.Id, @event.Type, @event.SourceId, @event.OccurredAt),
+                CancellationToken.None)).EnsureSuccess();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var workerA = ActivatorUtilities.CreateInstance<OutboxPublisherWorker>(_services);
+            var workerB = ActivatorUtilities.CreateInstance<OutboxPublisherWorker>(_services);
+            var runA = workerA.StartAsync(cts.Token);
+            var runB = workerB.StartAsync(cts.Token);
+
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            while (DateTime.UtcNow < deadline)
+            {
+                await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+                var processed = await conn.ExecuteScalarAsync<long>(
+                    "SELECT COUNT(*) FROM outbox_messages WHERE type = @t AND event_id = @e AND processed_at IS NOT NULL",
+                    new { t = OutboxMessageType.DeliveryReady, e = @event.Id });
+                if (processed == 1)
+                {
+                    break;
+                }
+
+                await Task.Delay(200);
+            }
+
+            await Task.WhenAll(workerA.StopAsync(CancellationToken.None), workerB.StopAsync(CancellationToken.None));
+            await Task.WhenAll(runA, runB);
+
+            await using var verifyConn = new NpgsqlConnection(_fixture.ConnectionString);
+            var processedRows = await verifyConn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM outbox_messages WHERE type = @t AND event_id = @e AND processed_at IS NOT NULL",
+                new { t = OutboxMessageType.DeliveryReady, e = @event.Id });
+            Assert.Equal(1, processedRows);
+        }
+
+        [Fact]
         public async Task Duplicate_publish_with_same_message_id_is_deduped_by_jetstream()
         {
             var js = _services.GetRequiredService<INatsJSContext>();
@@ -193,16 +240,16 @@ namespace KairoServer.IntegrationTests
 
             var publisher = _services.GetRequiredService<IEventBusPublisher>();
             var msgId = Guid.NewGuid().ToString();
+            var subject = $"delivery.dedupe.{Guid.NewGuid():N}";
             var payload = JsonSerializer.Serialize(new DeliveryReady(
                 Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
                 "acme", "orders.created", "{}", DateTimeOffset.UtcNow));
 
-            (await publisher.PublishAsync("delivery.ready", payload, msgId, CancellationToken.None)).EnsureSuccess();
-            (await publisher.PublishAsync("delivery.ready", payload, msgId, CancellationToken.None)).EnsureSuccess();
+            (await publisher.PublishAsync(subject, payload, msgId, CancellationToken.None)).EnsureSuccess();
+            await publisher.PublishAsync(subject, payload, msgId, CancellationToken.None);
 
-            var stream = await js.GetStreamAsync(natsOption.Stream);
-            // Only one message stored despite two publishes with the same Nats-Msg-Id.
-            Assert.Equal(1L, (long)stream.Info.State.Messages);
+            var received = await FetchCountAsync(js, natsOption.Stream, subject, $"dup-{Guid.NewGuid():N}", expected: 2);
+            Assert.Equal(1, received);
         }
 
         [Fact]
@@ -214,8 +261,9 @@ namespace KairoServer.IntegrationTests
 
             // Insert an outbox row on a subject NOT captured by any stream — publish
             // will fail because JetStream rejects "no stream matched subject".
+            var @event = await SeedEventAsync("orders.created");
             var badMessage = OutboxMessage.Create(
-                Guid.NewGuid(),
+                @event.Id,
                 type: "nomatch.subject",
                 payload: "{\"x\":1}",
                 createdAt: DateTimeOffset.UtcNow);

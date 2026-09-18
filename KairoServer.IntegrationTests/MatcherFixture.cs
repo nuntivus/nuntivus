@@ -17,6 +17,7 @@ using KairoServer.Infastructure.Messaging.Nats;
 using KairoServer.Infastructure.Persistence.Caching;
 using KairoServer.Infastructure.Persistence.Postgres;
 using KairoServer.Worker.Matching;
+using KairoServer.Worker.Outbox;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -132,10 +133,19 @@ namespace KairoServer.IntegrationTests
             {
                 DurableName = matcherDurable ?? "contract-matcher",
                 BatchSize = 16,
+                MaxConcurrentMessages = 4,
                 FetchTimeout = TimeSpan.FromSeconds(1),
                 NakDelay = TimeSpan.FromMilliseconds(200),
             };
             services.AddSingleton(matcherOption);
+
+            services.AddSingleton(new OutboxOption
+            {
+                BatchSize = 32,
+                PollDelay = TimeSpan.FromMilliseconds(100),
+                MaxConcurrentPublishes = 4,
+                ClaimTtl = TimeSpan.FromSeconds(30),
+            });
 
             services.AddSingleton<INatsConnection>(sp =>
                 new NatsConnection(NatsOpts.Default with { Url = natsOption.Url, Name = natsOption.Name }));

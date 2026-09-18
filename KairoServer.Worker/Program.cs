@@ -137,6 +137,20 @@ builder.Services
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<MatcherOption>>().Value);
 
 builder.Services
+    .AddOptions<OutboxOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.Outbox))
+    .Validate(WorkerConfigurationValidation.IsOutboxValid, "Outbox configuration is invalid.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<OutboxOption>>().Value);
+
+builder.Services
+    .AddOptions<DeliveryRecoveryOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.DeliveryRecovery))
+    .Validate(WorkerConfigurationValidation.IsDeliveryRecoveryValid, "DeliveryRecovery configuration is invalid.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DeliveryRecoveryOption>>().Value);
+
+builder.Services
     .AddOptions<WorkerRuntimeOption>()
     .Bind(builder.Configuration.GetSection("Worker"))
     .Validate(WorkerConfigurationValidation.IsRuntimeValid, "Worker configuration is invalid. Enable at least one hosted worker.")
@@ -266,6 +280,11 @@ if (workerRuntime.EnableContractMatcher)
 if (workerRuntime.EnableDeliveryDispatcher)
 {
     builder.Services.AddHostedService<DeliveryDispatcherWorker>();
+}
+
+if (workerRuntime.EnableDeliveryRecovery)
+{
+    builder.Services.AddHostedService<DeliveryRecoveryWorker>();
 }
 
 if (workerRuntime.EnableRetentionCleanup)

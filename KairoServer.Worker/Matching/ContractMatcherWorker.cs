@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
@@ -49,8 +50,8 @@ namespace KairoServer.Worker.Matching
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.Information(
-                "ContractMatcherWorker starting (stream {Stream}, durable {Durable}, filter {Filter}).",
-                _natsOptions.Stream, _matcherOptions.DurableName, _matcherOptions.FilterSubject);
+                "ContractMatcherWorker starting (stream {Stream}, durable {Durable}, filter {Filter}, parallelism {Parallelism}).",
+                _natsOptions.Stream, _matcherOptions.DurableName, _matcherOptions.FilterSubject, _matcherOptions.MaxConcurrentMessages);
 
             var consumer = await CreateConsumerAsync(stoppingToken);
 
@@ -64,9 +65,18 @@ namespace KairoServer.Worker.Matching
             {
                 try
                 {
+                    using var throttle = new SemaphoreSlim(Math.Max(1, _matcherOptions.MaxConcurrentMessages));
+                    var processTasks = new List<Task>();
+
                     await foreach (var msg in consumer.FetchAsync<byte[]>(fetchOpts, cancellationToken: stoppingToken))
                     {
-                        await ProcessMessageAsync(msg, stoppingToken);
+                        await throttle.WaitAsync(stoppingToken);
+                        processTasks.Add(ProcessWithThrottleAsync(msg, throttle, stoppingToken));
+                    }
+
+                    if (processTasks.Count > 0)
+                    {
+                        await Task.WhenAll(processTasks);
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -86,6 +96,21 @@ namespace KairoServer.Worker.Matching
             }
 
             _logger.Information("ContractMatcherWorker stopped.");
+        }
+
+        private async Task ProcessWithThrottleAsync(
+            NatsJSMsg<byte[]> msg,
+            SemaphoreSlim throttle,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                await ProcessMessageAsync(msg, cancellationToken);
+            }
+            finally
+            {
+                throttle.Release();
+            }
         }
 
         private async Task<INatsJSConsumer> CreateConsumerAsync(CancellationToken cancellationToken)

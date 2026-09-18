@@ -8,6 +8,8 @@ namespace KairoServer.Worker.Configuration
 
         public bool EnableDeliveryDispatcher { get; set; } = true;
 
+        public bool EnableDeliveryRecovery { get; set; } = true;
+
         public bool EnableRetentionCleanup { get; set; } = true;
     }
 }

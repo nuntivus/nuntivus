@@ -11,14 +11,22 @@ namespace KairoServer.Application.Persistence
     {
         Task<Result<IReadOnlyList<OutboxMessage>>> GetPendingAsync(
             int batchSize,
+            string workerId,
+            TimeSpan claimTtl,
             CancellationToken cancellationToken);
 
         Task<Result> MarkProcessedAsync(
             Guid id,
+            string workerId,
             CancellationToken cancellationToken);
 
-        Task<Result> IncrementAttemptAsync(
+        Task<Result> ReleaseClaimAfterFailureAsync(
             Guid id,
+            string workerId,
+            CancellationToken cancellationToken);
+
+        Task<Result<int>> ReleaseExpiredClaimsAsync(
+            string workerId,
             CancellationToken cancellationToken);
     }
 }

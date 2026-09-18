@@ -1,0 +1,11 @@
+using System;
+
+namespace KairoServer.Worker.Deliveries
+{
+    public sealed class DeliveryRecoveryOption
+    {
+        public TimeSpan RunInterval { get; set; } = TimeSpan.FromSeconds(30);
+        public TimeSpan StaleInFlightAfter { get; set; } = TimeSpan.FromMinutes(5);
+        public int BatchSize { get; set; } = 200;
+    }
+}

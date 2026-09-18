@@ -118,6 +118,9 @@ namespace KairoServer.UnitTests.Matching
             public Task<Result<Delivery?>> GetByIdAsync(Guid deliveryId, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success<Delivery?>(null));
 
+            public Task<Result<Delivery?>> TryClaimForDispatchAsync(Guid deliveryId, DateTimeOffset expectedUpdatedAt, DateTimeOffset now, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success<Delivery?>(null));
+
             public Task<Result<bool>> UpdateAsync(Delivery delivery, DateTimeOffset expectedUpdatedAt, IUnitOfWork uow, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(true));
 
@@ -135,6 +138,9 @@ namespace KairoServer.UnitTests.Matching
 
             public Task<Result<bool>> ScheduleNextAttemptAsync(Guid deliveryId, DateTimeOffset expectedUpdatedAt, DateTimeOffset nextAttemptAt, IUnitOfWork uow, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(true));
+
+            public Task<Result<int>> RecoverStaleInFlightAsync(DateTimeOffset staleBefore, DateTimeOffset now, int batchSize, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(0));
         }
 
         private sealed class FakeOutboxRepository : IOutboxRepository

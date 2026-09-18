@@ -86,6 +86,40 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Dispatch_concurrent_calls_claim_once_and_execute_single_attempt()
+        {
+            var (deliveryId, _) = await SeedDeliveryAsync(_server.Url);
+            _server.Enqueue(async ctx =>
+            {
+                await Task.Delay(300);
+                ctx.Response.StatusCode = 200;
+                await ctx.Response.WriteAsync("ok");
+            });
+
+            var dispatcherA = BuildDispatcher();
+            var dispatcherB = BuildDispatcher();
+
+            var taskA = dispatcherA.DispatchAsync(deliveryId, CancellationToken.None);
+            var taskB = dispatcherB.DispatchAsync(deliveryId, CancellationToken.None);
+            await Task.WhenAll(taskA, taskB);
+
+            taskA.Result.EnsureSuccess();
+            taskB.Result.EnsureSuccess();
+
+            var outcomes = new[] { taskA.Result.Value, taskB.Result.Value };
+            Assert.Equal(1, outcomes.Count(o => o == DeliveryDispatchOutcome.Delivered));
+            Assert.Equal(1, outcomes.Count(o => o == DeliveryDispatchOutcome.Skipped));
+
+            var (status, attemptCount, _, _) = await ReadDeliveryAsync(deliveryId);
+            Assert.Equal("Delivered", status);
+            Assert.Equal(1, attemptCount);
+
+            var attempts = await ReadAttemptsAsync(deliveryId);
+            Assert.Single(attempts);
+            Assert.Single(_server.Received);
+        }
+
+        [Fact]
         public async Task Dispatch_transient_5xx_schedules_retry_and_records_status()
         {
             var (deliveryId, _) = await SeedDeliveryAsync(_server.Url);

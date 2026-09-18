@@ -30,6 +30,19 @@ namespace KairoServer.Application.Persistence
             CancellationToken cancellationToken);
 
         /// <summary>
+        /// Atomically claims a delivery for active execution by transitioning the
+        /// row to <see cref="DeliveryStatus.InFlight"/> and incrementing
+        /// <c>attempt_count</c>. Returns the claimed row, or <c>null</c> when the
+        /// optimistic guard failed (already claimed/updated by another worker) or
+        /// the row is not currently eligible.
+        /// </summary>
+        Task<Result<Delivery?>> TryClaimForDispatchAsync(
+            Guid deliveryId,
+            DateTimeOffset expectedUpdatedAt,
+            DateTimeOffset now,
+            CancellationToken cancellationToken);
+
+        /// <summary>
         /// Persists the current state of a <see cref="Delivery"/> back to the
         /// store. Uses the row's <c>updated_at</c> as an optimistic guard so
         /// concurrent dispatchers cannot clobber each other's transitions.
@@ -70,6 +83,18 @@ namespace KairoServer.Application.Persistence
             DateTimeOffset expectedUpdatedAt,
             DateTimeOffset nextAttemptAt,
             IUnitOfWork uow,
+            CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Recovers abandoned in-flight deliveries by moving rows whose
+        /// <c>updated_at</c> is older than <paramref name="staleBefore"/> back to
+        /// retryable <see cref="DeliveryStatus.Failed"/> with
+        /// <c>next_attempt_at = now</c>.
+        /// </summary>
+        Task<Result<int>> RecoverStaleInFlightAsync(
+            DateTimeOffset staleBefore,
+            DateTimeOffset now,
+            int batchSize,
             CancellationToken cancellationToken);
     }
 }

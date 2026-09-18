@@ -140,16 +140,48 @@ namespace KairoServer.Application.Deliveries.Execution
                 return Result.Success(DeliveryDispatchOutcome.Skipped);
             }
 
-            try
+            if (delivery.OrderingEnabled)
             {
-                delivery.MarkInFlight(now);
+                try
+                {
+                    delivery.MarkInFlight(now);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    _logger.Warning(
+                        "Delivery {DeliveryId} cannot transition to InFlight ({Status}): {Error}.",
+                        delivery.Id, delivery.Status, ex.Message);
+                    return Result.Success(DeliveryDispatchOutcome.Skipped);
+                }
             }
-            catch (InvalidOperationException ex)
+            else
             {
-                _logger.Warning(
-                    "Delivery {DeliveryId} cannot transition to InFlight ({Status}): {Error}.",
-                    delivery.Id, delivery.Status, ex.Message);
-                return Result.Success(DeliveryDispatchOutcome.Skipped);
+                var claimResult = await _deliveries.TryClaimForDispatchAsync(
+                    delivery.Id,
+                    expectedUpdatedAt,
+                    now,
+                    cancellationToken);
+                if (claimResult.IsFailure)
+                    return Result.Failure<DeliveryDispatchOutcome>(claimResult.Error!);
+
+                var claimedDelivery = claimResult.Value;
+                if (claimedDelivery is null)
+                {
+                    _logger.Information(
+                        "Delivery {DeliveryId} was already claimed/updated by another worker.",
+                        delivery.Id);
+                    await _metrics.TrackDispatchOutcomeAsync(
+                        "concurrency_skipped",
+                        delivery.EventId,
+                        delivery.Id,
+                        delivery.ContractId,
+                        cancellationToken);
+                    activity?.SetTag(KairoTelemetry.OutcomeTag, "concurrency_skipped");
+                    return Result.Success(DeliveryDispatchOutcome.Skipped);
+                }
+
+                delivery = claimedDelivery;
+                expectedUpdatedAt = delivery.UpdatedAt;
             }
 
             var attemptNumber = delivery.AttemptCount;
