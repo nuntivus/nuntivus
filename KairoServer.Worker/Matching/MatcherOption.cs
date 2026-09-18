@@ -7,6 +7,8 @@ namespace KairoServer.Worker.Matching
     /// </summary>
     public sealed class MatcherOption
     {
+        public string WorkerName { get; set; } = "contract-matcher";
+
         /// <summary>
         /// Durable consumer name shared by all matcher worker replicas so
         /// JetStream distributes messages across them.
@@ -43,5 +45,15 @@ namespace KairoServer.Worker.Matching
         /// JetStream <c>MaxAckPending</c> cap for the durable consumer.
         /// </summary>
         public int MaxAckPending { get; set; } = 1000;
+
+        /// <summary>
+        /// Time JetStream waits for an ACK before automatic redelivery.
+        /// </summary>
+        public TimeSpan AckWait { get; set; } = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// Maximum times JetStream will redeliver the same message before poison handling.
+        /// </summary>
+        public int MaxDeliver { get; set; } = 10;
     }
 }

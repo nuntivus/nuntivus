@@ -27,4 +27,8 @@
     <ProjectReference Include="..\KairoServer.Infastructure\KairoServer.Infastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Worker\Configuration\" />
+  </ItemGroup>
+
 </Project>

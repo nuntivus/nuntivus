@@ -27,22 +27,22 @@ namespace KairoServer.Worker.Matching
     /// </summary>
     public sealed class ContractMatcherWorker : BackgroundService
     {
-        private readonly INatsJSContext _jetStream;
         private readonly NatsOption _natsOptions;
         private readonly MatcherOption _matcherOptions;
+        private readonly IDurableConsumerFactory _consumerFactory;
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly IAppLogger<ContractMatcherWorker> _logger;
 
         public ContractMatcherWorker(
-            INatsJSContext jetStream,
             NatsOption natsOptions,
             MatcherOption matcherOptions,
+            IDurableConsumerFactory consumerFactory,
             IServiceScopeFactory scopeFactory,
             IAppLogger<ContractMatcherWorker> logger)
         {
-            _jetStream = jetStream ?? throw new ArgumentNullException(nameof(jetStream));
             _natsOptions = natsOptions ?? throw new ArgumentNullException(nameof(natsOptions));
             _matcherOptions = matcherOptions ?? throw new ArgumentNullException(nameof(matcherOptions));
+            _consumerFactory = consumerFactory ?? throw new ArgumentNullException(nameof(consumerFactory));
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -115,23 +115,20 @@ namespace KairoServer.Worker.Matching
 
         private async Task<INatsJSConsumer> CreateConsumerAsync(CancellationToken cancellationToken)
         {
-            var config = new ConsumerConfig(_matcherOptions.DurableName)
-            {
-                FilterSubject = _matcherOptions.FilterSubject,
-                AckPolicy = ConsumerConfigAckPolicy.Explicit,
-                DeliverPolicy = ConsumerConfigDeliverPolicy.All,
-                MaxAckPending = _matcherOptions.MaxAckPending,
-                AckWait = TimeSpan.FromSeconds(30),
-            };
+            var spec = new DurableConsumerSpec(
+                _matcherOptions.WorkerName,
+                _matcherOptions.DurableName,
+                _matcherOptions.FilterSubject,
+                _matcherOptions.BatchSize,
+                _matcherOptions.MaxConcurrentMessages,
+                _matcherOptions.FetchTimeout,
+                _matcherOptions.NakDelay,
+                _matcherOptions.MaxAckPending,
+                _matcherOptions.AckWait,
+                _matcherOptions.MaxDeliver);
 
-            var consumer = await _jetStream.CreateOrUpdateConsumerAsync(
-                _natsOptions.Stream, config, cancellationToken);
-
-            _logger.Information(
-                "JetStream durable consumer {Durable} ready on stream {Stream} (filter {Filter}).",
-                _matcherOptions.DurableName, _natsOptions.Stream, _matcherOptions.FilterSubject);
-
-            return consumer;
+            var handle = await _consumerFactory.CreateOrUpdateAsync(spec, cancellationToken);
+            return handle.Consumer;
         }
 
         private async Task ProcessMessageAsync(NatsJSMsg<byte[]> msg, CancellationToken cancellationToken)
@@ -175,6 +172,7 @@ namespace KairoServer.Worker.Matching
 
             activity?.SetTag(KairoTelemetry.EventIdTag, accepted.EventId.ToString("D"));
             WorkerMetrics.TrackJetStreamConsumerLag(DateTimeOffset.UtcNow - accepted.OccurredAt, "contract-matcher");
+            TrackConsumerQueueState(msg, "contract-matcher");
 
             try
             {
@@ -190,6 +188,12 @@ namespace KairoServer.Worker.Matching
                 }
                 else
                 {
+                    if (await TryAckPoisonAsync(msg, accepted.EventId.ToString("D"), cancellationToken))
+                    {
+                        TrackMatcherOutcome("poison");
+                        return;
+                    }
+
                     _logger.Warning(
                         "Matcher failed for event {EventId}: {Error}. NAK for redelivery.",
                         accepted.EventId, result.Error);
@@ -207,6 +211,12 @@ namespace KairoServer.Worker.Matching
             }
             catch (Exception ex)
             {
+                if (await TryAckPoisonAsync(msg, accepted.EventId.ToString("D"), cancellationToken))
+                {
+                    TrackMatcherOutcome("poison");
+                    return;
+                }
+
                 _logger.Error(ex,
                     "Unexpected error while processing event {EventId}. NAK for redelivery.",
                     accepted.EventId);
@@ -221,6 +231,57 @@ namespace KairoServer.Worker.Matching
                 WorkerMetrics.TrackWorkerProcessed("contract-matcher", outcome);
                 WorkerMetrics.TrackMatcherLatency(stopwatch.Elapsed, outcome);
             }
+        }
+
+        private async Task<bool> TryAckPoisonAsync(
+            NatsJSMsg<byte[]> msg,
+            string eventId,
+            CancellationToken cancellationToken)
+        {
+            var deliveryCount = GetMetadataULong(msg, "NumDelivered");
+            if (deliveryCount is null)
+                return false;
+
+            if (deliveryCount.Value < (ulong)_matcherOptions.MaxDeliver)
+                return false;
+
+            _logger.Warning(
+                "Terminating poison matcher message for event {EventId} after {Deliveries} deliveries.",
+                eventId,
+                deliveryCount.Value);
+            await msg.AckTerminateAsync(cancellationToken: cancellationToken);
+            return true;
+        }
+
+        private static void TrackConsumerQueueState(NatsJSMsg<byte[]> msg, string workerName)
+        {
+            var pending = GetMetadataULong(msg, "NumPending");
+            if (pending is { } pendingCount)
+                WorkerMetrics.TrackJetStreamConsumerPending((long)Math.Min(pendingCount, long.MaxValue), workerName);
+
+            var delivered = GetMetadataULong(msg, "NumDelivered");
+            if (delivered is { } deliveryCount)
+                WorkerMetrics.TrackJetStreamConsumerDeliveryCount((long)Math.Min(deliveryCount, long.MaxValue), workerName);
+        }
+
+        private static ulong? GetMetadataULong(NatsJSMsg<byte[]> msg, string propertyName)
+        {
+            var metadata = msg.Metadata;
+            if (metadata is null)
+                return null;
+
+            var property = metadata.GetType().GetProperty(propertyName);
+            var value = property?.GetValue(metadata);
+            return value switch
+            {
+                byte v => v,
+                ushort v => v,
+                uint v => v,
+                ulong v => v,
+                int v when v >= 0 => (ulong)v,
+                long v when v >= 0 => (ulong)v,
+                _ => null,
+            };
         }
     }
 }

@@ -16,6 +16,12 @@ namespace KairoServer.Worker.Observability
         private static readonly Histogram<double> JetStreamConsumerLagMs =
             KairoTelemetry.Meter.CreateHistogram<double>("kairo.jetstream.consumer.lag.ms");
 
+        private static readonly Histogram<long> JetStreamConsumerPendingCount =
+            KairoTelemetry.Meter.CreateHistogram<long>("kairo.jetstream.consumer.pending.count");
+
+        private static readonly Histogram<long> JetStreamConsumerDeliveryCount =
+            KairoTelemetry.Meter.CreateHistogram<long>("kairo.jetstream.consumer.delivery.count");
+
         private static readonly Histogram<double> MatcherLatencyMs =
             KairoTelemetry.Meter.CreateHistogram<double>("kairo.matcher.latency.ms");
 
@@ -47,6 +53,28 @@ namespace KairoServer.Worker.Observability
                 return;
 
             JetStreamConsumerLagMs.Record(lag.TotalMilliseconds, new TagList
+            {
+                { KairoTelemetry.WorkerTag, worker },
+            });
+        }
+
+        public static void TrackJetStreamConsumerPending(long pending, string worker)
+        {
+            if (pending < 0)
+                return;
+
+            JetStreamConsumerPendingCount.Record(pending, new TagList
+            {
+                { KairoTelemetry.WorkerTag, worker },
+            });
+        }
+
+        public static void TrackJetStreamConsumerDeliveryCount(long deliveries, string worker)
+        {
+            if (deliveries <= 0)
+                return;
+
+            JetStreamConsumerDeliveryCount.Record(deliveries, new TagList
             {
                 { KairoTelemetry.WorkerTag, worker },
             });

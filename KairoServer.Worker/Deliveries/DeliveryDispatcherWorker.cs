@@ -29,22 +29,22 @@ namespace KairoServer.Worker.Deliveries
     /// </summary>
     public sealed class DeliveryDispatcherWorker : BackgroundService
     {
-        private readonly INatsJSContext _jetStream;
         private readonly NatsOption _natsOptions;
         private readonly DeliveryOption _deliveryOptions;
+        private readonly IDurableConsumerFactory _consumerFactory;
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly IAppLogger<DeliveryDispatcherWorker> _logger;
 
         public DeliveryDispatcherWorker(
-            INatsJSContext jetStream,
             NatsOption natsOptions,
             DeliveryOption deliveryOptions,
+            IDurableConsumerFactory consumerFactory,
             IServiceScopeFactory scopeFactory,
             IAppLogger<DeliveryDispatcherWorker> logger)
         {
-            _jetStream = jetStream ?? throw new ArgumentNullException(nameof(jetStream));
             _natsOptions = natsOptions ?? throw new ArgumentNullException(nameof(natsOptions));
             _deliveryOptions = deliveryOptions ?? throw new ArgumentNullException(nameof(deliveryOptions));
+            _consumerFactory = consumerFactory ?? throw new ArgumentNullException(nameof(consumerFactory));
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -113,23 +113,20 @@ namespace KairoServer.Worker.Deliveries
 
         private async Task<INatsJSConsumer> CreateConsumerAsync(CancellationToken cancellationToken)
         {
-            var config = new ConsumerConfig(_deliveryOptions.DurableName)
-            {
-                FilterSubject = _deliveryOptions.FilterSubject,
-                AckPolicy = ConsumerConfigAckPolicy.Explicit,
-                DeliverPolicy = ConsumerConfigDeliverPolicy.All,
-                MaxAckPending = _deliveryOptions.MaxAckPending,
-                AckWait = _deliveryOptions.AckWait,
-            };
+            var spec = new DurableConsumerSpec(
+                _deliveryOptions.WorkerName,
+                _deliveryOptions.DurableName,
+                _deliveryOptions.FilterSubject,
+                _deliveryOptions.BatchSize,
+                _deliveryOptions.MaxConcurrentMessages,
+                _deliveryOptions.FetchTimeout,
+                _deliveryOptions.NakDelay,
+                _deliveryOptions.MaxAckPending,
+                _deliveryOptions.AckWait,
+                _deliveryOptions.MaxDeliver);
 
-            var consumer = await _jetStream.CreateOrUpdateConsumerAsync(
-                _natsOptions.Stream, config, cancellationToken);
-
-            _logger.Information(
-                "JetStream durable consumer {Durable} ready on stream {Stream} (filter {Filter}).",
-                _deliveryOptions.DurableName, _natsOptions.Stream, _deliveryOptions.FilterSubject);
-
-            return consumer;
+            var handle = await _consumerFactory.CreateOrUpdateAsync(spec, cancellationToken);
+            return handle.Consumer;
         }
 
         private async Task ProcessMessageAsync(NatsJSMsg<byte[]> msg, CancellationToken cancellationToken)
@@ -171,6 +168,7 @@ namespace KairoServer.Worker.Deliveries
             activity?.SetTag(KairoTelemetry.ContractIdTag, ready.ContractId.ToString("D"));
             activity?.SetTag(KairoTelemetry.CustomerIdTag, ready.CustomerId);
             WorkerMetrics.TrackJetStreamConsumerLag(DateTimeOffset.UtcNow - ready.OccurredAt, "delivery-dispatcher");
+            TrackConsumerQueueState(msg, "delivery-dispatcher");
 
             try
             {
@@ -207,6 +205,12 @@ namespace KairoServer.Worker.Deliveries
                 }
                 else
                 {
+                    if (await TryAckPoisonAsync(msg, ready.DeliveryId, cancellationToken))
+                    {
+                        TrackDeliveryWorkerOutcome("poison");
+                        return;
+                    }
+
                     _logger.Warning(
                         "Dispatcher failed for delivery {DeliveryId}: {Error}. NAK for redelivery.",
                         ready.DeliveryId, result.Error);
@@ -223,6 +227,12 @@ namespace KairoServer.Worker.Deliveries
             }
             catch (Exception ex)
             {
+                if (await TryAckPoisonAsync(msg, ready.DeliveryId, cancellationToken))
+                {
+                    TrackDeliveryWorkerOutcome("poison");
+                    return;
+                }
+
                 _logger.Error(ex,
                     "Unexpected error dispatching delivery {DeliveryId}. NAK for redelivery.",
                     ready.DeliveryId);
@@ -235,6 +245,57 @@ namespace KairoServer.Worker.Deliveries
                 activity?.SetTag(KairoTelemetry.OutcomeTag, outcome);
                 WorkerMetrics.TrackWorkerProcessed("delivery-dispatcher", outcome);
             }
+        }
+
+        private async Task<bool> TryAckPoisonAsync(
+            NatsJSMsg<byte[]> msg,
+            Guid deliveryId,
+            CancellationToken cancellationToken)
+        {
+            var deliveryCount = GetMetadataULong(msg, "NumDelivered");
+            if (deliveryCount is null)
+                return false;
+
+            if (deliveryCount.Value < (ulong)_deliveryOptions.MaxDeliver)
+                return false;
+
+            _logger.Warning(
+                "Terminating poison delivery message {DeliveryId} after {Deliveries} deliveries.",
+                deliveryId,
+                deliveryCount.Value);
+            await msg.AckTerminateAsync(cancellationToken: cancellationToken);
+            return true;
+        }
+
+        private static void TrackConsumerQueueState(NatsJSMsg<byte[]> msg, string workerName)
+        {
+            var pending = GetMetadataULong(msg, "NumPending");
+            if (pending is { } pendingCount)
+                WorkerMetrics.TrackJetStreamConsumerPending((long)Math.Min(pendingCount, long.MaxValue), workerName);
+
+            var delivered = GetMetadataULong(msg, "NumDelivered");
+            if (delivered is { } deliveryCount)
+                WorkerMetrics.TrackJetStreamConsumerDeliveryCount((long)Math.Min(deliveryCount, long.MaxValue), workerName);
+        }
+
+        private static ulong? GetMetadataULong(NatsJSMsg<byte[]> msg, string propertyName)
+        {
+            var metadata = msg.Metadata;
+            if (metadata is null)
+                return null;
+
+            var property = metadata.GetType().GetProperty(propertyName);
+            var value = property?.GetValue(metadata);
+            return value switch
+            {
+                byte v => v,
+                ushort v => v,
+                uint v => v,
+                ulong v => v,
+                int v when v >= 0 => (ulong)v,
+                long v when v >= 0 => (ulong)v,
+                _ => null,
+            };
         }
 
         private async Task<bool> TryDelayRedeliveryAsync(

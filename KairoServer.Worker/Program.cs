@@ -33,6 +33,8 @@ var builder = Host.CreateApplicationBuilder(args);
 
 builder.Configuration.AddKairoEnvironmentVariableMappings();
 
+builder.Services.AddSingleton<IDurableConsumerNamer, KairoDurableConsumerNamer>();
+
 builder.Services
     .AddOptions<HostOptions>()
     .Bind(builder.Configuration.GetSection(KairoConfigurationSections.HostOptions))
@@ -71,6 +73,9 @@ builder.Services
     .AddOptions<DeliveryOption>()
     .Bind(builder.Configuration.GetSection(KairoConfigurationSections.Delivery))
     .Validate(WorkerConfigurationValidation.IsDeliveryConsumerValid, "Delivery configuration is invalid.")
+    .Validate<NatsOption, IDurableConsumerNamer>(
+        WorkerConfigurationValidation.IsDeliveryConsumerTopologyValid,
+        "Delivery consumer configuration must map to Nats:Subjects and a valid durable name.")
     .ValidateOnStart();
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DeliveryOption>>().Value);
 
@@ -133,6 +138,9 @@ builder.Services
     .AddOptions<MatcherOption>()
     .Bind(builder.Configuration.GetSection(KairoConfigurationSections.Matcher))
     .Validate(WorkerConfigurationValidation.IsMatcherConsumerValid, "Matcher configuration is invalid.")
+    .Validate<NatsOption, IDurableConsumerNamer>(
+        WorkerConfigurationValidation.IsMatcherConsumerTopologyValid,
+        "Matcher consumer configuration must map to Nats:Subjects and a valid durable name.")
     .ValidateOnStart();
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<MatcherOption>>().Value);
 
@@ -256,6 +264,8 @@ builder.Services.AddSingleton<INatsConnection>(sp =>
 
 builder.Services.AddSingleton<INatsJSContext>(sp =>
     new NatsJSContext(sp.GetRequiredService<INatsConnection>()));
+
+builder.Services.AddSingleton<IDurableConsumerFactory, NatsDurableConsumerFactory>();
 
 builder.Services.AddSingleton<IEventBusPublisher, NatsEventBusPublisher>();
 

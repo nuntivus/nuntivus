@@ -128,6 +128,7 @@ namespace KairoServer.IntegrationTests
                 Subjects = new[] { "event.>", "delivery.>" },
             };
             services.AddSingleton(natsOption);
+            services.AddSingleton<IDurableConsumerNamer, KairoDurableConsumerNamer>();
 
             var matcherOption = new MatcherOption
             {
@@ -151,6 +152,7 @@ namespace KairoServer.IntegrationTests
                 new NatsConnection(NatsOpts.Default with { Url = natsOption.Url, Name = natsOption.Name }));
             services.AddSingleton<INatsJSContext>(sp =>
                 new NatsJSContext(sp.GetRequiredService<INatsConnection>()));
+            services.AddSingleton<IDurableConsumerFactory, NatsDurableConsumerFactory>();
 
             services.AddSingleton<IEventBusPublisher, NatsEventBusPublisher>();
 
