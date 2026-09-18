@@ -30,7 +30,20 @@ namespace KairoServer.IntegrationTests
             var now = DateTimeOffset.UtcNow;
 
             var delivery = DeliveryFactory.CreatePending(
-                eventId, contractId, customerId, "orders.created", "{\"a\":1}", destination, now);
+                eventId,
+                contractId,
+                customerId,
+                "orders.created",
+                "{\"a\":1}",
+                destination,
+                now,
+                transformationConfiguration: "{\"Version\":1,\"FieldMappings\":[{\"SourceSelector\":\"order.id\",\"TargetSelector\":\"id\"}]}",
+                rateLimit: ContractRateLimit.Create(10, null, 5),
+                ordering: null,
+                authenticationReference: "secret.acme.hmac",
+                authenticationVersion: 7,
+                transformationVersion: 1,
+                schemaVersion: 4);
 
             var inserted = await InsertAsync(delivery);
             Assert.Equal(1, inserted);
@@ -40,9 +53,10 @@ namespace KairoServer.IntegrationTests
             var row = await conn.QuerySingleAsync<(
                 Guid id, Guid event_id, Guid contract_id, string customer_id,
                 string event_type, string payload, string destination_type, string destination_config,
+                string? auth_ref, int? auth_version, int? transformation_version, int? schema_version,
                 string status, int attempt_count, string? last_error, DateTimeOffset? next_attempt_at,
                 DateTimeOffset created_at, DateTimeOffset updated_at)>(
-                "SELECT id, event_id, contract_id, customer_id, event_type, payload::text, destination_type, destination_config::text, status, attempt_count, last_error, next_attempt_at, created_at, updated_at FROM deliveries;");
+                "SELECT id, event_id, contract_id, customer_id, event_type, payload::text, destination_type, destination_config::text, auth_ref, auth_version, transformation_version, schema_version, status, attempt_count, last_error, next_attempt_at, created_at, updated_at FROM deliveries;");
 
             Assert.Equal(delivery.Id, row.id);
             Assert.Equal(eventId, row.event_id);
@@ -51,6 +65,10 @@ namespace KairoServer.IntegrationTests
             Assert.Equal("orders.created", row.event_type);
             Assert.Equal("Http", row.destination_type);
             Assert.Contains("example.test", row.destination_config);
+            Assert.Equal("secret.acme.hmac", row.auth_ref);
+            Assert.Equal(7, row.auth_version);
+            Assert.Equal(1, row.transformation_version);
+            Assert.Equal(4, row.schema_version);
             Assert.Equal("Pending", row.status);
             Assert.Equal(0, row.attempt_count);
             Assert.Null(row.last_error);

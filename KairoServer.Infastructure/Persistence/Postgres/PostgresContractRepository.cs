@@ -384,13 +384,27 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                            c.ordering_key_selector AS OrderingKeySelector,
                            c.destination_type   AS DestinationType,
                            c.destination_config AS DestinationConfig,
+                           CASE
+                               WHEN lower(COALESCE(c.destination_config #>> '{Authentication,Credential,Kind}', '')) = 'ref'
+                                   THEN c.destination_config #>> '{Authentication,Credential,Value}'
+                               ELSE NULL
+                           END                  AS AuthenticationReference,
+                           CASE
+                               WHEN (c.destination_config #>> '{Authentication,Credential,Version}') ~ '^[0-9]+$'
+                                   THEN (c.destination_config #>> '{Authentication,Credential,Version}')::integer
+                               ELSE NULL
+                           END                  AS AuthenticationVersion,
                            c.transformation_config::text AS TransformationConfig,
+                           cst.schema_version    AS SchemaVersion,
                            c.rate_limit_per_second AS RateLimitPerSecond,
                            c.rate_limit_per_minute AS RateLimitPerMinute,
                            c.rate_limit_burst      AS RateLimitBurst
                     FROM contracts c
                     INNER JOIN contract_event_types cet ON cet.contract_id = c.id
                     INNER JOIN customers cu             ON cu.id = c.customer_id
+                    LEFT JOIN contract_schema_targets cst
+                        ON cst.contract_id = c.id
+                       AND cst.event_type = cet.event_type
                     WHERE c.enabled = TRUE
                       AND cu.enabled = TRUE
                       AND cet.event_type = @EventType;
@@ -406,7 +420,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 await using var connection = CreateConnection();
                 await connection.OpenAsync(cancellationToken);
 
-                var rows = await connection.QueryAsync<(Guid ContractId, string CustomerId, bool OrderingEnabled, string? OrderingKeySelector, string DestinationType, string DestinationConfig, string? TransformationConfig, int? RateLimitPerSecond, int? RateLimitPerMinute, int? RateLimitBurst)>(
+                var rows = await connection.QueryAsync<(Guid ContractId, string CustomerId, bool OrderingEnabled, string? OrderingKeySelector, string DestinationType, string DestinationConfig, string? AuthenticationReference, int? AuthenticationVersion, string? TransformationConfig, int? SchemaVersion, int? RateLimitPerSecond, int? RateLimitPerMinute, int? RateLimitBurst)>(
                     new CommandDefinition(
                         sql,
                         new { EventType = eventType },
@@ -430,16 +444,24 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 }
 
                 var matches = rowList
-                    .Select(r => new ContractMatch(
-                        r.ContractId,
-                        r.CustomerId,
-                        new Destination(
-                            Enum.Parse<DestinationType>(r.DestinationType),
-                            r.DestinationConfig),
-                        filtersByContract.TryGetValue(r.ContractId, out var filter) ? filter : null,
-                        DeserializeTransformation(r.TransformationConfig),
-                        ContractRateLimit.Create(r.RateLimitPerSecond, r.RateLimitPerMinute, r.RateLimitBurst),
-                        r.OrderingEnabled ? ContractOrdering.Create(r.OrderingKeySelector) : null))
+                    .Select(r =>
+                    {
+                        var transformation = DeserializeTransformation(r.TransformationConfig);
+                        return new ContractMatch(
+                            r.ContractId,
+                            r.CustomerId,
+                            new Destination(
+                                Enum.Parse<DestinationType>(r.DestinationType),
+                                r.DestinationConfig),
+                            filtersByContract.TryGetValue(r.ContractId, out var filter) ? filter : null,
+                            transformation,
+                            ContractRateLimit.Create(r.RateLimitPerSecond, r.RateLimitPerMinute, r.RateLimitBurst),
+                            r.OrderingEnabled ? ContractOrdering.Create(r.OrderingKeySelector) : null,
+                            r.AuthenticationReference,
+                            r.AuthenticationVersion,
+                            transformation?.Version,
+                            r.SchemaVersion);
+                    })
                     .ToList();
 
                 return Result.Success<IReadOnlyList<ContractMatch>>(matches);

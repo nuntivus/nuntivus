@@ -50,12 +50,13 @@
     <None Update="..\013_add_retention_cleanup_indexes.sql" Link="Migrations\013_add_retention_cleanup_indexes.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="..\014_add_outbox_retry_metadata.sql" Link="Migrations\014_add_outbox_retry_metadata.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="..\015_add_outbox_claim_indexes.sql" Link="Migrations\015_add_outbox_claim_indexes.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="..\016_add_delivery_contract_snapshots.sql" Link="Migrations\016_add_delivery_contract_snapshots.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Migrations\006_create_delivery_attempts.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="CopyRootMigrations" AfterTargets="Build">
     <ItemGroup>
-      <RootMigrationFiles Include="..\001_create_events.sql;..\002_create_outbox_messages.sql;..\003_create_customers.sql;..\004_create_contracts.sql;..\005_create_deliveries.sql;..\007_create_event_replays.sql;..\008_create_event_definitions.sql;..\009_create_contract_filters.sql;..\010_add_contract_payload_transformations.sql;..\011_add_delivery_rate_limits.sql;..\012_add_delivery_ordering.sql;..\013_add_retention_cleanup_indexes.sql;..\014_add_outbox_retry_metadata.sql;..\015_add_outbox_claim_indexes.sql" />
+      <RootMigrationFiles Include="..\001_create_events.sql;..\002_create_outbox_messages.sql;..\003_create_customers.sql;..\004_create_contracts.sql;..\005_create_deliveries.sql;..\007_create_event_replays.sql;..\008_create_event_definitions.sql;..\009_create_contract_filters.sql;..\010_add_contract_payload_transformations.sql;..\011_add_delivery_rate_limits.sql;..\012_add_delivery_ordering.sql;..\013_add_retention_cleanup_indexes.sql;..\014_add_outbox_retry_metadata.sql;..\015_add_outbox_claim_indexes.sql;..\016_add_delivery_contract_snapshots.sql" />
     </ItemGroup>
 
     <MakeDir Directories="$(OutDir)Migrations" />

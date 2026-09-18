@@ -65,6 +65,7 @@ namespace KairoServer.IntegrationTests
                 "013_add_retention_cleanup_indexes.sql",
                 "014_add_outbox_retry_metadata.sql",
                 "015_add_outbox_claim_indexes.sql",
+                "016_add_delivery_contract_snapshots.sql",
             })
             {
                 var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

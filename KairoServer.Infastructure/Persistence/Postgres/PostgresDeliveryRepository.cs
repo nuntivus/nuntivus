@@ -43,6 +43,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         customer_id,
                         event_type,
                         payload,
+                        auth_ref,
+                        auth_version,
+                        transformation_version,
+                        schema_version,
                         transformation_config,
                         rate_limit_per_second,
                         rate_limit_per_minute,
@@ -66,6 +70,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         @CustomerId,
                         @EventType,
                         CAST(@Payload AS jsonb),
+                        @AuthenticationReference,
+                        @AuthenticationVersion,
+                        @TransformationVersion,
+                        @SchemaVersion,
                         CAST(@TransformationConfiguration AS jsonb),
                         @RateLimitPerSecond,
                         @RateLimitPerMinute,
@@ -100,6 +108,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                             delivery.CustomerId,
                             delivery.EventType,
                             delivery.Payload,
+                            delivery.AuthenticationReference,
+                            delivery.AuthenticationVersion,
+                            delivery.TransformationVersion,
+                            delivery.SchemaVersion,
                             delivery.TransformationConfiguration,
                             RateLimitPerSecond = delivery.RateLimit?.PerSecond,
                             RateLimitPerMinute = delivery.RateLimit?.PerMinute,
@@ -160,6 +172,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         customer_id AS CustomerId,
                         event_type AS EventType,
                         payload::text AS Payload,
+                        auth_ref AS AuthenticationReference,
+                        auth_version AS AuthenticationVersion,
+                        transformation_version AS TransformationVersion,
+                        schema_version AS SchemaVersion,
                         transformation_config::text AS TransformationConfig,
                         rate_limit_per_second AS RateLimitPerSecond,
                         rate_limit_per_minute AS RateLimitPerMinute,
@@ -375,6 +391,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         customer_id         AS CustomerId,
                         event_type          AS EventType,
                         payload::text       AS Payload,
+                        auth_ref            AS AuthenticationReference,
+                        auth_version        AS AuthenticationVersion,
+                        transformation_version AS TransformationVersion,
+                        schema_version      AS SchemaVersion,
                         transformation_config::text AS TransformationConfig,
                         rate_limit_per_second AS RateLimitPerSecond,
                         rate_limit_per_minute AS RateLimitPerMinute,
@@ -436,6 +456,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         customer_id         AS CustomerId,
                         event_type          AS EventType,
                         payload::text       AS Payload,
+                        auth_ref            AS AuthenticationReference,
+                        auth_version        AS AuthenticationVersion,
+                        transformation_version AS TransformationVersion,
+                        schema_version      AS SchemaVersion,
                         transformation_config::text AS TransformationConfig,
                         rate_limit_per_second AS RateLimitPerSecond,
                         rate_limit_per_minute AS RateLimitPerMinute,
@@ -606,6 +630,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public string CustomerId { get; set; } = string.Empty;
             public string EventType { get; set; } = string.Empty;
             public string Payload { get; set; } = string.Empty;
+            public string? AuthenticationReference { get; set; }
+            public int? AuthenticationVersion { get; set; }
+            public int? TransformationVersion { get; set; }
+            public int? SchemaVersion { get; set; }
             public string? TransformationConfig { get; set; }
             public int? RateLimitPerSecond { get; set; }
             public int? RateLimitPerMinute { get; set; }
@@ -630,6 +658,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 row.CustomerId,
                 row.EventType,
                 row.Payload,
+                row.AuthenticationReference,
+                row.AuthenticationVersion,
+                row.TransformationVersion,
+                row.SchemaVersion,
                 row.TransformationConfig,
                 ContractRateLimit.Create(row.RateLimitPerSecond, row.RateLimitPerMinute, row.RateLimitBurst),
                 row.OrderingEnabled,

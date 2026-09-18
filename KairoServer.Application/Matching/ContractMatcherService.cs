@@ -124,7 +124,11 @@ namespace KairoServer.Application.Matching
                             ? null
                             : JsonSerializer.Serialize(match.Transformation),
                         match.RateLimit,
-                        match.Ordering);
+                        match.Ordering,
+                        match.AuthenticationReference,
+                        match.AuthenticationVersion,
+                        match.TransformationVersion,
+                        match.SchemaVersion);
 
                     var insertResult = await _deliveries.InsertPendingAsync(
                         new[] { delivery },

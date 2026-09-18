@@ -62,16 +62,20 @@ namespace KairoServer.IntegrationTests
             string customerId,
             string[] eventTypes,
             bool enabled = true,
-            ContractFilter? filter = null)
+            ContractFilter? filter = null,
+            Destination? destination = null,
+            IReadOnlyCollection<ContractSchemaTarget>? schemaTargets = null,
+            ContractPayloadTransformation? transformation = null)
         {
             var now = DateTimeOffset.UtcNow;
             var contract = Contract.Create(
                 customerId,
                 eventTypes,
-                schemaTargets: null,
+                schemaTargets,
                 filter,
-                new Destination(DestinationType.Http, "{\"Url\":\"https://x.example.com\"}"),
-                now);
+                destination ?? new Destination(DestinationType.Http, "{\"Url\":\"https://x.example.com\"}"),
+                now,
+                transformation: transformation);
             if (!enabled) contract.Disable(now);
 
             await using var scope = _services.CreateAsyncScope();
@@ -150,6 +154,76 @@ namespace KairoServer.IntegrationTests
             Assert.Equal("orders.created", row.event_type);
             Assert.Equal("Pending", row.status);
             Assert.Contains("o-1", row.payload);
+        }
+
+        [Fact]
+        public async Task Snapshot_fields_are_persisted_per_delivery_and_remain_stable_after_contract_edit()
+        {
+            await SeedCustomerAsync("acme");
+
+            var initialDestination = new Destination(
+                DestinationType.Http,
+                "{\"Url\":\"https://first.example.com\",\"Authentication\":{\"Type\":\"hmac\",\"Credential\":{\"Kind\":\"ref\",\"Value\":\"secret.acme.v1\",\"Version\":1}}}");
+
+            var contractId = await SeedContractAsync(
+                "acme",
+                new[] { "orders.created" },
+                destination: initialDestination,
+                schemaTargets: new[] { new ContractSchemaTarget("orders.created", 1) },
+                transformation: new ContractPayloadTransformation(
+                    1,
+                    new[] { new ContractPayloadFieldMapping("order.id", "orderId") }));
+
+            var firstEvent = await SeedEventAsync("orders.created", "{\"order\":{\"id\":\"first\"}}");
+            var matcher = _services.GetRequiredService<IContractMatcherService>();
+            var firstMatch = await matcher.MatchAsync(
+                new EventAccepted(firstEvent.Id, firstEvent.Type, firstEvent.SourceId, firstEvent.OccurredAt),
+                CancellationToken.None);
+            firstMatch.EnsureSuccess();
+            Assert.Equal(1, firstMatch.Value.InsertedDeliveries);
+
+            await using (var conn = new NpgsqlConnection(_fixture.ConnectionString))
+            {
+                await conn.OpenAsync();
+                await conn.ExecuteAsync(
+                    """
+                    UPDATE contracts
+                    SET destination_config = @DestinationConfig::jsonb,
+                        transformation_config = @TransformationConfig::jsonb,
+                        updated_at = @UpdatedAt
+                    WHERE id = @ContractId;
+                    """,
+                    new
+                    {
+                        ContractId = contractId,
+                        DestinationConfig = "{\"Url\":\"https://second.example.com\",\"Authentication\":{\"Type\":\"hmac\",\"Credential\":{\"Kind\":\"ref\",\"Value\":\"secret.acme.v2\",\"Version\":2}}}",
+                        TransformationConfig = "{\"Version\":2,\"FieldMappings\":[{\"SourceSelector\":\"order.id\",\"TargetSelector\":\"id\"}]}",
+                        UpdatedAt = DateTimeOffset.UtcNow,
+                    });
+
+                await conn.ExecuteAsync(
+                    "UPDATE contract_schema_targets SET schema_version = 2 WHERE contract_id = @ContractId AND event_type = @EventType;",
+                    new { ContractId = contractId, EventType = "orders.created" });
+            }
+
+            await using var verifyConn = new NpgsqlConnection(_fixture.ConnectionString);
+            await verifyConn.OpenAsync();
+
+            var currentContractConfig = await verifyConn.ExecuteScalarAsync<string>(
+                "SELECT destination_config::text FROM contracts WHERE id = @ContractId;",
+                new { ContractId = contractId });
+
+            var firstSnapshot = await verifyConn.QuerySingleAsync<(string destination_config, string? auth_ref, int? auth_version, int? transformation_version, int? schema_version)>(
+                "SELECT destination_config::text, auth_ref, auth_version, transformation_version, schema_version FROM deliveries WHERE event_id = @EventId;",
+                new { EventId = firstEvent.Id });
+
+            Assert.Contains("second.example.com", currentContractConfig);
+
+            Assert.Contains("first.example.com", firstSnapshot.destination_config);
+            Assert.Equal("secret.acme.v1", firstSnapshot.auth_ref);
+            Assert.Equal(1, firstSnapshot.auth_version);
+            Assert.Equal(1, firstSnapshot.transformation_version);
+            Assert.Equal(1, firstSnapshot.schema_version);
         }
 
         [Fact]

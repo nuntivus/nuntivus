@@ -16,6 +16,10 @@ namespace KairoServer.UnitTests.Deliveries
         {
             var now = DateTimeOffset.UtcNow;
             var destination = NewDestination();
+            const string authRef = "secret.acme.delivery";
+            const int authVersion = 3;
+            const int transformationVersion = 2;
+            const int schemaVersion = 5;
 
             var delivery = DeliveryFactory.CreatePending(
                 Guid.NewGuid(),
@@ -24,7 +28,14 @@ namespace KairoServer.UnitTests.Deliveries
                 "orders.created",
                 "{}",
                 destination,
-                now);
+                now,
+                transformationConfiguration: "{\"Version\":2,\"FieldMappings\":[]}",
+                rateLimit: null,
+                ordering: null,
+                authenticationReference: authRef,
+                authenticationVersion: authVersion,
+                transformationVersion: transformationVersion,
+                schemaVersion: schemaVersion);
 
             Assert.Equal(DeliveryStatus.Pending, delivery.Status);
             Assert.Equal(0, delivery.AttemptCount);
@@ -32,6 +43,10 @@ namespace KairoServer.UnitTests.Deliveries
             Assert.Null(delivery.NextAttemptAt);
             Assert.Equal(destination.Type, delivery.DestinationType);
             Assert.Equal(destination.Configuration, delivery.DestinationConfiguration);
+            Assert.Equal(authRef, delivery.AuthenticationReference);
+            Assert.Equal(authVersion, delivery.AuthenticationVersion);
+            Assert.Equal(transformationVersion, delivery.TransformationVersion);
+            Assert.Equal(schemaVersion, delivery.SchemaVersion);
             Assert.Equal(now, delivery.CreatedAt);
             Assert.Equal(now, delivery.UpdatedAt);
         }

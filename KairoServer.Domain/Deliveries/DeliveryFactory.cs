@@ -15,7 +15,11 @@ namespace KairoServer.Domain.Deliveries
             DateTimeOffset now,
             string? transformationConfiguration = null,
             ContractRateLimit? rateLimit = null,
-            ContractOrdering? ordering = null) =>
+            ContractOrdering? ordering = null,
+            string? authenticationReference = null,
+            int? authenticationVersion = null,
+            int? transformationVersion = null,
+            int? schemaVersion = null) =>
             Delivery.CreatePending(
                 eventId,
                 contractId,
@@ -26,6 +30,10 @@ namespace KairoServer.Domain.Deliveries
                 now,
                 transformationConfiguration,
                 rateLimit,
-                ordering);
+                ordering,
+                authenticationReference,
+                authenticationVersion,
+                transformationVersion,
+                schemaVersion);
     }
 }

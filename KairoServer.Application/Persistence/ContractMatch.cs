@@ -17,5 +17,9 @@ namespace KairoServer.Application.Persistence
         ContractFilter? Filter,
         ContractPayloadTransformation? Transformation = null,
         ContractRateLimit? RateLimit = null,
-        ContractOrdering? Ordering = null);
+        ContractOrdering? Ordering = null,
+        string? AuthenticationReference = null,
+        int? AuthenticationVersion = null,
+        int? TransformationVersion = null,
+        int? SchemaVersion = null);
 }

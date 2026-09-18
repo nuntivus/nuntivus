@@ -20,6 +20,10 @@ namespace KairoServer.Domain.Deliveries
         public string CustomerId { get; }
         public string EventType { get; }
         public string Payload { get; }
+        public string? AuthenticationReference { get; }
+        public int? AuthenticationVersion { get; }
+        public int? TransformationVersion { get; }
+        public int? SchemaVersion { get; }
         public string? TransformationConfiguration { get; }
         public ContractRateLimit? RateLimit { get; }
         public bool OrderingEnabled { get; }
@@ -40,6 +44,10 @@ namespace KairoServer.Domain.Deliveries
             string customerId,
             string eventType,
             string payload,
+            string? authenticationReference,
+            int? authenticationVersion,
+            int? transformationVersion,
+            int? schemaVersion,
             string? transformationConfiguration,
             ContractRateLimit? rateLimit,
             bool orderingEnabled,
@@ -59,6 +67,10 @@ namespace KairoServer.Domain.Deliveries
             CustomerId = customerId;
             EventType = eventType;
             Payload = payload;
+            AuthenticationReference = authenticationReference;
+            AuthenticationVersion = authenticationVersion;
+            TransformationVersion = transformationVersion;
+            SchemaVersion = schemaVersion;
             TransformationConfiguration = transformationConfiguration;
             RateLimit = rateLimit;
             OrderingEnabled = orderingEnabled;
@@ -83,7 +95,11 @@ namespace KairoServer.Domain.Deliveries
             DateTimeOffset now,
             string? transformationConfiguration = null,
             ContractRateLimit? rateLimit = null,
-            ContractOrdering? ordering = null)
+            ContractOrdering? ordering = null,
+            string? authenticationReference = null,
+            int? authenticationVersion = null,
+            int? transformationVersion = null,
+            int? schemaVersion = null)
         {
             if (eventId == Guid.Empty)
                 throw new ArgumentException("EventId cannot be empty.", nameof(eventId));
@@ -104,6 +120,10 @@ namespace KairoServer.Domain.Deliveries
                 customerId,
                 eventType,
                 payload,
+                authenticationReference,
+                authenticationVersion,
+                transformationVersion,
+                schemaVersion,
                 transformationConfiguration,
                 rateLimit,
                 ordering is not null,
@@ -238,6 +258,10 @@ namespace KairoServer.Domain.Deliveries
             string customerId,
             string eventType,
             string payload,
+            string? authenticationReference,
+            int? authenticationVersion,
+            int? transformationVersion,
+            int? schemaVersion,
             string? transformationConfiguration,
             ContractRateLimit? rateLimit,
             bool orderingEnabled,
@@ -251,6 +275,10 @@ namespace KairoServer.Domain.Deliveries
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt) =>
             new(id, eventId, contractId, customerId, eventType, payload,
+                authenticationReference,
+                authenticationVersion,
+                transformationVersion,
+                schemaVersion,
                 transformationConfiguration, rateLimit, orderingEnabled, orderingKey, destinationType, destinationConfiguration, status,
                 attemptCount, lastError, nextAttemptAt, createdAt, updatedAt);
 
@@ -276,6 +304,10 @@ namespace KairoServer.Domain.Deliveries
                 customerId,
                 eventType,
                 payload,
+                authenticationReference: null,
+                authenticationVersion: null,
+                transformationVersion: null,
+                schemaVersion: null,
                 transformationConfiguration: null,
                 rateLimit: null,
                 orderingEnabled: false,
