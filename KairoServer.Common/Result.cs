@@ -31,13 +31,13 @@ namespace KairoServer.Common
 
         public static Result Failure(string code, string message) => Failure(new Error(code, message));
         
-        public static Result Failure(Exception ex) => Failure(new Error("unexpected", ex.Message));
+        public static Result Failure(Exception ex) => Failure(new Error("unexpected", "An unexpected error occurred."));
 
         public static Result<T> Success<T>(T value) => Result<T>.Ok(value);
 
         public static Result<T> Failure<T>(Error error) => Result<T>.Fail(error);
 
-        public static Result<T> Failure<T>(Exception ex) => Result<T>.Fail(new Error("unexpected", ex.Message));
+        public static Result<T> Failure<T>(Exception ex) => Result<T>.Fail(new Error("unexpected", "An unexpected error occurred."));
 
         public static Result<T> Failure<T>(string code, string message) => Result<T>.Fail(new Error(code, message));
 

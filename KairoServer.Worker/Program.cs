@@ -1,4 +1,5 @@
 using KairoServer.Application.Caching;
+using KairoServer.Application.Contracts.Destinations;
 using KairoServer.Application.Deliveries.Execution;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Matching;
@@ -6,6 +7,7 @@ using KairoServer.Application.Messaging;
 using KairoServer.Application.Observability;
 using KairoServer.Application.Persistence;
 using KairoServer.Application.Retention;
+using KairoServer.Application.Security;
 using KairoServer.Infastructure.Caching;
 using KairoServer.Infastructure.Deliveries;
 using KairoServer.Infastructure.Deliveries.Http;
@@ -116,6 +118,12 @@ var destinationCredentialOption = builder.Configuration.GetSection("DestinationC
     ?? new DestinationCredentialOption();
 builder.Services.AddSingleton(destinationCredentialOption);
 
+var destinationSecurityOption = builder.Configuration.GetSection("EndpointSecurity").Get<HttpDestinationSecurityOption>()
+    ?? builder.Configuration.GetSection("DestinationSecurity").Get<HttpDestinationSecurityOption>()
+    ?? new HttpDestinationSecurityOption();
+builder.Services.AddSingleton(destinationSecurityOption);
+builder.Services.AddSingleton<IEndpointSecurityPolicy, EndpointSecurityPolicy>();
+
 builder.Services.AddScoped<IDeliveryDispatcherService, DeliveryDispatcherService>();
 builder.Services.AddScoped<IDeliveryRecoveryService, DeliveryRecoveryService>();
 builder.Services.AddScoped<IRetentionCleanupService, RetentionCleanupService>();
@@ -127,6 +135,7 @@ builder.Services.AddSingleton(retentionCleanupOption);
 // NATS / JetStream
 var natsOption = builder.Configuration.GetSection("Nats").Get<NatsOption>()
     ?? new NatsOption();
+ValidateNatsAuthentication(natsOption);
 builder.Services.AddSingleton(natsOption);
 
 var matcherOption = builder.Configuration.GetSection("Matcher").Get<MatcherOption>()
@@ -172,3 +181,28 @@ builder.Services.AddHostedService<RetentionCleanupWorker>();
 
 var host = builder.Build();
 host.Run();
+
+static void ValidateNatsAuthentication(NatsOption options)
+{
+    var hasToken = !string.IsNullOrWhiteSpace(options.Token);
+    var hasUser = !string.IsNullOrWhiteSpace(options.User);
+    var hasPassword = !string.IsNullOrWhiteSpace(options.Password);
+    var hasCredsFile = !string.IsNullOrWhiteSpace(options.CredsFile);
+
+    if (hasUser != hasPassword)
+    {
+        throw new InvalidOperationException(
+            "NATS authentication requires both Nats:User and Nats:Password when using username/password mode.");
+    }
+
+    var modes = 0;
+    if (hasToken) modes++;
+    if (hasUser && hasPassword) modes++;
+    if (hasCredsFile) modes++;
+
+    if (modes > 1)
+    {
+        throw new InvalidOperationException(
+            "NATS authentication is ambiguous. Configure only one mode: token, user/password, or credsFile.");
+    }
+}

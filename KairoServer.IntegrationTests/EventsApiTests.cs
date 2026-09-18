@@ -1,6 +1,7 @@
 using System;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Dapper;
 using KairoServer.Api.Common;
@@ -95,6 +96,27 @@ namespace KairoServer.IntegrationTests
             Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
             var err = await resp.Content.ReadFromJsonAsync<ApiErrorResponse>();
             Assert.Equal("not_found", err!.Code);
+        }
+
+        [Fact]
+        public async Task Publish_with_oversized_payload_returns_400()
+        {
+            using var payloadDoc = JsonDocument.Parse($"{{\"blob\":\"{new string('x', 300_000)}\"}}");
+
+            var response = await _client.PostAsJsonAsync(
+                "/events",
+                new PublishEventRequest(
+                    IdempotencyKey: "idem-security-1",
+                    Type: "orders.created",
+                    Source: "orders-api",
+                    Timestamp: DateTimeOffset.UtcNow,
+                    Metadata: null,
+                    Payload: payloadDoc.RootElement.Clone()));
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+            Assert.Equal("validation", error!.Code);
+            Assert.Contains("payload exceeds", error.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         private async Task<Guid> SeedEventAsync()

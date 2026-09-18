@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using KairoServer.Application.Security;
 using KairoServer.Common;
 using KairoServer.Contracts.CustomerContracts;
 using KairoServer.Domain.Contracts;
@@ -17,6 +18,7 @@ namespace KairoServer.Application.Contracts.Destinations
     {
         public const int MinTimeoutSeconds = 1;
         public const int MaxTimeoutSeconds = 300;
+        public const int MaxCredentialValueLength = 4096;
         public const string SecretRefScheme = "secret";
         public const string ProtectedRefScheme = "protected";
 
@@ -24,14 +26,23 @@ namespace KairoServer.Application.Contracts.Destinations
             new(StringComparer.OrdinalIgnoreCase) { "none", "hmac", "bearer" };
 
         private readonly IDestinationCredentialProtector _protector;
+        private readonly HttpDestinationSecurityOption _security;
+        private readonly IEndpointSecurityPolicy _securityPolicy;
 
-        public HttpDestinationConfigHandler(IDestinationCredentialProtector protector)
+        public HttpDestinationConfigHandler(
+            IDestinationCredentialProtector protector,
+            HttpDestinationSecurityOption? security = null,
+            IEndpointSecurityPolicy? securityPolicy = null)
         {
             _protector = protector ?? throw new ArgumentNullException(nameof(protector));
+            _security = security ?? new HttpDestinationSecurityOption();
+            _securityPolicy = securityPolicy ?? new EndpointSecurityPolicy();
         }
 
         public Type ConfigType => typeof(HttpDestinationConfig);
         public DomainDestinationType DestinationType => DomainDestinationType.Http;
+        public EndpointSecurityContext SecurityContext =>
+            new(EndpointDirection.Destination, "http", "Destination");
 
         public Result<Destination> Build(DestinationConfig configuration)
         {
@@ -44,11 +55,19 @@ namespace KairoServer.Application.Contracts.Destinations
             if (string.IsNullOrWhiteSpace(http.Url))
                 return Result.Failure<Destination>(Error.Validation("Destination url is required."));
 
-            if (!Uri.TryCreate(http.Url, UriKind.Absolute, out var uri)
-                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            if (!Uri.TryCreate(http.Url, UriKind.Absolute, out var destinationUri))
             {
                 return Result.Failure<Destination>(Error.Validation(
-                    "Destination url must be an absolute http or https URL."));
+                    "Destination url must be an absolute URL."));
+            }
+
+            var destinationValidation = _securityPolicy.ValidateEndpointUri(
+                destinationUri,
+                SecurityContext,
+                _security);
+            if (destinationValidation.IsFailure)
+            {
+                return Result<Destination>.Fail(destinationValidation.Errors);
             }
 
             if (http.TimeoutSeconds is int t
@@ -131,7 +150,7 @@ namespace KairoServer.Application.Contracts.Destinations
             catch (JsonException ex)
             {
                 return Result.Failure<string>(Error.Validation(
-                    $"Destination configuration is not valid JSON: {ex.Message}"));
+                    $"Destination configuration is not valid JSON: {ex.GetType().Name}."));
             }
 
             if (parsed is null)
@@ -197,6 +216,12 @@ namespace KairoServer.Application.Contracts.Destinations
             {
                 return Result.Failure<HttpAuthentication>(Error.Validation(
                     "Destination authentication.credential.kind and authentication.credential.value are required."));
+            }
+
+            if (credentialValue.Length > MaxCredentialValueLength)
+            {
+                return Result.Failure<HttpAuthentication>(Error.Validation(
+                    $"Destination authentication.credential.value exceeds maximum length of {MaxCredentialValueLength}."));
             }
 
             if (credentialKind == "ref")

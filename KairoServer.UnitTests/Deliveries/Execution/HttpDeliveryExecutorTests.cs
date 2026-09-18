@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Contracts.Destinations;
 using KairoServer.Application.Deliveries.Execution;
 using KairoServer.Common;
 using KairoServer.Common.Logging;
@@ -122,15 +123,53 @@ namespace KairoServer.UnitTests.Deliveries.Execution
             Assert.Equal("secret-value", Assert.Single(values));
         }
 
+        [Fact]
+        public async Task Private_network_destination_is_blocked_by_default_policy()
+        {
+            var executor = BuildExecutor(_ => new HttpResponseMessage(HttpStatusCode.OK));
+
+            var result = await executor.ExecuteAsync(BuildRequest(new HttpDestinationConfig(
+                Url: "http://127.0.0.1:9999/webhook",
+                Authentication: new HttpAuthentication("none"))), CancellationToken.None);
+
+            Assert.False(result.Succeeded);
+            Assert.Equal(DeliveryFailureCategory.ConfigurationInvalid, result.Category);
+        }
+
+        [Fact]
+        public async Task Response_body_is_bounded_and_marked_truncated()
+        {
+            var executor = BuildExecutor(
+                _ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent(new string('x', 50))
+                },
+                new HttpDestinationSecurityOption
+                {
+                    AllowPrivateNetworkDestinations = true,
+                    MaxResponseBodyBytes = 10,
+                });
+
+            var result = await executor.ExecuteAsync(BuildRequest(), CancellationToken.None);
+
+            Assert.False(result.Succeeded);
+            Assert.NotNull(result.Metadata);
+            Assert.True(result.Metadata!.TryGetValue("responseBody", out var responseBody));
+            Assert.Equal("xxxxxxxxxx...[truncated]", responseBody);
+        }
+
         // --- helpers ---------------------------------------------------------
 
-        private static HttpDeliveryExecutor BuildExecutor(Func<HttpRequestMessage, HttpResponseMessage> handler)
+        private static HttpDeliveryExecutor BuildExecutor(
+            Func<HttpRequestMessage, HttpResponseMessage> handler,
+            HttpDestinationSecurityOption? security = null)
         {
             var factory = new StubHttpClientFactory(handler);
             return new HttpDeliveryExecutor(
                 factory,
                 new StubSecretResolver(),
-                new NullAppLogger<HttpDeliveryExecutor>());
+                new NullAppLogger<HttpDeliveryExecutor>(),
+                security);
         }
 
         private static DeliveryExecutionRequest BuildRequest(string? configJson = null)

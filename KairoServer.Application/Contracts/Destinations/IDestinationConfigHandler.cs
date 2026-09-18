@@ -1,4 +1,5 @@
 using System;
+using KairoServer.Application.Security;
 using KairoServer.Common;
 using KairoServer.Contracts.CustomerContracts;
 using KairoServer.Domain.Contracts;
@@ -22,6 +23,11 @@ namespace KairoServer.Application.Contracts.Destinations
         /// The domain destination type emitted by this handler.
         /// </summary>
         DomainDestinationType DestinationType { get; }
+
+        /// <summary>
+        /// Shared endpoint security context used by policy evaluation.
+        /// </summary>
+        EndpointSecurityContext SecurityContext { get; }
 
         /// <summary>
         /// Validates <paramref name="configuration"/> and returns a domain <see cref="Destination"/>

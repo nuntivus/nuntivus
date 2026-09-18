@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using KairoServer.Application.Deliveries.Execution;
+using KairoServer.Application.Contracts.Destinations;
 using KairoServer.Application.Persistence;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.CustomerContracts;
@@ -445,6 +446,13 @@ namespace KairoServer.IntegrationTests
             });
 
             services.AddHttpClient(HttpDeliveryExecutor.HttpClientName);
+            services.AddSingleton(new HttpDestinationSecurityOption
+            {
+                AllowHttpScheme = true,
+                AllowPrivateNetworkDestinations = true,
+                AllowRedirects = false,
+                MaxResponseBodyBytes = 1024,
+            });
             services.AddSingleton<ISecretResolver, NullSecretResolver>();
             services.AddSingleton<IDeliveryExecutor, HttpDeliveryExecutor>();
             services.AddSingleton<IDeliveryExecutorDispatcher, DeliveryExecutorDispatcher>();

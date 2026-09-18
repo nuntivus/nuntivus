@@ -12,13 +12,16 @@ namespace KairoServer.Api.Controllers.Events
     {
         private readonly IEventService _events;
         private readonly IAppLogger<EventsController> _logger;
+        private readonly IEventPublishRequestValidator _validator;
 
         public EventsController(
             IEventService events,
-            IAppLogger<EventsController> logger)
+            IAppLogger<EventsController> logger,
+            IEventPublishRequestValidator validator)
         {
             _events = events;
             _logger = logger;
+            _validator = validator;
         }
 
         [HttpPost]
@@ -26,6 +29,10 @@ namespace KairoServer.Api.Controllers.Events
             PublishEventRequest request,
             CancellationToken cancellationToken)
         {
+            var validation = _validator.Validate(request);
+            if (validation.IsFailure)
+                return new BadRequestObjectResult(ApiErrorResponse.From(validation.Errors));
+
             _logger.Information(
                 "Received PublishEvent request (idempotencyKey {IdempotencyKey}, type {Type}, source {Source}).",
                 request.IdempotencyKey,

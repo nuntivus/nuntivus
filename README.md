@@ -1198,6 +1198,35 @@ without changing the Kairo programming model.
 
 ---
 
+# Security Configuration Guidance
+
+Use external secret stores or platform secret injection for all runtime credentials.
+Do not commit production secrets to `appsettings*.json`.
+
+## Destination credential encryption key
+
+Kairo requires `DestinationCredentials:EncryptionKey` (base64, exactly 32 bytes) for protected destination credentials.
+
+- Prefer environment variable `KAIRO_DESTINATION_CREDENTIALS_KEY` in production.
+- Rotate this key through your secret manager and rollout process.
+- Keep non-production keys isolated per environment.
+
+## Database credentials
+
+- Prefer managed identity / workload identity where supported.
+- If username/password is required, inject via secret manager and environment-specific configuration.
+- Use least-privilege Postgres roles (separate migration/admin and runtime users).
+- Enable TLS and certificate validation for remote Postgres connections.
+
+## NATS credentials
+
+- Prefer `Nats:CredsFile` (JWT/NKey) over static token or user/password.
+- Configure exactly one auth mode: token, user/password, or creds file.
+- Store credentials outside the container image and mount/inject at runtime.
+- Rotate NATS credentials regularly and scope account permissions to required subjects only.
+
+---
+
 # Infrastructure as Code
 
 Customer contracts and event definitions should eventually be manageable through configuration and GitOps workflows.

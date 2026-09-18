@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Security;
 using KairoServer.Domain.Sources;
 
 namespace KairoServer.Application.Sources
@@ -22,6 +23,11 @@ namespace KairoServer.Application.Sources
         /// The category of adapter (used for diagnostics and adapter registration).
         /// </summary>
         SourceType Type { get; }
+
+        /// <summary>
+        /// Shared endpoint security context used by policy evaluation.
+        /// </summary>
+        EndpointSecurityContext SecurityContext { get; }
 
         /// <summary>
         /// Resolves the canonical <see cref="SourceId"/> for the given adapter-specific context.

@@ -117,6 +117,22 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Create_with_private_network_destination_returns_400()
+        {
+            await CreateCustomerAsync("acme");
+
+            var req = new CreateContractRequest(
+                "acme",
+                new[] { "orders.created" },
+                new HttpDestinationConfig(
+                    "http://127.0.0.1:8080/webhook",
+                    new HttpAuthentication("none")));
+
+            var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
+
+        [Fact]
         public async Task Create_with_filter_persists_rules_and_returns_filter()
         {
             await CreateCustomerAsync("acme");

@@ -10,29 +10,38 @@ namespace KairoServer.Infastructure.Deliveries.Http
     {
         private const int NonceSize = 12;
         private const int TagSize = 16;
+        private const int RequiredKeyBytes = 32;
         private readonly byte[] _key;
 
         public AesGcmDestinationCredentialProtector(DestinationCredentialOption? option = null)
         {
-            if (!string.IsNullOrWhiteSpace(option?.EncryptionKey))
+            var configuredKey = option?.EncryptionKey;
+            if (string.IsNullOrWhiteSpace(configuredKey))
             {
-                try
-                {
-                    _key = Convert.FromBase64String(option.EncryptionKey);
-                }
-                catch (FormatException)
-                {
-                    _key = DeriveDefaultKey();
-                }
-            }
-            else
-            {
-                _key = DeriveDefaultKey();
+                configuredKey = Environment.GetEnvironmentVariable("KAIRO_DESTINATION_CREDENTIALS_KEY");
             }
 
-            if (_key.Length != 32)
+            if (string.IsNullOrWhiteSpace(configuredKey))
             {
-                _key = SHA256.HashData(_key);
+                throw new InvalidOperationException(
+                    "Destination credential encryption key is required. Configure DestinationCredentials:EncryptionKey or KAIRO_DESTINATION_CREDENTIALS_KEY with a base64-encoded 32-byte key.");
+            }
+
+            try
+            {
+                _key = Convert.FromBase64String(configuredKey);
+            }
+            catch (FormatException ex)
+            {
+                throw new InvalidOperationException(
+                    "Destination credential encryption key must be a valid base64 string.",
+                    ex);
+            }
+
+            if (_key.Length != RequiredKeyBytes)
+            {
+                throw new InvalidOperationException(
+                    "Destination credential encryption key must decode to exactly 32 bytes.");
             }
         }
 
@@ -97,11 +106,6 @@ namespace KairoServer.Infastructure.Deliveries.Http
             {
                 return Result.Failure<string>(Error.Validation("Protected credential payload could not be decrypted."));
             }
-        }
-
-        private static byte[] DeriveDefaultKey()
-        {
-            return SHA256.HashData(Encoding.UTF8.GetBytes("kairo.destination.credentials.default.dev.key"));
         }
     }
 }

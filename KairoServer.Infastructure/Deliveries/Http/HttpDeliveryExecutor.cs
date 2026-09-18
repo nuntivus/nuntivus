@@ -1,15 +1,19 @@
 using System;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Contracts.Destinations;
 using KairoServer.Application.Deliveries.Execution;
 using KairoServer.Application.Observability;
+using KairoServer.Application.Security;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.CustomerContracts;
 using DomainDestinationType = KairoServer.Domain.Contracts.DestinationType;
@@ -33,17 +37,25 @@ namespace KairoServer.Infastructure.Deliveries.Http
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ISecretResolver _secretResolver;
         private readonly IAppLogger<HttpDeliveryExecutor> _logger;
+        private readonly HttpDestinationSecurityOption _security;
+        private readonly IEndpointSecurityPolicy _securityPolicy;
 
         public const string HttpClientName = "kairo-delivery-http";
+        private static readonly EndpointSecurityContext SecurityContext =
+            new(EndpointDirection.Destination, "http", "Destination");
 
         public HttpDeliveryExecutor(
             IHttpClientFactory httpClientFactory,
             ISecretResolver secretResolver,
-            IAppLogger<HttpDeliveryExecutor> logger)
+            IAppLogger<HttpDeliveryExecutor> logger,
+            HttpDestinationSecurityOption? security = null,
+            IEndpointSecurityPolicy? securityPolicy = null)
         {
             _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
             _secretResolver = secretResolver ?? throw new ArgumentNullException(nameof(secretResolver));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _security = security ?? new HttpDestinationSecurityOption();
+            _securityPolicy = securityPolicy ?? new EndpointSecurityPolicy();
         }
 
         public DomainDestinationType DestinationType => DomainDestinationType.Http;
@@ -85,7 +97,29 @@ namespace KairoServer.Infastructure.Deliveries.Http
                     $"HTTP destination configuration is not valid JSON: {ex.Message}");
             }
 
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, config.Url)
+            if (!Uri.TryCreate(config.Url, UriKind.Absolute, out var destinationUri))
+            {
+                return DeliveryExecutionResult.Failure(
+                    DeliveryFailureCategory.ConfigurationInvalid,
+                    "Destination url must be an absolute URL.");
+            }
+
+            var destinationValidation = _securityPolicy.ValidateEndpointUri(
+                destinationUri,
+                SecurityContext,
+                _security);
+            if (destinationValidation.IsFailure)
+            {
+                return DeliveryExecutionResult.Failure(
+                    DeliveryFailureCategory.ConfigurationInvalid,
+                    destinationValidation.Errors[0].Message);
+            }
+
+            var destinationAddressValidation = await ValidateDestinationAddressAsync(destinationUri, cancellationToken);
+            if (destinationAddressValidation is not null)
+                return destinationAddressValidation;
+
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, destinationUri)
             {
                 Content = new StringContent(request.Payload, Encoding.UTF8),
             };
@@ -137,7 +171,12 @@ namespace KairoServer.Infastructure.Deliveries.Http
                 using var response = await client.SendAsync(httpRequest, linkedCts.Token);
                 var elapsed = Stopwatch.GetElapsedTime(startedAt);
                 activity?.SetTag("kairo.destination.latency.ms", elapsed.TotalMilliseconds);
-                var result = await ClassifyResponseAsync(response, request, elapsed, linkedCts.Token);
+                var result = await ClassifyResponseAsync(
+                    response,
+                    request,
+                    elapsed,
+                    _security.MaxResponseBodyBytes,
+                    linkedCts.Token);
                 activity?.SetTag(KairoTelemetry.OutcomeTag, result.Succeeded ? "delivered" : "failed");
                 return result;
             }
@@ -277,13 +316,51 @@ namespace KairoServer.Infastructure.Deliveries.Http
                 KairoServer.Common.Error.Validation("Credential is required."));
         }
 
-        /// <summary>Max bytes of response body captured for observability.</summary>
-        public const int MaxResponseBodyBytes = 1024;
+        private async Task<DeliveryExecutionResult?> ValidateDestinationAddressAsync(
+            Uri destinationUri,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyCollection<IPAddress> addresses = Array.Empty<IPAddress>();
+            try
+            {
+                if (IPAddress.TryParse(destinationUri.DnsSafeHost, out var hostIp))
+                {
+                    addresses = new[] { hostIp };
+                }
+                else
+                {
+                    addresses = await Dns.GetHostAddressesAsync(destinationUri.DnsSafeHost, cancellationToken);
+                }
+            }
+            catch (SocketException)
+            {
+                // DNS may fail transiently; do not misclassify as unsafe.
+                return null;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+
+            var addressValidation = _securityPolicy.ValidateResolvedAddresses(
+                addresses,
+                SecurityContext,
+                _security);
+            if (addressValidation.IsFailure)
+            {
+                return DeliveryExecutionResult.Failure(
+                    DeliveryFailureCategory.ConfigurationInvalid,
+                    addressValidation.Errors[0].Message);
+            }
+
+            return null;
+        }
 
         private static async Task<DeliveryExecutionResult> ClassifyResponseAsync(
             HttpResponseMessage response,
             DeliveryExecutionRequest request,
             TimeSpan destinationLatency,
+            int maxResponseBodyBytes,
             CancellationToken cancellationToken)
         {
             var statusCode = (int)response.StatusCode;
@@ -298,7 +375,7 @@ namespace KairoServer.Infastructure.Deliveries.Http
                 return DeliveryExecutionResult.Success(meta);
             }
 
-            var body = await ReadBoundedBodyAsync(response, cancellationToken);
+            var body = await ReadBoundedBodyAsync(response, maxResponseBodyBytes, cancellationToken);
             if (!string.IsNullOrEmpty(body))
             {
                 meta["responseBody"] = body;
@@ -334,12 +411,14 @@ namespace KairoServer.Infastructure.Deliveries.Http
 
         private static async Task<string?> ReadBoundedBodyAsync(
             HttpResponseMessage response,
+            int maxResponseBodyBytes,
             CancellationToken cancellationToken)
         {
             try
             {
                 await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-                var buffer = new byte[MaxResponseBodyBytes];
+                var boundedSize = Math.Max(1, maxResponseBodyBytes);
+                var buffer = new byte[boundedSize];
                 var read = 0;
                 while (read < buffer.Length)
                 {
@@ -350,7 +429,11 @@ namespace KairoServer.Infastructure.Deliveries.Http
                     read += n;
                 }
                 if (read == 0) return null;
-                return Encoding.UTF8.GetString(buffer, 0, read);
+                var boundedBody = Encoding.UTF8.GetString(buffer, 0, read);
+                if (read == buffer.Length)
+                    boundedBody += "...[truncated]";
+
+                return boundedBody;
             }
             catch
             {
