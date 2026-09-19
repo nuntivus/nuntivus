@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
+using KairoServer.Application.Events.Queries;
 using KairoServer.Application.Matching;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
@@ -74,6 +75,12 @@ namespace KairoServer.UnitTests.Matching
 
             public Task<Result<Event?>> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success<Event?>(_event));
+
+            public Task<Result<EventQueryView?>> GetQueryByIdAsync(Guid id, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success<EventQueryView?>(null));
+
+            public Task<Result<PagedResult<EventQueryView>>> ListQueryAsync(EventListQuery query, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(PagedResult<EventQueryView>.Empty(query.Page, query.PageSize)));
 
             public Task<Result<Event?>> GetByIngestionKeyAsync(string sourceId, string idempotencyKey, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success<Event?>(_event));

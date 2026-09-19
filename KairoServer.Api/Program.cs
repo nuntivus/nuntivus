@@ -5,6 +5,7 @@ using KairoServer.Application.Customers;
 using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Events;
+using KairoServer.Application.Events.Queries;
 using KairoServer.Application.Persistence;
 using KairoServer.Application.Security;
 using KairoServer.Api.Controllers.Events;
@@ -152,6 +153,7 @@ builder.Services.AddScoped<IEventDefinitionRepository>(sp => new CachedEventDefi
     sp.GetRequiredService<CacheOption>()));
 
 builder.Services.AddScoped<IEventService, EventService>();
+builder.Services.AddScoped<IEventQueryService, EventQueryService>();
 builder.Services.AddScoped<IEventDefinitionService, EventDefinitionService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContractService, ContractService>();

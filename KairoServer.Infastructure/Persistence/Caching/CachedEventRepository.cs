@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Caching;
+using KairoServer.Application.Events.Queries;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Domain.Events;
@@ -35,6 +36,14 @@ namespace KairoServer.Infastructure.Persistence.Caching
                 _ttl,
                 ct => _inner.GetByIdAsync(id, ct),
                 cancellationToken);
+
+        public Task<Result<EventQueryView?>> GetQueryByIdAsync(Guid id, CancellationToken cancellationToken) =>
+            _inner.GetQueryByIdAsync(id, cancellationToken);
+
+        public Task<Result<PagedResult<EventQueryView>>> ListQueryAsync(
+            EventListQuery query,
+            CancellationToken cancellationToken) =>
+            _inner.ListQueryAsync(query, cancellationToken);
 
         public Task<Result<Event?>> GetByIngestionKeyAsync(
             string sourceId,

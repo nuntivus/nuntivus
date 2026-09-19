@@ -1,4 +1,5 @@
 ﻿using KairoServer.Common;
+using KairoServer.Application.Events.Queries;
 using KairoServer.Domain.Events;
 using System;
 using System.Collections.Generic;
@@ -22,6 +23,14 @@ namespace KairoServer.Application.Persistence
         /// </summary>
         Task<Result<Event?>> GetByIdAsync(
             Guid id,
+            CancellationToken cancellationToken);
+
+        Task<Result<EventQueryView?>> GetQueryByIdAsync(
+            Guid id,
+            CancellationToken cancellationToken);
+
+        Task<Result<PagedResult<EventQueryView>>> ListQueryAsync(
+            EventListQuery query,
             CancellationToken cancellationToken);
 
         Task<Result<Event?>> GetByIngestionKeyAsync(
