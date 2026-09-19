@@ -216,13 +216,18 @@ namespace KairoServer.Domain.Deliveries
         }
 
         /// <summary>
-        /// Manual retry operation: reactivates a dead delivery by resetting attempt count
-        /// and clearing error/scheduling state. Returns false when already active.
+        /// Manual retry operation: reactivates a dead or failed delivery by resetting
+        /// attempt count and clearing error/scheduling state. Returns false when
+        /// already pending.
         /// </summary>
         public bool ManualRetryReset(DateTimeOffset now)
         {
-            if (Status != DeliveryStatus.Dead)
+            if (Status == DeliveryStatus.Pending)
                 return false;
+
+            if (Status is not (DeliveryStatus.Dead or DeliveryStatus.Failed))
+                throw new InvalidOperationException(
+                    $"Cannot manually retry delivery from {Status}.");
 
             Status = DeliveryStatus.Pending;
             AttemptCount = 0;
@@ -233,16 +238,43 @@ namespace KairoServer.Domain.Deliveries
         }
 
         /// <summary>
-        /// Manual requeue operation: reactivates a dead delivery preserving attempt count.
-        /// Returns false when already active.
+        /// Manual requeue operation: reactivates a dead or failed delivery preserving
+        /// attempt count and scheduling immediate retry. Returns false when already pending.
         /// </summary>
         public bool ManualRequeue(DateTimeOffset now)
         {
-            if (Status != DeliveryStatus.Dead)
+            if (Status == DeliveryStatus.Pending)
                 return false;
+
+            if (Status is not (DeliveryStatus.Dead or DeliveryStatus.Failed))
+                throw new InvalidOperationException(
+                    $"Cannot manually requeue delivery from {Status}.");
 
             Status = DeliveryStatus.Failed;
             NextAttemptAt = now;
+            UpdatedAt = now;
+            return true;
+        }
+
+        /// <summary>
+        /// Manual cancel operation: transitions pending/failed/dead delivery into
+        /// terminal dead state with an operator-provided reason. Returns false when
+        /// already dead.
+        /// </summary>
+        public bool ManualCancel(string reason, DateTimeOffset now)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(reason);
+
+            if (Status == DeliveryStatus.Dead)
+                return false;
+
+            if (Status is not (DeliveryStatus.Pending or DeliveryStatus.Failed))
+                throw new InvalidOperationException(
+                    $"Cannot manually cancel delivery from {Status}.");
+
+            Status = DeliveryStatus.Dead;
+            LastError = reason;
+            NextAttemptAt = null;
             UpdatedAt = now;
             return true;
         }

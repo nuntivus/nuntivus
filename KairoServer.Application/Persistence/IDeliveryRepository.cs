@@ -70,6 +70,16 @@ namespace KairoServer.Application.Persistence
             Guid deliveryId,
             CancellationToken cancellationToken);
 
+        Task<Result<DeliveryOperationAudit?>> GetOperationAuditAsync(
+            Guid deliveryId,
+            Guid operationId,
+            CancellationToken cancellationToken);
+
+        Task<Result<int>> AddOperationAuditAsync(
+            DeliveryOperationAudit operationAudit,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken);
+
         /// <summary>
         /// Lists terminal dead deliveries ordered by most recently updated.
         /// </summary>

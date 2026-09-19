@@ -68,6 +68,7 @@ namespace KairoServer.IntegrationTests
                 "016_add_delivery_contract_snapshots.sql",
                 "017_add_contract_snapshot_columns.sql",
                 "018_add_delivery_scheduler_indexes.sql",
+                "019_add_delivery_operation_audits.sql",
             })
             {
                 var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

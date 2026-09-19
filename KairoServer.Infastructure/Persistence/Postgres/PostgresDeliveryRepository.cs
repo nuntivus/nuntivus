@@ -465,6 +465,51 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        public async Task<Result<DeliveryOperationAudit?>> GetOperationAuditAsync(
+            Guid deliveryId,
+            Guid operationId,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                    SELECT
+                        id,
+                        delivery_id AS DeliveryId,
+                        operation_id AS OperationId,
+                        operation,
+                        operator_id AS OperatorId,
+                        request_snapshot::text AS RequestSnapshot,
+                        response_snapshot::text AS ResponseSnapshot,
+                        created_at AS CreatedAt
+                    FROM delivery_operation_audits
+                    WHERE delivery_id = @DeliveryId
+                      AND operation_id = @OperationId;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                var row = await connection.QuerySingleOrDefaultAsync<DeliveryOperationAuditRow>(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        DeliveryId = deliveryId,
+                        OperationId = operationId,
+                    },
+                    cancellationToken: cancellationToken));
+
+                if (row is null)
+                    return Result.Success<DeliveryOperationAudit?>(null);
+
+                return Result.Success<DeliveryOperationAudit?>(MapDeliveryOperationAudit(row));
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<DeliveryOperationAudit?>(ex);
+            }
+        }
+
         public async Task<Result<Delivery?>> GetByIdAsync(
             Guid deliveryId,
             CancellationToken cancellationToken)
@@ -710,6 +755,66 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        public async Task<Result<int>> AddOperationAuditAsync(
+            DeliveryOperationAudit operationAudit,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (!uow.IsTransactionOpen)
+                    throw new InvalidOperationException("Transaction is not open.");
+
+                const string sql = """
+                    INSERT INTO delivery_operation_audits
+                    (
+                        id,
+                        delivery_id,
+                        operation_id,
+                        operation,
+                        operator_id,
+                        request_snapshot,
+                        response_snapshot,
+                        created_at
+                    )
+                    VALUES
+                    (
+                        @Id,
+                        @DeliveryId,
+                        @OperationId,
+                        @Operation,
+                        @OperatorId,
+                        CAST(@RequestSnapshot AS jsonb),
+                        CAST(@ResponseSnapshot AS jsonb),
+                        @CreatedAt
+                    )
+                    ON CONFLICT (delivery_id, operation_id) DO NOTHING;
+                    """;
+
+                var rows = await uow.GetConnection()!.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        operationAudit.Id,
+                        operationAudit.DeliveryId,
+                        operationAudit.OperationId,
+                        operationAudit.Operation,
+                        operationAudit.OperatorId,
+                        operationAudit.RequestSnapshot,
+                        operationAudit.ResponseSnapshot,
+                        operationAudit.CreatedAt,
+                    },
+                    uow.GetTransaction(),
+                    cancellationToken: cancellationToken));
+
+                return Result.Success(rows);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<int>(ex);
+            }
+        }
+
         private sealed class DeliveryRow
         {
             public Guid Id { get; set; }
@@ -775,6 +880,29 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public DateTimeOffset StartedAt { get; set; }
             public DateTimeOffset CompletedAt { get; set; }
         }
+
+        private sealed class DeliveryOperationAuditRow
+        {
+            public Guid Id { get; set; }
+            public Guid DeliveryId { get; set; }
+            public Guid OperationId { get; set; }
+            public string Operation { get; set; } = string.Empty;
+            public string OperatorId { get; set; } = string.Empty;
+            public string RequestSnapshot { get; set; } = string.Empty;
+            public string ResponseSnapshot { get; set; } = string.Empty;
+            public DateTimeOffset CreatedAt { get; set; }
+        }
+
+        private static DeliveryOperationAudit MapDeliveryOperationAudit(DeliveryOperationAuditRow row) =>
+            DeliveryOperationAudit.Rehydrate(
+                row.Id,
+                row.DeliveryId,
+                row.OperationId,
+                row.Operation,
+                row.OperatorId,
+                row.RequestSnapshot,
+                row.ResponseSnapshot,
+                row.CreatedAt);
 
     }
 }

@@ -130,6 +130,12 @@ namespace KairoServer.UnitTests.Matching
             public Task<Result<IReadOnlyList<DeliveryAttempt>>> GetAttemptsByDeliveryIdAsync(Guid deliveryId, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success<IReadOnlyList<DeliveryAttempt>>(Array.Empty<DeliveryAttempt>()));
 
+            public Task<Result<DeliveryOperationAudit?>> GetOperationAuditAsync(Guid deliveryId, Guid operationId, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success<DeliveryOperationAudit?>(null));
+
+            public Task<Result<int>> AddOperationAuditAsync(DeliveryOperationAudit operationAudit, IUnitOfWork uow, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(1));
+
             public Task<Result<PagedResult<Delivery>>> ListDeadAsync(int page, int pageSize, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(PagedResult<Delivery>.Create(Array.Empty<Delivery>(), page, pageSize, 0)));
 

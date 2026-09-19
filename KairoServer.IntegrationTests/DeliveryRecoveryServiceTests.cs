@@ -30,9 +30,10 @@ namespace KairoServer.IntegrationTests
         {
             var delivery = await SeedDeadDeliveryAsync();
             var service = BuildService();
+            var request = NewRequest("manual retry");
 
-            var first = await service.ManualRetryAsync(delivery.Id, CancellationToken.None);
-            var second = await service.ManualRetryAsync(delivery.Id, CancellationToken.None);
+            var first = await service.ManualRetryAsync(delivery.Id, request, CancellationToken.None);
+            var second = await service.ManualRetryAsync(delivery.Id, request, CancellationToken.None);
 
             first.EnsureSuccess();
             second.EnsureSuccess();
@@ -44,6 +45,7 @@ namespace KairoServer.IntegrationTests
 
             var attempts = await ReadAttemptsAsync(delivery.Id);
             Assert.Single(attempts);
+            Assert.Equal(1, await ReadAuditCountAsync(delivery.Id));
         }
 
         [Fact]
@@ -51,9 +53,10 @@ namespace KairoServer.IntegrationTests
         {
             var delivery = await SeedDeadDeliveryAsync();
             var service = BuildService();
+            var request = NewRequest("manual requeue");
 
-            var first = await service.ManualRequeueAsync(delivery.Id, CancellationToken.None);
-            var second = await service.ManualRequeueAsync(delivery.Id, CancellationToken.None);
+            var first = await service.ManualRequeueAsync(delivery.Id, request, CancellationToken.None);
+            var second = await service.ManualRequeueAsync(delivery.Id, request, CancellationToken.None);
 
             first.EnsureSuccess();
             second.EnsureSuccess();
@@ -68,6 +71,42 @@ namespace KairoServer.IntegrationTests
 
             var attempts = await ReadAttemptsAsync(delivery.Id);
             Assert.Single(attempts);
+            Assert.Equal(1, await ReadAuditCountAsync(delivery.Id));
+        }
+
+        [Fact]
+        public async Task ManualCancelAsync_Transitions_To_Dead_And_Writes_Audit()
+        {
+            var delivery = await SeedFailedDeliveryAsync();
+            var service = BuildService();
+
+            var result = await service.ManualCancelAsync(
+                delivery.Id,
+                NewRequest("operator cancel"),
+                CancellationToken.None);
+
+            result.EnsureSuccess();
+            Assert.Equal(DeliveryStatus.Dead, result.Value.Status);
+            Assert.Contains("operator cancel", result.Value.LastError, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, await ReadAuditCountAsync(delivery.Id));
+        }
+
+        [Fact]
+        public async Task GetFailure_And_Attempts_Return_Inspection_Data()
+        {
+            var delivery = await SeedDeadDeliveryAsync();
+            var service = BuildService();
+
+            var failure = await service.GetFailureAsync(delivery.Id, CancellationToken.None);
+            var attempts = await service.GetAttemptsAsync(delivery.Id, CancellationToken.None);
+
+            failure.EnsureSuccess();
+            attempts.EnsureSuccess();
+
+            Assert.Equal(delivery.Id, failure.Value.DeliveryId);
+            Assert.Equal(DeliveryStatus.Dead, failure.Value.Status);
+            Assert.Single(attempts.Value);
+            Assert.False(attempts.Value[0].Succeeded);
         }
 
         [Fact]
@@ -125,6 +164,29 @@ namespace KairoServer.IntegrationTests
             return delivery;
         }
 
+        private async Task<Delivery> SeedFailedDeliveryAsync()
+        {
+            var (eventId, contractId, customerId) = await SeedAsync();
+            var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
+            var now = DateTimeOffset.UtcNow;
+
+            var delivery = DeliveryFactory.CreatePending(
+                eventId, contractId, customerId, "orders.created", "{}", destination, now);
+
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            using var uow = new PostgresUnitOfWork(factory);
+            uow.Begin(true);
+            var repo = new PostgresDeliveryRepository(factory);
+            (await repo.InsertPendingAsync(new[] { delivery }, uow, CancellationToken.None)).EnsureSuccess();
+
+            delivery.MarkInFlight(now.AddSeconds(1));
+            delivery.MarkFailed("temporary failure", now.AddMinutes(1), now.AddSeconds(2));
+            (await repo.UpdateAsync(delivery, now, uow, CancellationToken.None)).EnsureSuccess();
+            uow.Commit();
+
+            return delivery;
+        }
+
         private async Task<IReadOnlyList<DeliveryAttempt>> ReadAttemptsAsync(Guid deliveryId)
         {
             var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
@@ -132,6 +194,18 @@ namespace KairoServer.IntegrationTests
             var attempts = await repo.GetAttemptsByDeliveryIdAsync(deliveryId, CancellationToken.None);
             return attempts.EnsureValue();
         }
+
+        private async Task<long> ReadAuditCountAsync(Guid deliveryId)
+        {
+            await using var conn = new NpgsqlConnection(_fx.ConnectionString);
+            await conn.OpenAsync();
+            return await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM delivery_operation_audits WHERE delivery_id = @id;",
+                new { id = deliveryId });
+        }
+
+        private static ManualDeliveryOperationRequest NewRequest(string reason) =>
+            new(Guid.NewGuid(), "operator-1", reason, "{\"source\":\"integration\"}");
 
         private async Task<(Guid eventId, Guid contractId, string customerId)> SeedAsync()
         {
