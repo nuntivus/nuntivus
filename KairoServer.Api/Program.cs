@@ -124,6 +124,7 @@ builder.Services.AddSingleton<ICacheStore, InMemoryCacheStore>();
 
 builder.Services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
 builder.Services.AddScoped<IOutboxRepository, PostgresOutboxRepository>();
+builder.Services.AddScoped<IAuditLogRepository, PostgresAuditLogRepository>();
 
 builder.Services.AddScoped<PostgresEventRepository>();
 builder.Services.AddScoped<IEventRepository>(sp => new CachedEventRepository(

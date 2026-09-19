@@ -19,6 +19,7 @@ namespace KairoServer.UnitTests.Events
             var service = new EventService(
                 new FakeEventRepository(),
                 new FakeOutboxRepository(),
+                new FakeAuditLogRepository(),
                 new FakeUnitOfWork(),
                 new NullLogger<EventService>());
 
@@ -58,6 +59,12 @@ namespace KairoServer.UnitTests.Events
         {
             public Task<Result> InsertAsync(OutboxMessage message, IUnitOfWork uow, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success());
+        }
+
+        private sealed class FakeAuditLogRepository : IAuditLogRepository
+        {
+            public Task<Result<int>> AddAsync(KairoServer.Domain.Auditing.AuditLogEntry entry, IUnitOfWork uow, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(1));
         }
 
         private sealed class FakeUnitOfWork : IUnitOfWork

@@ -23,6 +23,8 @@
     <File Path="migration/018_add_delivery_scheduler_indexes.sql" />
     <File Path="migration/019_add_delivery_operation_audits.sql" />
     <File Path="migration/019_backfill_contract_auth_snapshot_columns.sql" />
+    <File Path="migration/020_create_delivery_replay_jobs.sql" />
+    <File Path="migration/021_create_audit_logs.sql" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path="../../../Desktop/AI_CONTEXT.md" />

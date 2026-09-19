@@ -75,6 +75,40 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Create_and_rotate_credentials_write_audit_entries()
+        {
+            await CreateCustomerAsync("audit-contract-customer");
+
+            var createResponse = await _client.PostAsJsonAsync("/v1/contracts",
+                ValidRequest("audit-contract-customer", "orders.created"));
+            var created = await createResponse.Content.ReadFromJsonAsync<ContractCreated>();
+            Assert.NotNull(created);
+
+            var rotateRequest = new UpdateContractCredentialsRequest(
+                new HttpDestinationConfig(
+                    "https://hooks.example.com/audit-rotated",
+                    new HttpAuthentication("hmac", new HttpCredential("ref", "secret.acme.rotated")),
+                    Headers: null,
+                    TimeoutSeconds: 30));
+
+            var rotateResponse = await _client.PostAsJsonAsync(
+                $"/v1/contracts/{created!.Id:D}/credentials/rotate",
+                rotateRequest);
+            Assert.Equal(HttpStatusCode.OK, rotateResponse.StatusCode);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            await conn.OpenAsync();
+
+            var actions = (await conn.QueryAsync<string>(
+                "SELECT action FROM audit_logs WHERE category = 'contract' AND contract_id = @contractId ORDER BY created_at;",
+                new { contractId = created.Id })).AsList();
+
+            Assert.Equal(2, actions.Count);
+            Assert.Equal("created", actions[0]);
+            Assert.Equal("credentials_rotated", actions[1]);
+        }
+
+        [Fact]
         public async Task Create_for_missing_customer_returns_404()
         {
             var resp = await _client.PostAsJsonAsync("/v1/contracts",

@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using System.Security.Claims;
 using KairoServer.Api.Common;
 using KairoServer.Application.Contracts;
 using KairoServer.Application.Customers;
@@ -35,7 +36,7 @@ namespace KairoServer.Api.Controllers.Customers
         {
             _logger.Information("Received CreateCustomer request (id {Id}).", request.Id);
 
-            var result = await _customers.CreateAsync(request.Id, request.Name, cancellationToken);
+            var result = await _customers.CreateAsync(request.Id, request.Name, cancellationToken, GetActorId());
 
             return result.ToActionResult(created =>
                 CreatedAtAction(nameof(GetById), new { id = created.Id }, created));
@@ -72,15 +73,25 @@ namespace KairoServer.Api.Controllers.Customers
         [HttpPost("{id}/enable")]
         public async Task<IActionResult> Enable(string id, CancellationToken cancellationToken)
         {
-            var result = await _customers.EnableAsync(id, cancellationToken);
+            var result = await _customers.EnableAsync(id, cancellationToken, GetActorId());
             return result.ToOk();
         }
 
         [HttpPost("{id}/disable")]
         public async Task<IActionResult> Disable(string id, CancellationToken cancellationToken)
         {
-            var result = await _customers.DisableAsync(id, cancellationToken);
+            var result = await _customers.DisableAsync(id, cancellationToken, GetActorId());
             return result.ToOk();
+        }
+
+        private string? GetActorId()
+        {
+            if (User?.Identity?.IsAuthenticated != true)
+                return null;
+
+            return User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue(ClaimTypes.Name)
+                ?? User.Identity?.Name;
         }
 
         [HttpGet("{id}/contracts")]

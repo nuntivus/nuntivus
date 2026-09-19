@@ -53,12 +53,13 @@ namespace KairoServer.Worker.Retention
                     else if (result.Value.TotalDeletedRows > 0)
                     {
                         _logger.Information(
-                            "Retention cleanup cycle removed {Total} rows (events {Events}, deliveries {Deliveries}, attempts {Attempts}, outbox {Outbox}) in {Batches} batches.",
+                            "Retention cleanup cycle removed {Total} rows (events {Events}, deliveries {Deliveries}, attempts {Attempts}, outbox {Outbox}, audits {Audits}) in {Batches} batches.",
                             result.Value.TotalDeletedRows,
                             result.Value.DeletedEvents,
                             result.Value.DeletedDeliveries,
                             result.Value.DeletedDeliveryAttempts,
                             result.Value.DeletedProcessedOutbox,
+                            result.Value.DeletedAuditLogs,
                             result.Value.BatchesProcessed);
                     }
                 }

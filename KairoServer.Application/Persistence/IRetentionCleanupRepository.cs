@@ -26,5 +26,10 @@ namespace KairoServer.Application.Persistence
             DateTimeOffset receivedBefore,
             int batchSize,
             CancellationToken cancellationToken);
+
+        Task<Result<int>> DeleteAuditLogsBatchAsync(
+            DateTimeOffset createdBefore,
+            int batchSize,
+            CancellationToken cancellationToken);
     }
 }

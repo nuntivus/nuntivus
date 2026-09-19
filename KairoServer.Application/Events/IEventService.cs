@@ -20,7 +20,8 @@ namespace KairoServer.Application.Events
             Guid eventId,
             string replayKey,
             string? reason,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken,
+            string? actorId = null);
     }
 
     public sealed record ReplayEventResult(

@@ -43,6 +43,24 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Create_and_disable_write_audit_entries()
+        {
+            await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest("audit-cust", "Audit Customer"));
+            await _client.PostAsync("/v1/customers/audit-cust/disable", null);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            await conn.OpenAsync();
+
+            var actions = (await conn.QueryAsync<string>(
+                "SELECT action FROM audit_logs WHERE category = 'customer' AND customer_id = @customerId ORDER BY created_at;",
+                new { customerId = "audit-cust" })).AsList();
+
+            Assert.Equal(2, actions.Count);
+            Assert.Equal("created", actions[0]);
+            Assert.Equal("disabled", actions[1]);
+        }
+
+        [Fact]
         public async Task Create_with_invalid_id_returns_400_validation()
         {
             var resp = await _client.PostAsJsonAsync("/v1/customers",

@@ -39,7 +39,7 @@ namespace KairoServer.IntegrationTests
             await using var conn = new NpgsqlConnection(ConnectionString);
             await conn.OpenAsync();
             await conn.ExecuteAsync(
-                "TRUNCATE TABLE delivery_operation_audits, delivery_attempts, deliveries, contract_event_types, contracts, customers, events CASCADE;");
+                "TRUNCATE TABLE audit_logs, delivery_operation_audits, delivery_attempts, deliveries, contract_event_types, contracts, customers, events CASCADE;");
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -82,6 +82,7 @@ namespace KairoServer.IntegrationTests
                 "018_add_delivery_scheduler_indexes.sql",
                 "019_add_delivery_operation_audits.sql",
                 "020_create_delivery_replay_jobs.sql",
+                "021_create_audit_logs.sql",
             })
             {
                 var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

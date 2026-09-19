@@ -4,6 +4,7 @@ using KairoServer.Api.Common;
 using KairoServer.Common.Extensions;
 using KairoServer.Common.Logging;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace KairoServer.Api.Controllers.Events
@@ -103,7 +104,8 @@ namespace KairoServer.Api.Controllers.Events
                 id,
                 request.ReplayKey,
                 request.Reason,
-                cancellationToken);
+                cancellationToken,
+                GetActorId());
 
             return result.ToActionResult(replay => Ok(new ReplayEventResponse(
                 replay.SourceEventId.ToString("D"),
@@ -138,6 +140,16 @@ namespace KairoServer.Api.Controllers.Events
 
             using var document = JsonDocument.Parse(json);
             return document.RootElement.Clone();
+        }
+
+        private string? GetActorId()
+        {
+            if (User?.Identity?.IsAuthenticated != true)
+                return null;
+
+            return User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue(ClaimTypes.Name)
+                ?? User.Identity?.Name;
         }
     }
 }

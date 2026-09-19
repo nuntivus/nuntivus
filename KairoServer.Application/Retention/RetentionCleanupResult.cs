@@ -5,9 +5,10 @@ namespace KairoServer.Application.Retention
         int DeletedDeliveryAttempts,
         int DeletedDeliveries,
         int DeletedEvents,
+        int DeletedAuditLogs,
         int BatchesProcessed)
     {
         public int TotalDeletedRows =>
-            DeletedProcessedOutbox + DeletedDeliveryAttempts + DeletedDeliveries + DeletedEvents;
+            DeletedProcessedOutbox + DeletedDeliveryAttempts + DeletedDeliveries + DeletedEvents + DeletedAuditLogs;
     }
 }

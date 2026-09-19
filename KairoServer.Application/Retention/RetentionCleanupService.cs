@@ -27,7 +27,7 @@ namespace KairoServer.Application.Retention
         {
             if (!_options.Enabled)
             {
-                return Result.Success(new RetentionCleanupResult(0, 0, 0, 0, 0));
+                return Result.Success(new RetentionCleanupResult(0, 0, 0, 0, 0, 0));
             }
 
             if (_options.BatchSize <= 0)
@@ -60,12 +60,18 @@ namespace KairoServer.Application.Retention
                     "events",
                     cancellationToken);
 
+                var auditLogs = await DeleteInBatchesAsync(
+                    (batchSize, ct) => _repository.DeleteAuditLogsBatchAsync(now - _options.AuditLogRetention, batchSize, ct),
+                    "audit_logs",
+                    cancellationToken);
+
                 return Result.Success(new RetentionCleanupResult(
                     outbox.DeletedRows,
                     attempts.DeletedRows,
                     deliveries.DeletedRows,
                     eventsDeleted.DeletedRows,
-                    outbox.Batches + attempts.Batches + deliveries.Batches + eventsDeleted.Batches));
+                    auditLogs.DeletedRows,
+                    outbox.Batches + attempts.Batches + deliveries.Batches + eventsDeleted.Batches + auditLogs.Batches));
             }
             catch (Exception ex)
             {

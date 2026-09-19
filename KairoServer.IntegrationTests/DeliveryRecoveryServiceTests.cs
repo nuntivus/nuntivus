@@ -183,6 +183,7 @@ namespace KairoServer.IntegrationTests
             var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
             return new DeliveryRecoveryService(
                 new PostgresDeliveryRepository(factory),
+                new PostgresAuditLogRepository(),
                 new PostgresUnitOfWork(factory),
                 new NullAppLogger<DeliveryRecoveryService>());
         }

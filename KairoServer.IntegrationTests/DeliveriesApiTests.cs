@@ -40,9 +40,13 @@ namespace KairoServer.IntegrationTests
             await conn.OpenAsync();
             var status = await conn.ExecuteScalarAsync<string>("SELECT status FROM deliveries WHERE id = @id", new { id });
             var audits = await conn.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM delivery_operation_audits WHERE delivery_id = @id", new { id });
+            var genericAudits = await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM audit_logs WHERE category = 'delivery' AND action = 'retry' AND delivery_id = @id;",
+                new { id });
 
             Assert.Equal("Pending", status);
             Assert.Equal(1L, audits);
+            Assert.Equal(1L, genericAudits);
         }
 
         [Fact]
@@ -134,8 +138,12 @@ namespace KairoServer.IntegrationTests
             var count = await conn.ExecuteScalarAsync<long>(
                 "SELECT COUNT(*) FROM delivery_replay_jobs WHERE operation_id = @operationId;",
                 new { operationId });
+            var auditCount = await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM audit_logs WHERE category = 'delivery' AND action = 'replay_requested' AND operation_id = @operationId;",
+                new { operationId });
 
             Assert.Equal(1L, count);
+            Assert.Equal(1L, auditCount);
         }
 
         [Fact]

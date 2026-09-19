@@ -1,4 +1,5 @@
 using System;
+using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Api.Common;
@@ -33,7 +34,7 @@ namespace KairoServer.Api.Controllers.Contracts
                 "Received CreateContract request for customer {CustomerId}.",
                 request?.CustomerId);
 
-            var result = await _contracts.CreateAsync(request!, cancellationToken);
+            var result = await _contracts.CreateAsync(request!, cancellationToken, GetActorId());
 
             return result.ToActionResult(created =>
                 CreatedAtAction(nameof(GetById), new { id = created.Id }, created));
@@ -49,14 +50,14 @@ namespace KairoServer.Api.Controllers.Contracts
         [HttpPost("{id:guid}/enable")]
         public async Task<IActionResult> Enable(Guid id, CancellationToken cancellationToken)
         {
-            var result = await _contracts.EnableAsync(id, cancellationToken);
+            var result = await _contracts.EnableAsync(id, cancellationToken, GetActorId());
             return result.ToOk();
         }
 
         [HttpPost("{id:guid}/disable")]
         public async Task<IActionResult> Disable(Guid id, CancellationToken cancellationToken)
         {
-            var result = await _contracts.DisableAsync(id, cancellationToken);
+            var result = await _contracts.DisableAsync(id, cancellationToken, GetActorId());
             return result.ToOk();
         }
 
@@ -66,7 +67,7 @@ namespace KairoServer.Api.Controllers.Contracts
             [FromBody] UpdateContractCredentialsRequest request,
             CancellationToken cancellationToken)
         {
-            var result = await _contracts.UpdateCredentialsAsync(id, request, cancellationToken);
+            var result = await _contracts.UpdateCredentialsAsync(id, request, cancellationToken, GetActorId());
             return result.ToOk();
         }
 
@@ -76,8 +77,18 @@ namespace KairoServer.Api.Controllers.Contracts
             [FromBody] UpdateContractCredentialsRequest request,
             CancellationToken cancellationToken)
         {
-            var result = await _contracts.RotateCredentialsAsync(id, request, cancellationToken);
+            var result = await _contracts.RotateCredentialsAsync(id, request, cancellationToken, GetActorId());
             return result.ToOk();
+        }
+
+        private string? GetActorId()
+        {
+            if (User?.Identity?.IsAuthenticated != true)
+                return null;
+
+            return User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue(ClaimTypes.Name)
+                ?? User.Identity?.Name;
         }
     }
 }

@@ -1,10 +1,12 @@
 using System;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.Customers;
+using KairoServer.Domain.Auditing;
 using KairoServer.Domain.Customers;
 
 namespace KairoServer.Application.Customers
@@ -15,15 +17,18 @@ namespace KairoServer.Application.Customers
         public const int DefaultPageSize = 20;
 
         private readonly ICustomerRepository _repository;
+        private readonly IAuditLogRepository _auditLogs;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IAppLogger<CustomerService> _logger;
 
         public CustomerService(
             ICustomerRepository repository,
+            IAuditLogRepository auditLogs,
             IUnitOfWork unitOfWork,
             IAppLogger<CustomerService> logger)
         {
             _repository = repository;
+            _auditLogs = auditLogs;
             _unitOfWork = unitOfWork;
             _logger = logger;
         }
@@ -31,7 +36,8 @@ namespace KairoServer.Application.Customers
         public async Task<Result<CustomerCreated>> CreateAsync(
             string id,
             string name,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string? actorId = null)
         {
             if (!CustomerValidation.IsValidId(id))
                 return Result.Failure<CustomerCreated>(Error.Validation(
@@ -53,6 +59,25 @@ namespace KairoServer.Application.Customers
                     _unitOfWork.Rollback();
                     return Result<CustomerCreated>.Fail(insert.Errors);
                 }
+
+                var audit = BuildAudit(
+                    action: "created",
+                    actorId: actorId,
+                    customerId: customer.Id,
+                    details: JsonSerializer.Serialize(new
+                    {
+                        customer.Id,
+                        customer.Name,
+                        customer.Enabled,
+                    }),
+                    createdAt: now);
+                var auditInsert = await _auditLogs.AddAsync(audit, _unitOfWork, cancellationToken);
+                if (auditInsert.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<CustomerCreated>.Fail(auditInsert.Errors);
+                }
+
                 _unitOfWork.Commit();
 
                 _logger.Information("Customer created {CustomerId} ({Name}).", customer.Id, customer.Name);
@@ -106,16 +131,17 @@ namespace KairoServer.Application.Customers
             return Result.Success(result.Value.Map(c => c.ToView()));
         }
 
-        public Task<Result<CustomerView>> EnableAsync(string id, CancellationToken cancellationToken) =>
-            ToggleAsync(id, enable: true, cancellationToken);
+        public Task<Result<CustomerView>> EnableAsync(string id, CancellationToken cancellationToken, string? actorId = null) =>
+            ToggleAsync(id, enable: true, cancellationToken, actorId);
 
-        public Task<Result<CustomerView>> DisableAsync(string id, CancellationToken cancellationToken) =>
-            ToggleAsync(id, enable: false, cancellationToken);
+        public Task<Result<CustomerView>> DisableAsync(string id, CancellationToken cancellationToken, string? actorId = null) =>
+            ToggleAsync(id, enable: false, cancellationToken, actorId);
 
         private async Task<Result<CustomerView>> ToggleAsync(
             string id,
             bool enable,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string? actorId)
         {
             if (string.IsNullOrWhiteSpace(id))
                 return Result.Failure<CustomerView>(Error.Validation("Customer id is required."));
@@ -140,6 +166,25 @@ namespace KairoServer.Application.Customers
                     _unitOfWork.Rollback();
                     return Result<CustomerView>.Fail(update.Errors);
                 }
+
+                var action = enable ? "enabled" : "disabled";
+                var audit = BuildAudit(
+                    action,
+                    actorId,
+                    customer.Id,
+                    JsonSerializer.Serialize(new
+                    {
+                        customer.Id,
+                        customer.Enabled,
+                    }),
+                    now);
+                var auditInsert = await _auditLogs.AddAsync(audit, _unitOfWork, cancellationToken);
+                if (auditInsert.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<CustomerView>.Fail(auditInsert.Errors);
+                }
+
                 _unitOfWork.Commit();
 
                 _logger.Information(
@@ -155,6 +200,27 @@ namespace KairoServer.Application.Customers
                 _logger.Error(ex, "Failed to toggle customer {CustomerId} (enable={Enable}).", id, enable);
                 return Result.Failure<CustomerView>(ex);
             }
+        }
+
+        private static AuditLogEntry BuildAudit(
+            string action,
+            string? actorId,
+            string customerId,
+            string details,
+            DateTimeOffset createdAt)
+        {
+            return AuditLogEntry.Create(
+                category: "customer",
+                action: action,
+                actorId: actorId,
+                customerId: customerId,
+                contractId: null,
+                deliveryId: null,
+                eventId: null,
+                operationId: null,
+                details: details,
+                createdAt: createdAt,
+                expiresAt: createdAt.AddDays(90));
         }
     }
 }

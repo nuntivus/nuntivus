@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Contracts.Destinations;
@@ -8,6 +9,7 @@ using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.CustomerContracts;
+using KairoServer.Domain.Auditing;
 using KairoServer.Domain.Contracts;
 
 namespace KairoServer.Application.Contracts
@@ -20,6 +22,7 @@ namespace KairoServer.Application.Contracts
         private readonly IContractRepository _repository;
         private readonly ICustomerRepository _customers;
         private readonly IEventDefinitionRepository _eventDefinitions;
+        private readonly IAuditLogRepository _auditLogs;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IDestinationConfigDispatcher _destinations;
         private readonly IAppLogger<ContractService> _logger;
@@ -28,6 +31,7 @@ namespace KairoServer.Application.Contracts
             IContractRepository repository,
             ICustomerRepository customers,
             IEventDefinitionRepository eventDefinitions,
+            IAuditLogRepository auditLogs,
             IUnitOfWork unitOfWork,
             IDestinationConfigDispatcher destinations,
             IAppLogger<ContractService> logger)
@@ -35,6 +39,7 @@ namespace KairoServer.Application.Contracts
             _repository = repository;
             _customers = customers;
             _eventDefinitions = eventDefinitions;
+            _auditLogs = auditLogs;
             _unitOfWork = unitOfWork;
             _destinations = destinations;
             _logger = logger;
@@ -42,7 +47,8 @@ namespace KairoServer.Application.Contracts
 
         public async Task<Result<ContractCreated>> CreateAsync(
             CreateContractRequest request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string? actorId = null)
         {
             if (request is null)
                 return Result.Failure<ContractCreated>(Error.Validation("Request body is required."));
@@ -152,6 +158,28 @@ namespace KairoServer.Application.Contracts
                     _unitOfWork.Rollback();
                     return Result<ContractCreated>.Fail(insert.Errors);
                 }
+
+                var audit = BuildAudit(
+                    action: "created",
+                    actorId: actorId,
+                    contract: contract,
+                    operationId: null,
+                    details: JsonSerializer.Serialize(new
+                    {
+                        contract.Id,
+                        contract.CustomerId,
+                        contract.Enabled,
+                        EventTypes = contract.EventTypes,
+                        DestinationType = contract.Destination.Type.ToString(),
+                    }),
+                    createdAt: now);
+                var auditInsert = await _auditLogs.AddAsync(audit, _unitOfWork, cancellationToken);
+                if (auditInsert.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<ContractCreated>.Fail(auditInsert.Errors);
+                }
+
                 _unitOfWork.Commit();
 
                 _logger.Information(
@@ -224,28 +252,31 @@ namespace KairoServer.Application.Contracts
                 result.Value.TotalCount));
         }
 
-        public Task<Result<ContractView>> EnableAsync(Guid id, CancellationToken cancellationToken) =>
-            ToggleAsync(id, enable: true, cancellationToken);
+        public Task<Result<ContractView>> EnableAsync(Guid id, CancellationToken cancellationToken, string? actorId = null) =>
+            ToggleAsync(id, enable: true, cancellationToken, actorId);
 
-        public Task<Result<ContractView>> DisableAsync(Guid id, CancellationToken cancellationToken) =>
-            ToggleAsync(id, enable: false, cancellationToken);
+        public Task<Result<ContractView>> DisableAsync(Guid id, CancellationToken cancellationToken, string? actorId = null) =>
+            ToggleAsync(id, enable: false, cancellationToken, actorId);
 
         public Task<Result<ContractView>> UpdateCredentialsAsync(
             Guid id,
             UpdateContractCredentialsRequest request,
-            CancellationToken cancellationToken) =>
-            UpsertCredentialsAsync(id, request, "updated", rotate: false, cancellationToken);
+            CancellationToken cancellationToken,
+            string? actorId = null) =>
+            UpsertCredentialsAsync(id, request, "updated", rotate: false, cancellationToken, actorId);
 
         public Task<Result<ContractView>> RotateCredentialsAsync(
             Guid id,
             UpdateContractCredentialsRequest request,
-            CancellationToken cancellationToken) =>
-            UpsertCredentialsAsync(id, request, "rotated", rotate: true, cancellationToken);
+            CancellationToken cancellationToken,
+            string? actorId = null) =>
+            UpsertCredentialsAsync(id, request, "rotated", rotate: true, cancellationToken, actorId);
 
         private async Task<Result<ContractView>> ToggleAsync(
             Guid id,
             bool enable,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string? actorId)
         {
             if (id == Guid.Empty)
                 return Result.Failure<ContractView>(Error.Validation("Contract id is required."));
@@ -270,6 +301,27 @@ namespace KairoServer.Application.Contracts
                     _unitOfWork.Rollback();
                     return Result<ContractView>.Fail(update.Errors);
                 }
+
+                var action = enable ? "enabled" : "disabled";
+                var audit = BuildAudit(
+                    action,
+                    actorId,
+                    contract,
+                    null,
+                    JsonSerializer.Serialize(new
+                    {
+                        contract.Id,
+                        contract.CustomerId,
+                        contract.Enabled,
+                    }),
+                    now);
+                var auditInsert = await _auditLogs.AddAsync(audit, _unitOfWork, cancellationToken);
+                if (auditInsert.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<ContractView>.Fail(auditInsert.Errors);
+                }
+
                 _unitOfWork.Commit();
 
                 _logger.Information(
@@ -292,7 +344,8 @@ namespace KairoServer.Application.Contracts
             UpdateContractCredentialsRequest request,
             string action,
             bool rotate,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string? actorId)
         {
             if (id == Guid.Empty)
                 return Result.Failure<ContractView>(Error.Validation("Contract id is required."));
@@ -324,7 +377,8 @@ namespace KairoServer.Application.Contracts
                     destinationToApply = rotation.Value;
                 }
 
-                contract.UpdateDestination(destinationToApply, DateTimeOffset.UtcNow);
+                var now = DateTimeOffset.UtcNow;
+                contract.UpdateDestination(destinationToApply, now);
 
                 _unitOfWork.Begin(true);
                 var update = await _repository.UpdateAsync(contract, _unitOfWork, cancellationToken);
@@ -332,6 +386,26 @@ namespace KairoServer.Application.Contracts
                 {
                     _unitOfWork.Rollback();
                     return Result<ContractView>.Fail(update.Errors);
+                }
+
+                var audit = BuildAudit(
+                    rotate ? "credentials_rotated" : "credentials_updated",
+                    actorId,
+                    contract,
+                    null,
+                    JsonSerializer.Serialize(new
+                    {
+                        contract.Id,
+                        contract.CustomerId,
+                        DestinationType = contract.Destination.Type.ToString(),
+                        Rotate = rotate,
+                    }),
+                    now);
+                var auditInsert = await _auditLogs.AddAsync(audit, _unitOfWork, cancellationToken);
+                if (auditInsert.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<ContractView>.Fail(auditInsert.Errors);
                 }
 
                 _unitOfWork.Commit();
@@ -345,6 +419,28 @@ namespace KairoServer.Application.Contracts
                 _logger.Error(ex, "Failed to {Action} contract credentials {ContractId}.", action, id);
                 return Result.Failure<ContractView>(ex);
             }
+        }
+
+        private static AuditLogEntry BuildAudit(
+            string action,
+            string? actorId,
+            Contract contract,
+            Guid? operationId,
+            string details,
+            DateTimeOffset createdAt)
+        {
+            return AuditLogEntry.Create(
+                category: "contract",
+                action: action,
+                actorId: actorId,
+                customerId: contract.CustomerId,
+                contractId: contract.Id,
+                deliveryId: null,
+                eventId: null,
+                operationId: operationId,
+                details: details,
+                createdAt: createdAt,
+                expiresAt: createdAt.AddDays(90));
         }
 
         private Result<ContractView> MapToView(Contract contract)

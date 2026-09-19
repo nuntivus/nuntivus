@@ -140,6 +140,32 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             return await ExecuteCountAsync(sql, new { ReceivedBefore = receivedBefore, BatchSize = batchSize }, cancellationToken);
         }
 
+        public async Task<Result<int>> DeleteAuditLogsBatchAsync(
+            DateTimeOffset createdBefore,
+            int batchSize,
+            CancellationToken cancellationToken)
+        {
+            const string sql = """
+                WITH candidates AS (
+                    SELECT id
+                    FROM audit_logs
+                    WHERE created_at < @CreatedBefore
+                    ORDER BY created_at, id
+                    LIMIT @BatchSize
+                    FOR UPDATE SKIP LOCKED
+                ),
+                deleted AS (
+                    DELETE FROM audit_logs a
+                    USING candidates c
+                    WHERE a.id = c.id
+                    RETURNING 1
+                )
+                SELECT COUNT(*) FROM deleted;
+                """;
+
+            return await ExecuteCountAsync(sql, new { CreatedBefore = createdBefore, BatchSize = batchSize }, cancellationToken);
+        }
+
         private async Task<Result<int>> ExecuteCountAsync(string sql, object param, CancellationToken cancellationToken)
         {
             try

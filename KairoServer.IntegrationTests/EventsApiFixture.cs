@@ -36,6 +36,7 @@ namespace KairoServer.IntegrationTests
         {
             await using var conn = new NpgsqlConnection(ConnectionString);
             await conn.OpenAsync();
+            await conn.ExecuteAsync("TRUNCATE TABLE audit_logs;");
             await conn.ExecuteAsync("TRUNCATE TABLE event_replays, outbox_messages, events CASCADE;");
         }
 
@@ -65,7 +66,8 @@ namespace KairoServer.IntegrationTests
                 "004_create_contracts.sql",
                 "005_create_deliveries.sql",
                 "006_create_delivery_attempts.sql",
-                "007_create_event_replays.sql"
+                "007_create_event_replays.sql",
+                "021_create_audit_logs.sql"
             })
             {
                 var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

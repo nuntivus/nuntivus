@@ -209,6 +209,7 @@ builder.Services.AddSingleton<IDatabaseConnectionFactory>(
 
 builder.Services.AddSingleton<IOutboxReader, PostgresOutboxReader>();
 builder.Services.AddSingleton<IRetentionCleanupRepository, PostgresRetentionCleanupRepository>();
+builder.Services.AddScoped<IAuditLogRepository, PostgresAuditLogRepository>();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ICacheStore, InMemoryCacheStore>();

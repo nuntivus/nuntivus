@@ -10,7 +10,8 @@ namespace KairoServer.Application.Customers
         Task<Result<CustomerCreated>> CreateAsync(
             string id,
             string name,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken,
+            string? actorId = null);
 
         Task<Result<CustomerView>> GetByIdAsync(
             string id,
@@ -23,10 +24,12 @@ namespace KairoServer.Application.Customers
 
         Task<Result<CustomerView>> EnableAsync(
             string id,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken,
+            string? actorId = null);
 
         Task<Result<CustomerView>> DisableAsync(
             string id,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken,
+            string? actorId = null);
     }
 }

@@ -10,7 +10,8 @@ namespace KairoServer.Application.Contracts
     {
         Task<Result<ContractCreated>> CreateAsync(
             CreateContractRequest request,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken,
+            string? actorId = null);
 
         Task<Result<ContractView>> GetByIdAsync(
             Guid id,
@@ -24,20 +25,24 @@ namespace KairoServer.Application.Contracts
 
         Task<Result<ContractView>> EnableAsync(
             Guid id,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken,
+            string? actorId = null);
 
         Task<Result<ContractView>> DisableAsync(
             Guid id,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken,
+            string? actorId = null);
 
         Task<Result<ContractView>> UpdateCredentialsAsync(
             Guid id,
             UpdateContractCredentialsRequest request,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken,
+            string? actorId = null);
 
         Task<Result<ContractView>> RotateCredentialsAsync(
             Guid id,
             UpdateContractCredentialsRequest request,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken,
+            string? actorId = null);
     }
 }

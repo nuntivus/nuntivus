@@ -423,6 +423,7 @@ namespace KairoServer.IntegrationTests
                 var eventService = new EventService(
                     scope.ServiceProvider.GetRequiredService<IEventRepository>(),
                     scope.ServiceProvider.GetRequiredService<IOutboxRepository>(),
+                    scope.ServiceProvider.GetRequiredService<IAuditLogRepository>(),
                     scope.ServiceProvider.GetRequiredService<IUnitOfWork>(),
                     scope.ServiceProvider.GetRequiredService<IAppLogger<EventService>>());
 

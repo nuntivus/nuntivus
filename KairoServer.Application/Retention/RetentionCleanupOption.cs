@@ -14,5 +14,6 @@ namespace KairoServer.Application.Retention
         public TimeSpan DeliveryRetention { get; set; } = TimeSpan.FromDays(14);
         public TimeSpan DeliveryAttemptRetention { get; set; } = TimeSpan.FromDays(14);
         public TimeSpan ProcessedOutboxRetention { get; set; } = TimeSpan.FromDays(7);
+        public TimeSpan AuditLogRetention { get; set; } = TimeSpan.FromDays(90);
     }
 }

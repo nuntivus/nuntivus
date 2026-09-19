@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Common.Logging;
+using KairoServer.Domain.Auditing;
 using KairoServer.Domain.Deliveries;
 
 namespace KairoServer.Application.Deliveries.Recovery
@@ -16,15 +17,18 @@ namespace KairoServer.Application.Deliveries.Recovery
         public const int MaxReplayBatchLimit = 5000;
 
         private readonly IDeliveryRepository _deliveries;
+        private readonly IAuditLogRepository _auditLogs;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IAppLogger<DeliveryRecoveryService> _logger;
 
         public DeliveryRecoveryService(
             IDeliveryRepository deliveries,
+            IAuditLogRepository auditLogs,
             IUnitOfWork unitOfWork,
             IAppLogger<DeliveryRecoveryService> logger)
         {
             _deliveries = deliveries ?? throw new ArgumentNullException(nameof(deliveries));
+            _auditLogs = auditLogs ?? throw new ArgumentNullException(nameof(auditLogs));
             _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
@@ -213,6 +217,25 @@ namespace KairoServer.Application.Deliveries.Recovery
                         return Result.Success(ToView(winner.Value));
 
                     return Result.Failure<DeliveryReplayJobView>(Error.Conflict("Replay job already exists."));
+                }
+
+                var audit = AuditLogEntry.Create(
+                    category: "delivery",
+                    action: "replay_requested",
+                    actorId: request.OperatorId,
+                    customerId: request.CustomerId,
+                    contractId: request.ContractId,
+                    deliveryId: null,
+                    eventId: null,
+                    operationId: request.OperationId,
+                    details: request.RequestSnapshot,
+                    createdAt: now,
+                    expiresAt: now.AddDays(90));
+                var auditInsert = await _auditLogs.AddAsync(audit, _unitOfWork, cancellationToken);
+                if (auditInsert.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<DeliveryReplayJobView>.Fail(auditInsert.Errors);
                 }
 
                 _unitOfWork.Commit();
@@ -420,6 +443,25 @@ namespace KairoServer.Application.Deliveries.Recovery
                     {
                         _unitOfWork.Rollback();
                         continue;
+                    }
+
+                    var operationAudit = AuditLogEntry.Create(
+                        category: "delivery",
+                        action: operation,
+                        actorId: request.OperatorId,
+                        customerId: null,
+                        contractId: null,
+                        deliveryId: deliveryId,
+                        eventId: null,
+                        operationId: request.OperationId,
+                        details: request.RequestSnapshot,
+                        createdAt: now,
+                        expiresAt: now.AddDays(90));
+                    var operationAuditInsert = await _auditLogs.AddAsync(operationAudit, _unitOfWork, cancellationToken);
+                    if (operationAuditInsert.IsFailure)
+                    {
+                        _unitOfWork.Rollback();
+                        return Result<DeliveryRecoveryView>.Fail(operationAuditInsert.Errors);
                     }
 
                     _unitOfWork.Commit();

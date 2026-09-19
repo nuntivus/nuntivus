@@ -18,7 +18,8 @@ namespace KairoServer.UnitTests.Retention
                 processedOutbox: new Queue<int>(new[] { 2, 1 }),
                 deliveryAttempts: new Queue<int>(new[] { 0 }),
                 deliveries: new Queue<int>(new[] { 2, 2, 2, 2 }),
-                events: new Queue<int>(new[] { 1 }));
+                events: new Queue<int>(new[] { 1 }),
+                auditLogs: new Queue<int>(new[] { 0 }));
 
             var options = new RetentionCleanupOption
             {
@@ -41,8 +42,9 @@ namespace KairoServer.UnitTests.Retention
             Assert.Equal(0, result.Value.DeletedDeliveryAttempts);
             Assert.Equal(6, result.Value.DeletedDeliveries);
             Assert.Equal(1, result.Value.DeletedEvents);
+            Assert.Equal(0, result.Value.DeletedAuditLogs);
             Assert.Equal(10, result.Value.TotalDeletedRows);
-            Assert.Equal(7, result.Value.BatchesProcessed);
+            Assert.Equal(8, result.Value.BatchesProcessed);
         }
 
         [Fact]
@@ -70,17 +72,20 @@ namespace KairoServer.UnitTests.Retention
             private readonly Queue<int> _deliveryAttempts;
             private readonly Queue<int> _deliveries;
             private readonly Queue<int> _events;
+            private readonly Queue<int> _auditLogs;
 
             public FakeRetentionCleanupRepository(
                 Queue<int>? processedOutbox = null,
                 Queue<int>? deliveryAttempts = null,
                 Queue<int>? deliveries = null,
-                Queue<int>? events = null)
+                Queue<int>? events = null,
+                Queue<int>? auditLogs = null)
             {
                 _processedOutbox = processedOutbox ?? new Queue<int>(new[] { 0 });
                 _deliveryAttempts = deliveryAttempts ?? new Queue<int>(new[] { 0 });
                 _deliveries = deliveries ?? new Queue<int>(new[] { 0 });
                 _events = events ?? new Queue<int>(new[] { 0 });
+                _auditLogs = auditLogs ?? new Queue<int>(new[] { 0 });
             }
 
             public Task<Result<int>> DeleteProcessedOutboxBatchAsync(DateTimeOffset processedBefore, int batchSize, CancellationToken cancellationToken) =>
@@ -94,6 +99,9 @@ namespace KairoServer.UnitTests.Retention
 
             public Task<Result<int>> DeleteEventsBatchAsync(DateTimeOffset receivedBefore, int batchSize, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(Dequeue(_events)));
+
+            public Task<Result<int>> DeleteAuditLogsBatchAsync(DateTimeOffset createdBefore, int batchSize, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(Dequeue(_auditLogs)));
 
             private static int Dequeue(Queue<int> queue) => queue.Count > 0 ? queue.Dequeue() : 0;
         }

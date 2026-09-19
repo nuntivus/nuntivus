@@ -7,6 +7,7 @@ using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.Events;
+using KairoServer.Domain.Auditing;
 using KairoServer.Domain.Events;
 using KairoServer.Domain.Outbox;
 
@@ -16,17 +17,20 @@ namespace KairoServer.Application.Events
     {
         private readonly IEventRepository _eventRepository;
         private readonly IOutboxRepository _outboxRepository;
+        private readonly IAuditLogRepository _auditLogs;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IAppLogger<EventService> _logger;
 
         public EventService(
             IEventRepository eventRepository,
             IOutboxRepository outboxRepository,
+            IAuditLogRepository auditLogs,
             IUnitOfWork unitOfWork,
             IAppLogger<EventService> logger)
         {
             _eventRepository = eventRepository;
             _outboxRepository = outboxRepository;
+            _auditLogs = auditLogs;
             _unitOfWork = unitOfWork;
             _logger = logger;
         }
@@ -131,7 +135,8 @@ namespace KairoServer.Application.Events
             Guid eventId,
             string replayKey,
             string? reason,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string? actorId = null)
         {
             if (eventId == Guid.Empty)
                 return Result.Failure<ReplayEventResult>(Error.Validation("eventId is required."));
@@ -214,6 +219,27 @@ namespace KairoServer.Application.Events
 
                 var outboxInsert = await _outboxRepository.InsertAsync(outbox, _unitOfWork, cancellationToken);
                 outboxInsert.EnsureSuccess();
+
+                var audit = AuditLogEntry.Create(
+                    category: "event",
+                    action: "replayed",
+                    actorId: actorId,
+                    customerId: null,
+                    contractId: null,
+                    deliveryId: null,
+                    eventId: source.Id,
+                    operationId: null,
+                    details: JsonSerializer.Serialize(new
+                    {
+                        sourceEventId = source.Id,
+                        replayedEventId = replayedEvent.Id,
+                        replayKey,
+                        reason,
+                    }),
+                    createdAt: now,
+                    expiresAt: now.AddDays(90));
+                var auditInsert = await _auditLogs.AddAsync(audit, _unitOfWork, cancellationToken);
+                auditInsert.EnsureSuccess();
 
                 _unitOfWork.Commit();
 

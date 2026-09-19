@@ -70,7 +70,8 @@ namespace KairoServer.Infastructure.Configuration
                && option.EventRetention > TimeSpan.Zero
                && option.DeliveryRetention > TimeSpan.Zero
                && option.DeliveryAttemptRetention > TimeSpan.Zero
-               && option.ProcessedOutboxRetention > TimeSpan.Zero;
+               && option.ProcessedOutboxRetention > TimeSpan.Zero
+               && option.AuditLogRetention > TimeSpan.Zero;
 
         public static bool IsNatsSettingsValid(NatsOption option)
         {
