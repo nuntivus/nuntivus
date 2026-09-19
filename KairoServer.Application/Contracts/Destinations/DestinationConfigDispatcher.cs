@@ -56,5 +56,18 @@ namespace KairoServer.Application.Contracts.Destinations
 
             return handler.Redact(destination.Configuration);
         }
+
+        public Result<Destination> Rotate(Destination current, Destination next)
+        {
+            if (current is null)
+                return Result.Failure<Destination>(Error.Validation("Current destination is required."));
+            if (next is null)
+                return Result.Failure<Destination>(Error.Validation("Next destination is required."));
+
+            if (!_handlersByDestinationType.TryGetValue(next.Type, out var handler))
+                return Result.Success(next);
+
+            return handler.Rotate(current, next);
+        }
     }
 }

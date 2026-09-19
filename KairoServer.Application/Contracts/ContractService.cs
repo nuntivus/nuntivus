@@ -234,13 +234,13 @@ namespace KairoServer.Application.Contracts
             Guid id,
             UpdateContractCredentialsRequest request,
             CancellationToken cancellationToken) =>
-            UpsertCredentialsAsync(id, request, "updated", cancellationToken);
+            UpsertCredentialsAsync(id, request, "updated", rotate: false, cancellationToken);
 
         public Task<Result<ContractView>> RotateCredentialsAsync(
             Guid id,
             UpdateContractCredentialsRequest request,
             CancellationToken cancellationToken) =>
-            UpsertCredentialsAsync(id, request, "rotated", cancellationToken);
+            UpsertCredentialsAsync(id, request, "rotated", rotate: true, cancellationToken);
 
         private async Task<Result<ContractView>> ToggleAsync(
             Guid id,
@@ -291,6 +291,7 @@ namespace KairoServer.Application.Contracts
             Guid id,
             UpdateContractCredentialsRequest request,
             string action,
+            bool rotate,
             CancellationToken cancellationToken)
         {
             if (id == Guid.Empty)
@@ -313,7 +314,17 @@ namespace KairoServer.Application.Contracts
                 if (contract is null)
                     return Result.Failure<ContractView>(Error.NotFound($"Contract '{id}' was not found."));
 
-                contract.UpdateDestination(destinationResult.Value, DateTimeOffset.UtcNow);
+                var destinationToApply = destinationResult.Value;
+                if (rotate)
+                {
+                    var rotation = _destinations.Rotate(contract.Destination, destinationResult.Value);
+                    if (rotation.IsFailure)
+                        return Result<ContractView>.Fail(rotation.Errors);
+
+                    destinationToApply = rotation.Value;
+                }
+
+                contract.UpdateDestination(destinationToApply, DateTimeOffset.UtcNow);
 
                 _unitOfWork.Begin(true);
                 var update = await _repository.UpdateAsync(contract, _unitOfWork, cancellationToken);

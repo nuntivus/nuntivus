@@ -188,6 +188,97 @@ namespace KairoServer.Application.Contracts.Destinations
             return Result.Success(JsonSerializer.Serialize(redacted));
         }
 
+        public Result<Destination> Rotate(Destination current, Destination next)
+        {
+            if (current is null)
+                return Result.Failure<Destination>(Error.Validation("Current destination is required."));
+            if (next is null)
+                return Result.Failure<Destination>(Error.Validation("Next destination is required."));
+
+            if (current.Type != DomainDestinationType.Http || next.Type != DomainDestinationType.Http)
+                return Result.Success(next);
+
+            HttpDestinationConfig? currentConfig;
+            HttpDestinationConfig? nextConfig;
+            try
+            {
+                currentConfig = JsonSerializer.Deserialize<HttpDestinationConfig>(current.Configuration);
+                nextConfig = JsonSerializer.Deserialize<HttpDestinationConfig>(next.Configuration);
+            }
+            catch (JsonException ex)
+            {
+                return Result.Failure<Destination>(Error.Validation(
+                    $"Destination configuration is not valid JSON: {ex.GetType().Name}."));
+            }
+
+            if (currentConfig is null || nextConfig is null)
+                return Result.Failure<Destination>(Error.Validation("Destination configuration is empty."));
+
+            var authType = nextConfig.Authentication?.Type?.Trim().ToLowerInvariant();
+            if (!string.Equals(authType, "hmac", StringComparison.Ordinal))
+                return Result.Success(next);
+
+            var nextCredential = nextConfig.Authentication.Credential;
+            if (nextCredential is null)
+            {
+                return Result.Failure<Destination>(Error.Validation(
+                    "HTTP destination auth 'hmac' requires authentication.credential."));
+            }
+
+            var currentCredential = currentConfig.Authentication?.Credential;
+            var oldVersion = currentCredential?.Version ?? 0;
+            var requestedVersion = nextCredential.Version ?? 0;
+            var nextVersion = requestedVersion > oldVersion
+                ? requestedVersion
+                : oldVersion + 1;
+
+            if (nextVersion <= 0)
+                nextVersion = 1;
+
+            var previous = new List<HttpCredentialSnapshot>();
+            if (nextCredential.Previous is not null)
+            {
+                previous.AddRange(nextCredential.Previous
+                    .Where(p => !string.IsNullOrWhiteSpace(p?.Kind) && !string.IsNullOrWhiteSpace(p.Value))
+                    .Select(p => new HttpCredentialSnapshot(p.Kind, p.Value, p.Version)));
+            }
+
+            if (currentCredential is not null
+                && !string.IsNullOrWhiteSpace(currentCredential.Kind)
+                && !string.IsNullOrWhiteSpace(currentCredential.Value))
+            {
+                previous.Add(new HttpCredentialSnapshot(
+                    currentCredential.Kind,
+                    currentCredential.Value,
+                    currentCredential.Version));
+            }
+
+            var deduplicatedPrevious = previous
+                .GroupBy(
+                    p => $"{p.Kind.Trim()}|{p.Value.Trim()}|{p.Version?.ToString() ?? string.Empty}",
+                    StringComparer.Ordinal)
+                .Select(g => g.First())
+                .ToArray();
+
+            var rotatedCredential = new HttpCredential(
+                nextCredential.Kind,
+                nextCredential.Value,
+                nextVersion,
+                deduplicatedPrevious.Length == 0 ? null : deduplicatedPrevious);
+
+            var rotatedConfig = new HttpDestinationConfig(
+                nextConfig.Url,
+                new HttpAuthentication(nextConfig.Authentication.Type, rotatedCredential),
+                nextConfig.Headers,
+                nextConfig.SecretHeaders,
+                nextConfig.ProtectedHeaders,
+                nextConfig.TimeoutSeconds);
+
+            return Result.Success(new Destination(
+                DomainDestinationType.Http,
+                JsonSerializer.Serialize(rotatedConfig)));
+        }
+
         private Result<HttpAuthentication> NormalizeAuthentication(string authType, HttpAuthentication authentication)
         {
             var credential = authentication.Credential;

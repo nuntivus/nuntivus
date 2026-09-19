@@ -536,6 +536,55 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Rotate_hmac_credentials_persists_version_and_overlap_snapshot()
+        {
+            await CreateCustomerAsync("acme");
+
+            var createResp = await _client.PostAsJsonAsync(
+                "/v1/contracts",
+                new CreateContractRequest(
+                    "acme",
+                    new[] { "orders.created" },
+                    new HttpDestinationConfig(
+                        "https://hooks.example.com/acme",
+                        new HttpAuthentication("hmac", new HttpCredential("ref", "secret.acme.v1", Version: 1)),
+                        TimeoutSeconds: 30)));
+
+            Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
+            var created = await createResp.Content.ReadFromJsonAsync<ContractCreated>();
+
+            var rotateResp = await _client.PostAsJsonAsync(
+                $"/v1/contracts/{created!.Id}/credentials/rotate",
+                new UpdateContractCredentialsRequest(new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("hmac", new HttpCredential("ref", "secret.acme.v2")),
+                    TimeoutSeconds: 30)));
+
+            Assert.Equal(HttpStatusCode.OK, rotateResp.StatusCode);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var row = await conn.QuerySingleAsync<(string? auth_ref, int? auth_version, string destination_config)>(
+                "SELECT auth_ref, auth_version, destination_config::text FROM contracts WHERE id = @id;",
+                new { id = created.Id });
+
+            Assert.Equal("secret.acme.v2", row.auth_ref);
+            Assert.Equal(2, row.auth_version);
+
+            using var destination = JsonDocument.Parse(row.destination_config);
+            var credential = destination.RootElement
+                .GetProperty("Authentication")
+                .GetProperty("Credential");
+
+            Assert.Equal("secret.acme.v2", credential.GetProperty("Value").GetString());
+            Assert.Equal(2, credential.GetProperty("Version").GetInt32());
+
+            var previous = credential.GetProperty("Previous");
+            Assert.Equal(1, previous.GetArrayLength());
+            Assert.Equal("secret.acme.v1", previous[0].GetProperty("Value").GetString());
+            Assert.Equal(1, previous[0].GetProperty("Version").GetInt32());
+        }
+
+        [Fact]
         public async Task GetById_missing_returns_404()
         {
             var resp = await _client.GetAsync($"/v1/contracts/{Guid.NewGuid()}");

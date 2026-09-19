@@ -41,6 +41,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         ordering_key_selector,
                         destination_type,
                         destination_config,
+                        auth_ref,
+                        auth_version,
                         transformation_config,
                         rate_limit_per_second,
                         rate_limit_per_minute,
@@ -57,6 +59,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         @OrderingKeySelector,
                         @DestinationType,
                         @DestinationConfig::jsonb,
+                        @AuthenticationReference,
+                        @AuthenticationVersion,
                         CAST(@TransformationConfig AS jsonb),
                         @RateLimitPerSecond,
                         @RateLimitPerMinute,
@@ -68,6 +72,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
 
                 var connection = uow.GetConnection()!;
                 var transaction = uow.GetTransaction()!;
+                var authSnapshot = ExtractAuthenticationSnapshot(contract.Destination);
 
                 await connection.ExecuteAsync(new CommandDefinition(
                     insertContract,
@@ -80,6 +85,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         OrderingKeySelector = contract.Ordering?.KeySelector,
                         DestinationType = contract.Destination.Type.ToString(),
                         DestinationConfig = contract.Destination.Configuration,
+                        AuthenticationReference = authSnapshot.AuthenticationReference,
+                        AuthenticationVersion = authSnapshot.AuthenticationVersion,
                         TransformationConfig = SerializeTransformation(contract.Transformation),
                         RateLimitPerSecond = contract.RateLimit?.PerSecond,
                         RateLimitPerMinute = contract.RateLimit?.PerMinute,
@@ -124,6 +131,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         ordering_key_selector = @OrderingKeySelector,
                         destination_type = @DestinationType,
                         destination_config = @DestinationConfig::jsonb,
+                        auth_ref = @AuthenticationReference,
+                        auth_version = @AuthenticationVersion,
                         transformation_config = CAST(@TransformationConfig AS jsonb),
                         rate_limit_per_second = @RateLimitPerSecond,
                         rate_limit_per_minute = @RateLimitPerMinute,
@@ -138,6 +147,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
 
                 var connection = uow.GetConnection()!;
                 var transaction = uow.GetTransaction()!;
+                var authSnapshot = ExtractAuthenticationSnapshot(contract.Destination);
 
                 var rows = await connection.ExecuteAsync(new CommandDefinition(
                     updateContract,
@@ -149,6 +159,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         OrderingKeySelector = contract.Ordering?.KeySelector,
                         DestinationType = contract.Destination.Type.ToString(),
                         DestinationConfig = contract.Destination.Configuration,
+                        AuthenticationReference = authSnapshot.AuthenticationReference,
+                        AuthenticationVersion = authSnapshot.AuthenticationVersion,
                         TransformationConfig = SerializeTransformation(contract.Transformation),
                         RateLimitPerSecond = contract.RateLimit?.PerSecond,
                         RateLimitPerMinute = contract.RateLimit?.PerMinute,
@@ -384,16 +396,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                            c.ordering_key_selector AS OrderingKeySelector,
                            c.destination_type   AS DestinationType,
                            c.destination_config AS DestinationConfig,
-                           CASE
-                               WHEN lower(COALESCE(c.destination_config #>> '{Authentication,Credential,Kind}', '')) = 'ref'
-                                   THEN c.destination_config #>> '{Authentication,Credential,Value}'
-                               ELSE NULL
-                           END                  AS AuthenticationReference,
-                           CASE
-                               WHEN (c.destination_config #>> '{Authentication,Credential,Version}') ~ '^[0-9]+$'
-                                   THEN (c.destination_config #>> '{Authentication,Credential,Version}')::integer
-                               ELSE NULL
-                           END                  AS AuthenticationVersion,
+                           c.auth_ref           AS AuthenticationReference,
+                           c.auth_version       AS AuthenticationVersion,
                            c.transformation_config::text AS TransformationConfig,
                            cst.schema_version    AS SchemaVersion,
                            c.rate_limit_per_second AS RateLimitPerSecond,
@@ -643,6 +647,46 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 return null;
 
             return JsonSerializer.Serialize(transformation);
+        }
+
+        private static (string? AuthenticationReference, int? AuthenticationVersion) ExtractAuthenticationSnapshot(
+            Destination destination)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(destination.Configuration);
+                if (!doc.RootElement.TryGetProperty("Authentication", out var authentication)
+                    || !authentication.TryGetProperty("Credential", out var credential))
+                {
+                    return (null, null);
+                }
+
+                var kind = credential.TryGetProperty("Kind", out var kindNode)
+                    ? kindNode.GetString()?.Trim()
+                    : null;
+                var value = credential.TryGetProperty("Value", out var valueNode)
+                    ? valueNode.GetString()?.Trim()
+                    : null;
+
+                if (!string.Equals(kind, "ref", StringComparison.OrdinalIgnoreCase)
+                    || string.IsNullOrWhiteSpace(value))
+                    return (null, null);
+
+                int? version = null;
+                if (credential.TryGetProperty("Version", out var versionNode)
+                    && versionNode.ValueKind == JsonValueKind.Number
+                    && versionNode.TryGetInt32(out var parsedVersion)
+                    && parsedVersion > 0)
+                {
+                    version = parsedVersion;
+                }
+
+                return (value, version);
+            }
+            catch (JsonException)
+            {
+                return (null, null);
+            }
         }
 
         private static ContractPayloadTransformation? DeserializeTransformation(string? json)

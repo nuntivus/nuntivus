@@ -189,6 +189,8 @@ namespace KairoServer.IntegrationTests
                     """
                     UPDATE contracts
                     SET destination_config = @DestinationConfig::jsonb,
+                        auth_ref = @AuthRef,
+                        auth_version = @AuthVersion,
                         transformation_config = @TransformationConfig::jsonb,
                         updated_at = @UpdatedAt
                     WHERE id = @ContractId;
@@ -197,6 +199,8 @@ namespace KairoServer.IntegrationTests
                     {
                         ContractId = contractId,
                         DestinationConfig = "{\"Url\":\"https://second.example.com\",\"Authentication\":{\"Type\":\"hmac\",\"Credential\":{\"Kind\":\"ref\",\"Value\":\"secret.acme.v2\",\"Version\":2}}}",
+                        AuthRef = "secret.acme.v2",
+                        AuthVersion = 2,
                         TransformationConfig = "{\"Version\":2,\"FieldMappings\":[{\"SourceSelector\":\"order.id\",\"TargetSelector\":\"id\"}]}",
                         UpdatedAt = DateTimeOffset.UtcNow,
                     });

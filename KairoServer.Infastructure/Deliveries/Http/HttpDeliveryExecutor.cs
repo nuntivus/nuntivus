@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
@@ -6,6 +7,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -232,40 +234,111 @@ namespace KairoServer.Infastructure.Deliveries.Http
                     $"HTTP destination auth '{authType}' has invalid credentials.");
             }
 
-            var secretResult = credentialKind switch
-            {
-                "ref" => await ResolveCredentialAsync(credentialValue, null, cancellationToken),
-                "inline" => await ResolveCredentialAsync(null, credentialValue, cancellationToken),
-                _ => KairoServer.Common.Result.Failure<string>(
-                    KairoServer.Common.Error.Validation("Unsupported credential kind."))
-            };
-
-            if (secretResult.IsFailure)
-            {
-                return DeliveryExecutionResult.Failure(
-                    DeliveryFailureCategory.ConfigurationInvalid,
-                    $"Failed to resolve credentials for HTTP auth '{authType}'.");
-            }
-
             switch (authType)
             {
                 case "bearer":
+                    var secretResult = await ResolveCredentialByKindAsync(
+                        credentialKind,
+                        credentialValue,
+                        cancellationToken);
+                    if (secretResult.IsFailure)
+                    {
+                        return DeliveryExecutionResult.Failure(
+                            DeliveryFailureCategory.ConfigurationInvalid,
+                            $"Failed to resolve credentials for HTTP auth '{authType}'.");
+                    }
+
                     httpRequest.Headers.Authorization =
                         new AuthenticationHeaderValue("Bearer", secretResult.Value);
                     return null;
 
                 case "hmac":
-                    // Placeholder: real HMAC signing arrives with the auth story.
-                    // We surface the secret as a header so the request is deterministic
-                    // but flag the mode so operators know signing isn't fully implemented.
-                    httpRequest.Headers.TryAddWithoutValidation("X-Kairo-Signature", "hmac-placeholder");
-                    return null;
+                    return await ApplyHmacAuthenticationAsync(httpRequest, config, cancellationToken);
 
                 default:
                     return DeliveryExecutionResult.Failure(
                         DeliveryFailureCategory.ConfigurationInvalid,
                         $"Unsupported HTTP auth type '{authType}'.");
             }
+        }
+
+        private async Task<DeliveryExecutionResult?> ApplyHmacAuthenticationAsync(
+            HttpRequestMessage httpRequest,
+            HttpDestinationConfig config,
+            CancellationToken cancellationToken)
+        {
+            var credential = config.Authentication.Credential!;
+            var credentialKind = credential.Kind?.Trim().ToLowerInvariant();
+            var credentialValue = credential.Value?.Trim();
+
+            if (string.IsNullOrWhiteSpace(credentialKind) || string.IsNullOrWhiteSpace(credentialValue))
+            {
+                return DeliveryExecutionResult.Failure(
+                    DeliveryFailureCategory.ConfigurationInvalid,
+                    "HTTP destination auth 'hmac' has invalid credentials.");
+            }
+
+            var primarySecretResult = await ResolveCredentialByKindAsync(
+                credentialKind,
+                credentialValue,
+                cancellationToken);
+            if (primarySecretResult.IsFailure)
+            {
+                return DeliveryExecutionResult.Failure(
+                    DeliveryFailureCategory.ConfigurationInvalid,
+                    "Failed to resolve credentials for HTTP auth 'hmac'.");
+            }
+
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var timestampValue = timestamp.ToString(CultureInfo.InvariantCulture);
+            var payload = httpRequest.Content is null
+                ? string.Empty
+                : await httpRequest.Content.ReadAsStringAsync(cancellationToken);
+
+            var activeSignature = ComputeHmacSignature(primarySecretResult.Value, payload, timestampValue);
+            var activeVersion = credential.Version ?? 1;
+
+            httpRequest.Headers.TryAddWithoutValidation("X-Kairo-Signature-Timestamp", timestampValue);
+            httpRequest.Headers.TryAddWithoutValidation("X-Kairo-Signature", $"v{activeVersion}={activeSignature}");
+
+            if (credential.Previous is null || credential.Previous.Count == 0)
+                return null;
+
+            var previousSignatures = new List<string>(credential.Previous.Count);
+            foreach (var previous in credential.Previous)
+            {
+                var previousKind = previous.Kind?.Trim().ToLowerInvariant();
+                var previousValue = previous.Value?.Trim();
+                if (string.IsNullOrWhiteSpace(previousKind) || string.IsNullOrWhiteSpace(previousValue))
+                    continue;
+
+                var previousSecretResult = await ResolveCredentialByKindAsync(
+                    previousKind,
+                    previousValue,
+                    cancellationToken);
+                if (previousSecretResult.IsFailure)
+                {
+                    return DeliveryExecutionResult.Failure(
+                        DeliveryFailureCategory.ConfigurationInvalid,
+                        "Failed to resolve overlap credentials for HTTP auth 'hmac'.");
+                }
+
+                var previousVersion = previous.Version ?? 0;
+                var previousSignature = ComputeHmacSignature(
+                    previousSecretResult.Value,
+                    payload,
+                    timestampValue);
+                previousSignatures.Add($"v{previousVersion}={previousSignature}");
+            }
+
+            if (previousSignatures.Count > 0)
+            {
+                httpRequest.Headers.TryAddWithoutValidation(
+                    "X-Kairo-Signature-Previous",
+                    string.Join(",", previousSignatures));
+            }
+
+            return null;
         }
 
         private async Task<DeliveryExecutionResult?> ApplyProtectedHeadersAsync(
@@ -314,6 +387,26 @@ namespace KairoServer.Infastructure.Deliveries.Http
 
             return KairoServer.Common.Result.Failure<string>(
                 KairoServer.Common.Error.Validation("Credential is required."));
+        }
+
+        private Task<KairoServer.Common.Result<string>> ResolveCredentialByKindAsync(
+            string kind,
+            string value,
+            CancellationToken cancellationToken) =>
+            kind switch
+            {
+                "ref" => ResolveCredentialAsync(value, null, cancellationToken),
+                "inline" => ResolveCredentialAsync(null, value, cancellationToken),
+                _ => Task.FromResult(KairoServer.Common.Result.Failure<string>(
+                    KairoServer.Common.Error.Validation("Unsupported credential kind.")))
+            };
+
+        private static string ComputeHmacSignature(string secret, string payload, string timestamp)
+        {
+            using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
+            var bytes = Encoding.UTF8.GetBytes($"{timestamp}.{payload}");
+            var hash = hmac.ComputeHash(bytes);
+            return Convert.ToHexString(hash).ToLowerInvariant();
         }
 
         private async Task<DeliveryExecutionResult?> ValidateDestinationAddressAsync(

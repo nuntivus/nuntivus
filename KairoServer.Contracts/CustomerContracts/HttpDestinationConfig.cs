@@ -32,5 +32,17 @@ namespace KairoServer.Contracts.CustomerContracts
     /// <c>Kind="inline"</c> means <see cref="Value"/> is raw input that must be
     /// protected before persistence.
     /// </summary>
-    public sealed record HttpCredential(string Kind, string Value);
+    public sealed record HttpCredential(
+        string Kind,
+        string Value,
+        int? Version = null,
+        IReadOnlyList<HttpCredentialSnapshot>? Previous = null);
+
+    /// <summary>
+    /// Snapshot of a previous credential retained for overlap delivery windows.
+    /// </summary>
+    public sealed record HttpCredentialSnapshot(
+        string Kind,
+        string Value,
+        int? Version = null);
 }

@@ -14,5 +14,7 @@ namespace KairoServer.Application.Contracts.Destinations
         Result<Destination> Build(DestinationConfig? configuration);
 
         Result<string> Redact(Destination destination);
+
+        Result<Destination> Rotate(Destination current, Destination next);
     }
 }

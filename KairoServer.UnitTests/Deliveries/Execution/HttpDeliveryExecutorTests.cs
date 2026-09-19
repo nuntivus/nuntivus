@@ -124,6 +124,40 @@ namespace KairoServer.UnitTests.Deliveries.Execution
         }
 
         [Fact]
+        public async Task Hmac_auth_adds_active_and_overlap_signatures()
+        {
+            HttpRequestMessage? sent = null;
+            var executor = BuildExecutor(req =>
+            {
+                sent = req;
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            });
+
+            var result = await executor.ExecuteAsync(BuildRequest(new HttpDestinationConfig(
+                Url: "https://example.test/webhook",
+                Authentication: new HttpAuthentication("hmac", new HttpCredential(
+                    "ref",
+                    "protected.v1.new",
+                    Version: 2,
+                    Previous: new[]
+                    {
+                        new HttpCredentialSnapshot("ref", "protected.v1.old", 1)
+                    })))), CancellationToken.None);
+
+            Assert.True(result.Succeeded);
+            Assert.NotNull(sent);
+
+            Assert.True(sent!.Headers.TryGetValues("X-Kairo-Signature", out var activeValues));
+            Assert.StartsWith("v2=", Assert.Single(activeValues));
+
+            Assert.True(sent.Headers.TryGetValues("X-Kairo-Signature-Previous", out var previousValues));
+            Assert.Contains("v1=", Assert.Single(previousValues));
+
+            Assert.True(sent.Headers.TryGetValues("X-Kairo-Signature-Timestamp", out var timestampValues));
+            Assert.True(long.TryParse(Assert.Single(timestampValues), out _));
+        }
+
+        [Fact]
         public async Task Private_network_destination_is_blocked_by_default_policy()
         {
             var executor = BuildExecutor(_ => new HttpResponseMessage(HttpStatusCode.OK));
@@ -210,8 +244,16 @@ namespace KairoServer.UnitTests.Deliveries.Execution
 
         private sealed class StubSecretResolver : ISecretResolver
         {
-            public Task<Result<string>> ResolveAsync(string secretRef, CancellationToken cancellationToken) =>
-                Task.FromResult(Result.Success("secret-value"));
+            public Task<Result<string>> ResolveAsync(string secretRef, CancellationToken cancellationToken)
+            {
+                if (secretRef.EndsWith(".old", StringComparison.Ordinal))
+                    return Task.FromResult(Result.Success("old-secret"));
+
+                if (secretRef.EndsWith(".new", StringComparison.Ordinal))
+                    return Task.FromResult(Result.Success("new-secret"));
+
+                return Task.FromResult(Result.Success("secret-value"));
+            }
         }
 
         private sealed class NullAppLogger<T> : IAppLogger<T>

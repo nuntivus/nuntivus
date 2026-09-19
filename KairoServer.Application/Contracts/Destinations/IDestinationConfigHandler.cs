@@ -39,5 +39,11 @@ namespace KairoServer.Application.Contracts.Destinations
         /// Redacts sensitive values from a persisted destination configuration JSON payload.
         /// </summary>
         Result<string> Redact(string configurationJson);
+
+        /// <summary>
+        /// Applies destination-specific credential rotation behavior.
+        /// Implementations may augment <paramref name="next"/> with overlap metadata.
+        /// </summary>
+        Result<Destination> Rotate(Destination current, Destination next);
     }
 }
