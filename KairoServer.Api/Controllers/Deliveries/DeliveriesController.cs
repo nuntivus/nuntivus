@@ -100,6 +100,37 @@ namespace KairoServer.Api.Controllers.Deliveries
             return result.ToOk();
         }
 
+        [HttpPost("replay-jobs")]
+        public async Task<IActionResult> CreateReplayJob(
+            [FromBody] DeliveryReplayJobApiRequest request,
+            CancellationToken cancellationToken)
+        {
+            var operatorId = GetOperatorId();
+            if (operatorId is null)
+                return UnauthorizedResult();
+
+            var replayRequest = new DeliveryReplayRequest(
+                request.OperationId,
+                operatorId,
+                SerializeReplayRequestSnapshot(request, operatorId),
+                request.EventType,
+                request.CustomerId,
+                request.ContractId,
+                request.CreatedFrom,
+                request.CreatedTo,
+                request.BatchLimit);
+
+            var result = await _recovery.SubmitReplayJobAsync(replayRequest, cancellationToken);
+            return result.ToOk();
+        }
+
+        [HttpGet("replay-jobs/{id:guid}")]
+        public async Task<IActionResult> GetReplayJob(Guid id, CancellationToken cancellationToken)
+        {
+            var result = await _recovery.GetReplayJobAsync(id, cancellationToken);
+            return result.ToOk();
+        }
+
         private string? GetOperatorId()
         {
             if (User?.Identity?.IsAuthenticated != true)
@@ -130,6 +161,25 @@ namespace KairoServer.Api.Controllers.Deliveries
                 deliveryId,
                 operation,
                 request.OperationId,
+                request.Reason,
+                operatorId,
+                receivedAt = DateTimeOffset.UtcNow,
+            });
+        }
+
+        private static string SerializeReplayRequestSnapshot(
+            DeliveryReplayJobApiRequest request,
+            string operatorId)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                request.OperationId,
+                request.EventType,
+                request.CustomerId,
+                request.ContractId,
+                request.CreatedFrom,
+                request.CreatedTo,
+                request.BatchLimit,
                 request.Reason,
                 operatorId,
                 receivedAt = DateTimeOffset.UtcNow,

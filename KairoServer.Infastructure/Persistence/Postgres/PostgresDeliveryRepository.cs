@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Domain.Contracts;
@@ -405,6 +406,362 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             catch (Exception ex)
             {
                 return Result.Failure<int>(ex);
+            }
+        }
+
+        public async Task<Result<DeliveryReplayJob?>> GetReplayJobByOperationIdAsync(
+            Guid operationId,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                    SELECT
+                        id,
+                        operation_id AS OperationId,
+                        operator_id AS OperatorId,
+                        request_snapshot::text AS RequestSnapshot,
+                        status,
+                        event_type AS EventType,
+                        customer_id AS CustomerId,
+                        contract_id AS ContractId,
+                        created_from AS CreatedFrom,
+                        created_to AS CreatedTo,
+                        batch_limit AS BatchLimit,
+                        replayed_count AS ReplayedCount,
+                        error,
+                        created_at AS CreatedAt,
+                        updated_at AS UpdatedAt,
+                        completed_at AS CompletedAt
+                    FROM delivery_replay_jobs
+                    WHERE operation_id = @OperationId
+                    LIMIT 1;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                var row = await connection.QuerySingleOrDefaultAsync<DeliveryReplayJobRow>(new CommandDefinition(
+                    sql,
+                    new { OperationId = operationId },
+                    cancellationToken: cancellationToken));
+
+                if (row is null)
+                    return Result.Success<DeliveryReplayJob?>(null);
+
+                return Result.Success<DeliveryReplayJob?>(MapDeliveryReplayJob(row));
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<DeliveryReplayJob?>(ex);
+            }
+        }
+
+        public async Task<Result<DeliveryReplayJob?>> GetReplayJobByIdAsync(
+            Guid replayJobId,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                    SELECT
+                        id,
+                        operation_id AS OperationId,
+                        operator_id AS OperatorId,
+                        request_snapshot::text AS RequestSnapshot,
+                        status,
+                        event_type AS EventType,
+                        customer_id AS CustomerId,
+                        contract_id AS ContractId,
+                        created_from AS CreatedFrom,
+                        created_to AS CreatedTo,
+                        batch_limit AS BatchLimit,
+                        replayed_count AS ReplayedCount,
+                        error,
+                        created_at AS CreatedAt,
+                        updated_at AS UpdatedAt,
+                        completed_at AS CompletedAt
+                    FROM delivery_replay_jobs
+                    WHERE id = @Id
+                    LIMIT 1;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                var row = await connection.QuerySingleOrDefaultAsync<DeliveryReplayJobRow>(new CommandDefinition(
+                    sql,
+                    new { Id = replayJobId },
+                    cancellationToken: cancellationToken));
+
+                if (row is null)
+                    return Result.Success<DeliveryReplayJob?>(null);
+
+                return Result.Success<DeliveryReplayJob?>(MapDeliveryReplayJob(row));
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<DeliveryReplayJob?>(ex);
+            }
+        }
+
+        public async Task<Result<int>> AddReplayJobAsync(
+            DeliveryReplayJob replayJob,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (!uow.IsTransactionOpen)
+                    throw new InvalidOperationException("Transaction is not open.");
+
+                const string sql = """
+                    INSERT INTO delivery_replay_jobs
+                    (
+                        id,
+                        operation_id,
+                        operator_id,
+                        request_snapshot,
+                        status,
+                        event_type,
+                        customer_id,
+                        contract_id,
+                        created_from,
+                        created_to,
+                        batch_limit,
+                        replayed_count,
+                        error,
+                        created_at,
+                        updated_at,
+                        completed_at
+                    )
+                    VALUES
+                    (
+                        @Id,
+                        @OperationId,
+                        @OperatorId,
+                        CAST(@RequestSnapshot AS jsonb),
+                        @Status,
+                        @EventType,
+                        @CustomerId,
+                        @ContractId,
+                        @CreatedFrom,
+                        @CreatedTo,
+                        @BatchLimit,
+                        @ReplayedCount,
+                        @Error,
+                        @CreatedAt,
+                        @UpdatedAt,
+                        @CompletedAt
+                    )
+                    ON CONFLICT (operation_id) DO NOTHING;
+                    """;
+
+                var rows = await uow.GetConnection()!.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        replayJob.Id,
+                        replayJob.OperationId,
+                        replayJob.OperatorId,
+                        replayJob.RequestSnapshot,
+                        Status = replayJob.Status.ToString(),
+                        replayJob.EventType,
+                        replayJob.CustomerId,
+                        replayJob.ContractId,
+                        replayJob.CreatedFrom,
+                        replayJob.CreatedTo,
+                        replayJob.BatchLimit,
+                        replayJob.ReplayedCount,
+                        replayJob.Error,
+                        replayJob.CreatedAt,
+                        replayJob.UpdatedAt,
+                        replayJob.CompletedAt,
+                    },
+                    uow.GetTransaction(),
+                    cancellationToken: cancellationToken));
+
+                return Result.Success(rows);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<int>(ex);
+            }
+        }
+
+        public async Task<Result<IReadOnlyList<DeliveryReplayJob>>> ClaimReplayJobsAsync(
+            int maxJobs,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (maxJobs <= 0)
+                    return Result.Success<IReadOnlyList<DeliveryReplayJob>>(Array.Empty<DeliveryReplayJob>());
+
+                const string sql = """
+                    WITH candidates AS (
+                        SELECT id
+                        FROM delivery_replay_jobs
+                        WHERE status = @PendingStatus
+                        ORDER BY created_at ASC
+                        LIMIT @MaxJobs
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE delivery_replay_jobs j
+                    SET status = @RunningStatus,
+                        updated_at = @Now
+                    FROM candidates c
+                    WHERE j.id = c.id
+                    RETURNING
+                        j.id,
+                        j.operation_id AS OperationId,
+                        j.operator_id AS OperatorId,
+                        j.request_snapshot::text AS RequestSnapshot,
+                        j.status,
+                        j.event_type AS EventType,
+                        j.customer_id AS CustomerId,
+                        j.contract_id AS ContractId,
+                        j.created_from AS CreatedFrom,
+                        j.created_to AS CreatedTo,
+                        j.batch_limit AS BatchLimit,
+                        j.replayed_count AS ReplayedCount,
+                        j.error,
+                        j.created_at AS CreatedAt,
+                        j.updated_at AS UpdatedAt,
+                        j.completed_at AS CompletedAt;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                var rows = await connection.QueryAsync<DeliveryReplayJobRow>(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        MaxJobs = maxJobs,
+                        PendingStatus = DeliveryReplayJobStatus.Pending.ToString(),
+                        RunningStatus = DeliveryReplayJobStatus.Running.ToString(),
+                        Now = DateTimeOffset.UtcNow,
+                    },
+                    cancellationToken: cancellationToken));
+
+                var jobs = new List<DeliveryReplayJob>();
+                foreach (var row in rows)
+                {
+                    jobs.Add(MapDeliveryReplayJob(row));
+                }
+
+                return Result.Success<IReadOnlyList<DeliveryReplayJob>>(jobs);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<IReadOnlyList<DeliveryReplayJob>>(ex);
+            }
+        }
+
+        public async Task<Result<int>> ExecuteReplayJobAsync(
+            DeliveryReplayJob replayJob,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (replayJob.BatchLimit <= 0)
+                    return Result.Success(0);
+
+                const string sql = """
+                    WITH candidates AS (
+                        SELECT id
+                        FROM deliveries
+                        WHERE status = ANY(@ReplayableStatuses)
+                          AND (@EventType IS NULL OR event_type = @EventType)
+                          AND (@CustomerId IS NULL OR customer_id = @CustomerId)
+                          AND (@ContractId IS NULL OR contract_id = @ContractId)
+                          AND (@CreatedFrom IS NULL OR created_at >= @CreatedFrom)
+                          AND (@CreatedTo IS NULL OR created_at <= @CreatedTo)
+                        ORDER BY updated_at ASC, id ASC
+                        LIMIT @BatchLimit
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE deliveries d
+                    SET status = @FailedStatus,
+                        next_attempt_at = @Now,
+                        updated_at = @Now
+                    FROM candidates c
+                    WHERE d.id = c.id;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                var rows = await connection.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        ReplayableStatuses = new[]
+                        {
+                            DeliveryStatus.Failed.ToString(),
+                            DeliveryStatus.Dead.ToString(),
+                        },
+                        EventType = replayJob.EventType,
+                        CustomerId = replayJob.CustomerId,
+                        ContractId = replayJob.ContractId,
+                        CreatedFrom = replayJob.CreatedFrom,
+                        CreatedTo = replayJob.CreatedTo,
+                        BatchLimit = replayJob.BatchLimit,
+                        FailedStatus = DeliveryStatus.Failed.ToString(),
+                        Now = DateTimeOffset.UtcNow,
+                    },
+                    cancellationToken: cancellationToken));
+
+                return Result.Success(rows);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<int>(ex);
+            }
+        }
+
+        public async Task<Result<bool>> CompleteReplayJobAsync(
+            Guid replayJobId,
+            DeliveryReplayJobStatus status,
+            int replayedCount,
+            string? error,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                    UPDATE delivery_replay_jobs
+                    SET status = @Status,
+                        replayed_count = @ReplayedCount,
+                        error = @Error,
+                        updated_at = @Now,
+                        completed_at = @Now
+                    WHERE id = @Id
+                      AND status = @RunningStatus;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                var rows = await connection.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        Id = replayJobId,
+                        Status = status.ToString(),
+                        ReplayedCount = replayedCount,
+                        Error = error,
+                        Now = DateTimeOffset.UtcNow,
+                        RunningStatus = DeliveryReplayJobStatus.Running.ToString(),
+                    },
+                    cancellationToken: cancellationToken));
+
+                return Result.Success(rows == 1);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<bool>(ex);
             }
         }
 
@@ -881,6 +1238,26 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public DateTimeOffset CompletedAt { get; set; }
         }
 
+        private sealed class DeliveryReplayJobRow
+        {
+            public Guid Id { get; set; }
+            public Guid OperationId { get; set; }
+            public string OperatorId { get; set; } = string.Empty;
+            public string RequestSnapshot { get; set; } = string.Empty;
+            public string Status { get; set; } = string.Empty;
+            public string? EventType { get; set; }
+            public string? CustomerId { get; set; }
+            public Guid? ContractId { get; set; }
+            public DateTimeOffset? CreatedFrom { get; set; }
+            public DateTimeOffset? CreatedTo { get; set; }
+            public int BatchLimit { get; set; }
+            public int ReplayedCount { get; set; }
+            public string? Error { get; set; }
+            public DateTimeOffset CreatedAt { get; set; }
+            public DateTimeOffset UpdatedAt { get; set; }
+            public DateTimeOffset? CompletedAt { get; set; }
+        }
+
         private sealed class DeliveryOperationAuditRow
         {
             public Guid Id { get; set; }
@@ -903,6 +1280,25 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 row.RequestSnapshot,
                 row.ResponseSnapshot,
                 row.CreatedAt);
+
+        private static DeliveryReplayJob MapDeliveryReplayJob(DeliveryReplayJobRow row) =>
+            DeliveryReplayJob.Rehydrate(
+                row.Id,
+                row.OperationId,
+                row.OperatorId,
+                row.RequestSnapshot,
+                Enum.Parse<DeliveryReplayJobStatus>(row.Status),
+                row.EventType,
+                row.CustomerId,
+                row.ContractId,
+                row.CreatedFrom,
+                row.CreatedTo,
+                row.BatchLimit,
+                row.ReplayedCount,
+                row.Error,
+                row.CreatedAt,
+                row.UpdatedAt,
+                row.CompletedAt);
 
     }
 }

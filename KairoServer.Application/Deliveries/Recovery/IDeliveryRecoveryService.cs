@@ -35,5 +35,17 @@ namespace KairoServer.Application.Deliveries.Recovery
         Task<Result<IReadOnlyList<DeliveryAttemptView>>> GetAttemptsAsync(
             Guid deliveryId,
             CancellationToken cancellationToken);
+
+        Task<Result<DeliveryReplayJobView>> SubmitReplayJobAsync(
+            DeliveryReplayRequest request,
+            CancellationToken cancellationToken);
+
+        Task<Result<DeliveryReplayJobView>> GetReplayJobAsync(
+            Guid replayJobId,
+            CancellationToken cancellationToken);
+
+        Task<Result<DeliveryReplayWorkerResult>> ProcessReplayJobsAsync(
+            int maxJobs,
+            CancellationToken cancellationToken);
     }
 }

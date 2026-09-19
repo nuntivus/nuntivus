@@ -13,6 +13,7 @@ namespace KairoServer.Application.Deliveries.Recovery
     public sealed class DeliveryRecoveryService : IDeliveryRecoveryService
     {
         public const int MaxPageSize = 100;
+        public const int MaxReplayBatchLimit = 5000;
 
         private readonly IDeliveryRepository _deliveries;
         private readonly IUnitOfWork _unitOfWork;
@@ -131,6 +132,199 @@ namespace KairoServer.Application.Deliveries.Recovery
             }
 
             return Result.Success<IReadOnlyList<DeliveryAttemptView>>(mapped);
+        }
+
+        public async Task<Result<DeliveryReplayJobView>> SubmitReplayJobAsync(
+            DeliveryReplayRequest request,
+            CancellationToken cancellationToken)
+        {
+            if (request.OperationId == Guid.Empty)
+                return Result.Failure<DeliveryReplayJobView>(Error.Validation("operationId is required."));
+            if (string.IsNullOrWhiteSpace(request.OperatorId))
+                return Result.Failure<DeliveryReplayJobView>(Error.Validation("operatorId is required."));
+            if (string.IsNullOrWhiteSpace(request.RequestSnapshot))
+                return Result.Failure<DeliveryReplayJobView>(Error.Validation("requestSnapshot is required."));
+            if (request.BatchLimit < 1 || request.BatchLimit > MaxReplayBatchLimit)
+            {
+                return Result.Failure<DeliveryReplayJobView>(
+                    Error.Validation($"batchLimit must be between 1 and {MaxReplayBatchLimit}."));
+            }
+
+            var eventType = Normalize(request.EventType);
+            var customerId = Normalize(request.CustomerId);
+            var contractId = request.ContractId;
+            var createdFrom = request.CreatedFrom;
+            var createdTo = request.CreatedTo;
+
+            if (createdFrom.HasValue && createdTo.HasValue && createdFrom > createdTo)
+            {
+                return Result.Failure<DeliveryReplayJobView>(
+                    Error.Validation("createdFrom must be less than or equal to createdTo."));
+            }
+
+            if (eventType is null
+                && customerId is null
+                && !contractId.HasValue
+                && !createdFrom.HasValue
+                && !createdTo.HasValue)
+            {
+                return Result.Failure<DeliveryReplayJobView>(
+                    Error.Validation("At least one replay filter must be provided."));
+            }
+
+            var existing = await _deliveries.GetReplayJobByOperationIdAsync(request.OperationId, cancellationToken);
+            if (existing.IsFailure)
+                return Result<DeliveryReplayJobView>.Fail(existing.Errors);
+
+            if (existing.Value is not null)
+                return Result.Success(ToView(existing.Value));
+
+            try
+            {
+                var now = DateTimeOffset.UtcNow;
+                var job = DeliveryReplayJob.Create(
+                    operationId: request.OperationId,
+                    operatorId: request.OperatorId.Trim(),
+                    requestSnapshot: request.RequestSnapshot,
+                    eventType: eventType,
+                    customerId: customerId,
+                    contractId: contractId,
+                    createdFrom: createdFrom,
+                    createdTo: createdTo,
+                    batchLimit: request.BatchLimit,
+                    now: now);
+
+                _unitOfWork.Begin(true);
+                var inserted = await _deliveries.AddReplayJobAsync(job, _unitOfWork, cancellationToken);
+                if (inserted.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<DeliveryReplayJobView>.Fail(inserted.Errors);
+                }
+
+                if (inserted.Value == 0)
+                {
+                    _unitOfWork.Rollback();
+                    var winner = await _deliveries.GetReplayJobByOperationIdAsync(request.OperationId, cancellationToken);
+                    if (winner.IsFailure)
+                        return Result<DeliveryReplayJobView>.Fail(winner.Errors);
+
+                    if (winner.Value is not null)
+                        return Result.Success(ToView(winner.Value));
+
+                    return Result.Failure<DeliveryReplayJobView>(Error.Conflict("Replay job already exists."));
+                }
+
+                _unitOfWork.Commit();
+                return Result.Success(ToView(job));
+            }
+            catch (Exception ex)
+            {
+                _unitOfWork.Rollback();
+                _logger.Error(ex, "Failed to submit delivery replay job for operation {OperationId}.", request.OperationId);
+                return Result.Failure<DeliveryReplayJobView>(ex);
+            }
+        }
+
+        public async Task<Result<DeliveryReplayJobView>> GetReplayJobAsync(
+            Guid replayJobId,
+            CancellationToken cancellationToken)
+        {
+            if (replayJobId == Guid.Empty)
+                return Result.Failure<DeliveryReplayJobView>(Error.Validation("replayJobId is required."));
+
+            var lookup = await _deliveries.GetReplayJobByIdAsync(replayJobId, cancellationToken);
+            if (lookup.IsFailure)
+                return Result<DeliveryReplayJobView>.Fail(lookup.Errors);
+
+            if (lookup.Value is null)
+                return Result.Failure<DeliveryReplayJobView>(Error.NotFound($"Replay job '{replayJobId}' was not found."));
+
+            return Result.Success(ToView(lookup.Value));
+        }
+
+        public async Task<Result<DeliveryReplayWorkerResult>> ProcessReplayJobsAsync(
+            int maxJobs,
+            CancellationToken cancellationToken)
+        {
+            if (maxJobs <= 0)
+            {
+                return Result.Failure<DeliveryReplayWorkerResult>(
+                    Error.Validation("maxJobs must be greater than zero."));
+            }
+
+            var claim = await _deliveries.ClaimReplayJobsAsync(maxJobs, cancellationToken);
+            if (claim.IsFailure)
+                return Result<DeliveryReplayWorkerResult>.Fail(claim.Errors);
+
+            var claimedJobs = claim.Value;
+            var completed = 0;
+            var failed = 0;
+            var replayed = 0;
+
+            foreach (var job in claimedJobs)
+            {
+                try
+                {
+                    var replay = await _deliveries.ExecuteReplayJobAsync(job, cancellationToken);
+                    if (replay.IsFailure)
+                    {
+                        failed++;
+                        await _deliveries.CompleteReplayJobAsync(
+                            job.Id,
+                            DeliveryReplayJobStatus.Failed,
+                            replayedCount: 0,
+                            error: replay.Error?.Message ?? "Replay failed.",
+                            cancellationToken);
+                        continue;
+                    }
+
+                    var completion = await _deliveries.CompleteReplayJobAsync(
+                        job.Id,
+                        DeliveryReplayJobStatus.Completed,
+                        replay.Value,
+                        error: null,
+                        cancellationToken);
+
+                    if (completion.IsFailure)
+                    {
+                        failed++;
+                        _logger.Warning(
+                            "Failed to complete replay job {ReplayJobId}: {Error}.",
+                            job.Id,
+                            completion.Error?.Message ?? "unknown");
+                        continue;
+                    }
+
+                    completed++;
+                    replayed += replay.Value;
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    _logger.Error(ex, "Unhandled error processing replay job {ReplayJobId}.", job.Id);
+
+                    var markFailed = await _deliveries.CompleteReplayJobAsync(
+                        job.Id,
+                        DeliveryReplayJobStatus.Failed,
+                        replayedCount: 0,
+                        error: ex.Message,
+                        cancellationToken);
+
+                    if (markFailed.IsFailure)
+                    {
+                        _logger.Warning(
+                            "Failed to mark replay job {ReplayJobId} as failed after exception.",
+                            job.Id);
+                    }
+                }
+            }
+
+            return Result.Success(new DeliveryReplayWorkerResult(
+                claimedJobs.Count,
+                completed,
+                failed,
+                replayed));
         }
 
         private async Task<Result<DeliveryRecoveryView>> RecoverAsync(
@@ -254,5 +448,31 @@ namespace KairoServer.Application.Deliveries.Recovery
                 delivery.LastError,
                 delivery.NextAttemptAt,
                 delivery.UpdatedAt);
+
+        private static DeliveryReplayJobView ToView(DeliveryReplayJob replayJob) =>
+            new(
+                replayJob.Id,
+                replayJob.OperationId,
+                replayJob.OperatorId,
+                replayJob.Status,
+                replayJob.EventType,
+                replayJob.CustomerId,
+                replayJob.ContractId,
+                replayJob.CreatedFrom,
+                replayJob.CreatedTo,
+                replayJob.BatchLimit,
+                replayJob.ReplayedCount,
+                replayJob.Error,
+                replayJob.CreatedAt,
+                replayJob.UpdatedAt,
+                replayJob.CompletedAt);
+
+        private static string? Normalize(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            return value.Trim();
+        }
     }
 }

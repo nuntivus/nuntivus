@@ -68,7 +68,9 @@ namespace KairoServer.Worker.Configuration
         public static bool IsDeliveryRecoveryValid(DeliveryRecoveryOption option)
             => option.RunInterval > TimeSpan.Zero
                && option.StaleInFlightAfter > TimeSpan.Zero
-               && option.BatchSize > 0;
+               && option.BatchSize > 0
+               && option.ReplayMaxJobsPerCycle > 0
+               && option.ReplayInterJobDelay >= TimeSpan.Zero;
 
         private static bool IsConsumerTopologyValid(
             string workerName,

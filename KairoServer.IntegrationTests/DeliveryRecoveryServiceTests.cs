@@ -121,6 +121,63 @@ namespace KairoServer.IntegrationTests
             Assert.Contains(page.Value.Items, d => d.Id == dead.Id && d.Status == DeliveryStatus.Dead);
         }
 
+        [Fact]
+        public async Task ReplayJob_Submit_Is_Idempotent_And_Replays_Filtered_Failed_Deliveries()
+        {
+            var now = DateTimeOffset.UtcNow;
+            var matchingId = await SeedReplayDeliveryAsync(DeliveryStatus.Dead, "orders.created", now.AddMinutes(-5));
+            var nonMatchingId = await SeedReplayDeliveryAsync(DeliveryStatus.Dead, "orders.updated", now.AddMinutes(-5));
+            var service = BuildService();
+
+            var operationId = Guid.NewGuid();
+            var request = new DeliveryReplayRequest(
+                operationId,
+                "operator-replay",
+                "{\"source\":\"integration\"}",
+                EventType: "orders.created",
+                CustomerId: null,
+                ContractId: null,
+                CreatedFrom: now.AddHours(-1),
+                CreatedTo: now,
+                BatchLimit: 10);
+
+            var first = await service.SubmitReplayJobAsync(request, CancellationToken.None);
+            var second = await service.SubmitReplayJobAsync(request, CancellationToken.None);
+
+            first.EnsureSuccess();
+            second.EnsureSuccess();
+            Assert.Equal(first.Value.Id, second.Value.Id);
+            Assert.Equal(DeliveryReplayJobStatus.Pending, first.Value.Status);
+
+            var processed = await service.ProcessReplayJobsAsync(5, CancellationToken.None);
+            processed.EnsureSuccess();
+
+            Assert.Equal(1, processed.Value.ClaimedJobs);
+            Assert.Equal(1, processed.Value.CompletedJobs);
+            Assert.Equal(0, processed.Value.FailedJobs);
+            Assert.Equal(1, processed.Value.TotalReplayedDeliveries);
+
+            var completed = await service.GetReplayJobAsync(first.Value.Id, CancellationToken.None);
+            completed.EnsureSuccess();
+            Assert.Equal(DeliveryReplayJobStatus.Completed, completed.Value.Status);
+            Assert.Equal(1, completed.Value.ReplayedCount);
+
+            await using var conn = new NpgsqlConnection(_fx.ConnectionString);
+            await conn.OpenAsync();
+
+            var matching = await conn.QuerySingleAsync<(string status, DateTimeOffset? next_attempt_at)>(
+                "SELECT status, next_attempt_at FROM deliveries WHERE id = @id;",
+                new { id = matchingId });
+            var nonMatching = await conn.QuerySingleAsync<(string status, DateTimeOffset? next_attempt_at)>(
+                "SELECT status, next_attempt_at FROM deliveries WHERE id = @id;",
+                new { id = nonMatchingId });
+
+            Assert.Equal("Failed", matching.status);
+            Assert.NotNull(matching.next_attempt_at);
+            Assert.Equal("Dead", nonMatching.status);
+            Assert.Null(nonMatching.next_attempt_at);
+        }
+
         private DeliveryRecoveryService BuildService()
         {
             var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
@@ -162,6 +219,36 @@ namespace KairoServer.IntegrationTests
             uow.Commit();
 
             return delivery;
+        }
+
+        private async Task<Guid> SeedReplayDeliveryAsync(
+            DeliveryStatus status,
+            string eventType,
+            DateTimeOffset createdAt)
+        {
+            var deliveryId = Guid.NewGuid();
+            var (eventId, contractId, customerId) = await SeedAsync();
+
+            await using var conn = new NpgsqlConnection(_fx.ConnectionString);
+            await conn.OpenAsync();
+            await conn.ExecuteAsync(
+                """
+                INSERT INTO deliveries
+                (id, event_id, contract_id, customer_id, event_type, payload, destination_type, destination_config, status, attempt_count, last_error, next_attempt_at, created_at, updated_at)
+                VALUES (@id, @eventId, @contractId, @customerId, @eventType, '{}'::jsonb, 'Http', '{"url":"https://example.test"}'::jsonb, @status, 2, 'failed', NULL, @createdAt, @createdAt);
+                """,
+                new
+                {
+                    id = deliveryId,
+                    eventId,
+                    contractId,
+                    customerId,
+                    eventType,
+                    status = status.ToString(),
+                    createdAt,
+                });
+
+            return deliveryId;
         }
 
         private async Task<Delivery> SeedFailedDeliveryAsync()

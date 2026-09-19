@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Matching;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
@@ -150,6 +151,24 @@ namespace KairoServer.UnitTests.Matching
 
             public Task<Result<int>> RecoverStaleInFlightAsync(DateTimeOffset staleBefore, DateTimeOffset now, int batchSize, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(0));
+
+            public Task<Result<DeliveryReplayJob?>> GetReplayJobByOperationIdAsync(Guid operationId, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success<DeliveryReplayJob?>(null));
+
+            public Task<Result<DeliveryReplayJob?>> GetReplayJobByIdAsync(Guid replayJobId, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success<DeliveryReplayJob?>(null));
+
+            public Task<Result<int>> AddReplayJobAsync(DeliveryReplayJob replayJob, IUnitOfWork uow, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(1));
+
+            public Task<Result<IReadOnlyList<DeliveryReplayJob>>> ClaimReplayJobsAsync(int maxJobs, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success<IReadOnlyList<DeliveryReplayJob>>(Array.Empty<DeliveryReplayJob>()));
+
+            public Task<Result<int>> ExecuteReplayJobAsync(DeliveryReplayJob replayJob, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(0));
+
+            public Task<Result<bool>> CompleteReplayJobAsync(Guid replayJobId, DeliveryReplayJobStatus status, int replayedCount, string? error, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(true));
         }
 
         private sealed class FakeOutboxRepository : IOutboxRepository

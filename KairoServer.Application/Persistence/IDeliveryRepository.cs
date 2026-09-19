@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Common;
 using KairoServer.Domain.Deliveries;
 
@@ -117,6 +118,34 @@ namespace KairoServer.Application.Persistence
             DateTimeOffset staleBefore,
             DateTimeOffset now,
             int batchSize,
+            CancellationToken cancellationToken);
+
+        Task<Result<DeliveryReplayJob?>> GetReplayJobByOperationIdAsync(
+            Guid operationId,
+            CancellationToken cancellationToken);
+
+        Task<Result<DeliveryReplayJob?>> GetReplayJobByIdAsync(
+            Guid replayJobId,
+            CancellationToken cancellationToken);
+
+        Task<Result<int>> AddReplayJobAsync(
+            DeliveryReplayJob replayJob,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken);
+
+        Task<Result<IReadOnlyList<DeliveryReplayJob>>> ClaimReplayJobsAsync(
+            int maxJobs,
+            CancellationToken cancellationToken);
+
+        Task<Result<int>> ExecuteReplayJobAsync(
+            DeliveryReplayJob replayJob,
+            CancellationToken cancellationToken);
+
+        Task<Result<bool>> CompleteReplayJobAsync(
+            Guid replayJobId,
+            DeliveryReplayJobStatus status,
+            int replayedCount,
+            string? error,
             CancellationToken cancellationToken);
     }
 }

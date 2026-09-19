@@ -54,12 +54,13 @@
     <None Update="..\migration\017_add_contract_snapshot_columns.sql" Link="Migrations\017_add_contract_snapshot_columns.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="..\migration\018_add_delivery_scheduler_indexes.sql" Link="Migrations\018_add_delivery_scheduler_indexes.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="..\migration\019_add_delivery_operation_audits.sql" Link="Migrations\019_add_delivery_operation_audits.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="..\migration\020_create_delivery_replay_jobs.sql" Link="Migrations\020_create_delivery_replay_jobs.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Migrations\006_create_delivery_attempts.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="CopyRootMigrations" AfterTargets="Build">
     <ItemGroup>
-      <RootMigrationFiles Include="..\migration\001_create_events.sql;..\migration\002_create_outbox_messages.sql;..\migration\003_create_customers.sql;..\migration\004_create_contracts.sql;..\migration\005_create_deliveries.sql;..\migration\007_create_event_replays.sql;..\migration\008_create_event_definitions.sql;..\migration\009_create_contract_filters.sql;..\migration\010_add_contract_payload_transformations.sql;..\migration\011_add_delivery_rate_limits.sql;..\migration\012_add_delivery_ordering.sql;..\migration\013_add_retention_cleanup_indexes.sql;..\migration\014_add_outbox_retry_metadata.sql;..\migration\015_add_outbox_claim_indexes.sql;..\migration\016_add_delivery_contract_snapshots.sql;..\migration\017_add_contract_snapshot_columns.sql;..\migration\018_add_delivery_scheduler_indexes.sql;..\migration\019_add_delivery_operation_audits.sql" />
+      <RootMigrationFiles Include="..\migration\001_create_events.sql;..\migration\002_create_outbox_messages.sql;..\migration\003_create_customers.sql;..\migration\004_create_contracts.sql;..\migration\005_create_deliveries.sql;..\migration\007_create_event_replays.sql;..\migration\008_create_event_definitions.sql;..\migration\009_create_contract_filters.sql;..\migration\010_add_contract_payload_transformations.sql;..\migration\011_add_delivery_rate_limits.sql;..\migration\012_add_delivery_ordering.sql;..\migration\013_add_retention_cleanup_indexes.sql;..\migration\014_add_outbox_retry_metadata.sql;..\migration\015_add_outbox_claim_indexes.sql;..\migration\016_add_delivery_contract_snapshots.sql;..\migration\017_add_contract_snapshot_columns.sql;..\migration\018_add_delivery_scheduler_indexes.sql;..\migration\019_add_delivery_operation_audits.sql;..\migration\020_create_delivery_replay_jobs.sql" />
     </ItemGroup>
 
     <MakeDir Directories="$(OutDir)Migrations" />

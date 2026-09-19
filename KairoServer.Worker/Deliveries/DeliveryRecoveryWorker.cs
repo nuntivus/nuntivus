@@ -1,24 +1,26 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Persistence;
 using KairoServer.Common.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 namespace KairoServer.Worker.Deliveries
 {
     public sealed class DeliveryRecoveryWorker : BackgroundService
     {
-        private readonly IDeliveryRepository _deliveries;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly DeliveryRecoveryOption _option;
         private readonly IAppLogger<DeliveryRecoveryWorker> _logger;
 
         public DeliveryRecoveryWorker(
-            IDeliveryRepository deliveries,
+            IServiceScopeFactory scopeFactory,
             DeliveryRecoveryOption option,
             IAppLogger<DeliveryRecoveryWorker> logger)
         {
-            _deliveries = deliveries;
+            _scopeFactory = scopeFactory;
             _option = option;
             _logger = logger;
         }
@@ -26,18 +28,23 @@ namespace KairoServer.Worker.Deliveries
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.Information(
-                "DeliveryRecoveryWorker started (interval {Interval}, stale threshold {StaleAfter}, batch {BatchSize}).",
+                "DeliveryRecoveryWorker started (interval {Interval}, stale threshold {StaleAfter}, batch {BatchSize}, replay jobs/cycle {ReplayJobsPerCycle}).",
                 _option.RunInterval,
                 _option.StaleInFlightAfter,
-                _option.BatchSize);
+                _option.BatchSize,
+                _option.ReplayMaxJobsPerCycle);
 
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
+                    await using var scope = _scopeFactory.CreateAsyncScope();
+                    var deliveries = scope.ServiceProvider.GetRequiredService<IDeliveryRepository>();
+                    var recovery = scope.ServiceProvider.GetRequiredService<IDeliveryRecoveryService>();
+
                     var now = DateTimeOffset.UtcNow;
                     var staleBefore = now - _option.StaleInFlightAfter;
-                    var recovered = await _deliveries.RecoverStaleInFlightAsync(
+                    var recovered = await deliveries.RecoverStaleInFlightAsync(
                         staleBefore,
                         now,
                         _option.BatchSize,
@@ -51,6 +58,26 @@ namespace KairoServer.Worker.Deliveries
                             "Recovered {Count} stale in-flight delivery row(s) older than {StaleBefore}.",
                             recovered.Value,
                             staleBefore);
+                    }
+
+                    var replay = await recovery.ProcessReplayJobsAsync(_option.ReplayMaxJobsPerCycle, stoppingToken);
+                    if (replay.IsFailure)
+                    {
+                        _logger.Warning("Replay recovery cycle failed: {Error}", replay.Error?.Message ?? "unknown");
+                    }
+                    else if (replay.Value.ClaimedJobs > 0)
+                    {
+                        _logger.Information(
+                            "Processed {Claimed} replay job(s): completed {Completed}, failed {Failed}, replayed deliveries {Deliveries}.",
+                            replay.Value.ClaimedJobs,
+                            replay.Value.CompletedJobs,
+                            replay.Value.FailedJobs,
+                            replay.Value.TotalReplayedDeliveries);
+
+                        if (_option.ReplayInterJobDelay > TimeSpan.Zero)
+                        {
+                            await Task.Delay(_option.ReplayInterJobDelay, stoppingToken);
+                        }
                     }
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

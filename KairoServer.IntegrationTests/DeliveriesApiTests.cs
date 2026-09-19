@@ -100,6 +100,44 @@ namespace KairoServer.IntegrationTests
             Assert.Equal("unauthorized", err!.Code);
         }
 
+        [Fact]
+        public async Task Replay_job_endpoint_is_idempotent_by_operation_id()
+        {
+            await SeedDeadDeliveryAsync();
+            var operationId = Guid.NewGuid();
+            var request = new DeliveryReplayJobApiRequest(
+                operationId,
+                EventType: "orders.created",
+                CustomerId: null,
+                ContractId: null,
+                CreatedFrom: DateTimeOffset.UtcNow.AddHours(-1),
+                CreatedTo: DateTimeOffset.UtcNow.AddHours(1),
+                BatchLimit: 10,
+                Reason: "manual replay");
+
+            var first = await _client.PostAsJsonAsync("/v1/deliveries/replay-jobs", request);
+            var second = await _client.PostAsJsonAsync("/v1/deliveries/replay-jobs", request);
+
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+            var firstBody = await first.Content.ReadFromJsonAsync<DeliveryReplayJobDto>();
+            var secondBody = await second.Content.ReadFromJsonAsync<DeliveryReplayJobDto>();
+
+            Assert.NotNull(firstBody);
+            Assert.NotNull(secondBody);
+            Assert.Equal(firstBody!.Id, secondBody!.Id);
+            Assert.Equal("Pending", firstBody.Status);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            await conn.OpenAsync();
+            var count = await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM delivery_replay_jobs WHERE operation_id = @operationId;",
+                new { operationId });
+
+            Assert.Equal(1L, count);
+        }
+
         private async Task<Guid> SeedDeadDeliveryAsync()
         {
             var now = DateTimeOffset.UtcNow;
@@ -188,5 +226,6 @@ namespace KairoServer.IntegrationTests
 
         private sealed record DeliveryFailureDto(Guid DeliveryId, string Status, string? LastError, DateTimeOffset? NextAttemptAt, DateTimeOffset UpdatedAt);
         private sealed record DeliveryAttemptDto(Guid Id, int AttemptNumber, bool Succeeded, string? FailureCategory, string? Error, Dictionary<string, string> Metadata, DateTimeOffset StartedAt, DateTimeOffset CompletedAt);
+        private sealed record DeliveryReplayJobDto(Guid Id, string Status, int ReplayedCount);
     }
 }
