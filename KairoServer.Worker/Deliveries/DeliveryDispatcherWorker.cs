@@ -181,19 +181,19 @@ namespace KairoServer.Worker.Deliveries
                 {
                     if (result.Value is DeliveryDispatchOutcome.FailedRetry or DeliveryDispatchOutcome.Skipped)
                     {
-                        var delayed = await TryDelayRedeliveryAsync(
-                            msg,
+                        var shouldAck = await ShouldAckDeferredOutcomeAsync(
                             ready.DeliveryId,
                             scope.ServiceProvider,
                             cancellationToken);
 
-                        if (!delayed)
+                        if (shouldAck)
                         {
                             await msg.AckAsync(cancellationToken: cancellationToken);
                             TrackDeliveryWorkerOutcome("acked");
                         }
                         else
                         {
+                            await msg.NakAsync(delay: _deliveryOptions.NakDelay, cancellationToken: cancellationToken);
                             TrackDeliveryWorkerOutcome("retry_delayed");
                         }
                     }
@@ -298,8 +298,7 @@ namespace KairoServer.Worker.Deliveries
             };
         }
 
-        private async Task<bool> TryDelayRedeliveryAsync(
-            NatsJSMsg<byte[]> msg,
+        private async Task<bool> ShouldAckDeferredOutcomeAsync(
             Guid deliveryId,
             IServiceProvider scopeProvider,
             CancellationToken cancellationToken)
@@ -309,45 +308,33 @@ namespace KairoServer.Worker.Deliveries
             if (load.IsFailure)
             {
                 _logger.Warning(
-                    "Failed to load delivery {DeliveryId} to compute retry delay; using default NAK delay.",
+                    "Failed to load delivery {DeliveryId} after deferred outcome; keeping broker retry semantics.",
                     deliveryId);
-                await msg.NakAsync(delay: _deliveryOptions.NakDelay, cancellationToken: cancellationToken);
-                return true;
+                return false;
             }
 
             var delivery = load.Value;
             if (delivery is null)
             {
-                return false;
+                return true;
             }
 
-            if (delivery.Status is DeliveryStatus.Delivered)
+            if (delivery.Status is DeliveryStatus.Delivered or DeliveryStatus.Dead or DeliveryStatus.InFlight)
             {
-                return false;
+                return true;
             }
 
-            if (delivery.Status is DeliveryStatus.Dead)
+            if (delivery.NextAttemptAt is not null)
             {
-                return false;
+                return true;
             }
 
             if (delivery.Status is DeliveryStatus.Failed && delivery.NextAttemptAt is null)
             {
-                return false;
+                return true;
             }
 
-            var delay = _deliveryOptions.NakDelay;
-            if (delivery.NextAttemptAt is { } nextAttemptAt)
-            {
-                var computed = nextAttemptAt - DateTimeOffset.UtcNow;
-                if (computed > TimeSpan.Zero)
-                {
-                    delay = computed;
-                }
-            }
-
-            await msg.NakAsync(delay: delay, cancellationToken: cancellationToken);
-            return true;
+            return false;
         }
     }
 }

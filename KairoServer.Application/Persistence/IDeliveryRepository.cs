@@ -86,6 +86,18 @@ namespace KairoServer.Application.Persistence
             CancellationToken cancellationToken);
 
         /// <summary>
+        /// Atomically claims a batch of due delayed deliveries for enqueueing by
+        /// the durable scheduler. Rows are selected using
+        /// <c>FOR UPDATE SKIP LOCKED</c> so multiple schedulers can scale out
+        /// safely. Claimed rows are made dispatchable and returned for enqueue.
+        /// </summary>
+        Task<Result<IReadOnlyList<Delivery>>> ClaimDueForSchedulingAsync(
+            DateTimeOffset now,
+            int batchSize,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken);
+
+        /// <summary>
         /// Recovers abandoned in-flight deliveries by moving rows whose
         /// <c>updated_at</c> is older than <paramref name="staleBefore"/> back to
         /// retryable <see cref="DeliveryStatus.Failed"/> with

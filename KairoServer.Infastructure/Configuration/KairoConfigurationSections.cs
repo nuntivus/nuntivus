@@ -10,6 +10,7 @@ namespace KairoServer.Infastructure.Configuration
         public const string EndpointSecurity = "EndpointSecurity";
         public const string LegacyDestinationSecurity = "DestinationSecurity";
         public const string Delivery = "Delivery";
+        public const string DeliveryScheduler = "DeliveryScheduler";
         public const string DeliveryRecovery = "DeliveryRecovery";
         public const string DeliveryDispatcher = "DeliveryDispatcher";
         public const string DeliveryOrdering = "DeliveryOrdering";

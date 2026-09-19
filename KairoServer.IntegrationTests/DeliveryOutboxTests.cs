@@ -11,8 +11,10 @@ using KairoServer.Contracts.Deliveries;
 using KairoServer.Contracts.Events;
 using KairoServer.Domain.Contracts;
 using KairoServer.Domain.Customers;
+using KairoServer.Domain.Deliveries;
 using KairoServer.Domain.Events;
 using KairoServer.Domain.Outbox;
+using KairoServer.Worker.Deliveries;
 using KairoServer.Worker.Outbox;
 using Microsoft.Extensions.DependencyInjection;
 using NATS.Client.Core;
@@ -25,6 +27,8 @@ namespace KairoServer.IntegrationTests
     [Collection(nameof(MatcherCollection))]
     public sealed class DeliveryOutboxTests : IAsyncLifetime
     {
+        private static readonly DeliveryFactory DeliveryFactory = new();
+
         private readonly MatcherFixture _fixture;
         private readonly ServiceProvider _services;
 
@@ -51,7 +55,7 @@ namespace KairoServer.IntegrationTests
             uow.Commit();
         }
 
-        private async Task SeedContractAsync(string customerId, string[] eventTypes)
+        private async Task<Guid> SeedContractAsync(string customerId, string[] eventTypes)
         {
             var contract = Contract.Create(
                 customerId,
@@ -67,6 +71,8 @@ namespace KairoServer.IntegrationTests
             uow.Begin(true);
             (await repo.InsertAsync(contract, uow, CancellationToken.None)).EnsureSuccess();
             uow.Commit();
+
+            return contract.Id;
         }
 
         private async Task<Event> SeedEventAsync(string type, string payload = "{\"k\":\"v\"}")
@@ -86,6 +92,38 @@ namespace KairoServer.IntegrationTests
             (await repo.InsertAsync(@event, uow, CancellationToken.None)).EnsureSuccess();
             uow.Commit();
             return @event;
+        }
+
+        private async Task<Delivery> SeedScheduledDeliveryAsync(
+            Event @event,
+            Guid contractId,
+            string customerId,
+            DateTimeOffset scheduledAt)
+        {
+            var delivery = DeliveryFactory.CreatePending(
+                @event.Id,
+                contractId,
+                customerId,
+                @event.Type,
+                @event.Payload,
+                new Destination(DestinationType.Http, "{\"Url\":\"https://x.example.com\"}"),
+                DateTimeOffset.UtcNow);
+
+            await using var scope = _services.CreateAsyncScope();
+            var repo = scope.ServiceProvider.GetRequiredService<IDeliveryRepository>();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            uow.Begin(true);
+            (await repo.InsertPendingAsync(new[] { delivery }, uow, CancellationToken.None)).EnsureSuccess();
+            (await repo.ScheduleNextAttemptAsync(
+                delivery.Id,
+                delivery.UpdatedAt,
+                scheduledAt,
+                uow,
+                CancellationToken.None)).EnsureSuccess();
+            uow.Commit();
+
+            return delivery;
         }
 
         // ---- tests -----------------------------------------------------------
@@ -229,6 +267,85 @@ namespace KairoServer.IntegrationTests
                 "SELECT COUNT(*) FROM outbox_messages WHERE type = @t AND event_id = @e AND processed_at IS NOT NULL",
                 new { t = OutboxMessageType.DeliveryReady, e = @event.Id });
             Assert.Equal(1, processedRows);
+        }
+
+        [Fact]
+        public async Task Delivery_scheduler_worker_enqueues_due_delivery_once()
+        {
+            await SeedCustomerAsync("acme");
+            var contractId = await SeedContractAsync("acme", new[] { "orders.created" });
+            var @event = await SeedEventAsync("orders.created");
+            var delivery = await SeedScheduledDeliveryAsync(@event, contractId, "acme", DateTimeOffset.UtcNow.AddSeconds(-1));
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var worker = ActivatorUtilities.CreateInstance<DeliverySchedulerWorker>(_services);
+            var runTask = worker.StartAsync(cts.Token);
+
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            long count = 0;
+            while (DateTime.UtcNow < deadline)
+            {
+                await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+                count = await conn.ExecuteScalarAsync<long>(
+                    "SELECT COUNT(*) FROM outbox_messages WHERE type = @t AND event_id = @e",
+                    new { t = OutboxMessageType.DeliveryReady, e = @event.Id });
+                if (count >= 1)
+                    break;
+
+                await Task.Delay(100);
+            }
+
+            await worker.StopAsync(CancellationToken.None);
+            await runTask;
+
+            Assert.Equal(1, count);
+
+            await using var verifyConn = new NpgsqlConnection(_fixture.ConnectionString);
+            var row = await verifyConn.QuerySingleAsync<(string status, DateTimeOffset? next_attempt_at)>(
+                "SELECT status, next_attempt_at FROM deliveries WHERE id = @id",
+                new { id = delivery.Id });
+
+            Assert.Equal("Pending", row.status);
+            Assert.Null(row.next_attempt_at);
+        }
+
+        [Fact]
+        public async Task Two_delivery_scheduler_workers_do_not_duplicate_enqueues()
+        {
+            await SeedCustomerAsync("acme");
+            var contractId = await SeedContractAsync("acme", new[] { "orders.created" });
+            var @event = await SeedEventAsync("orders.created");
+            await SeedScheduledDeliveryAsync(@event, contractId, "acme", DateTimeOffset.UtcNow.AddSeconds(-1));
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var workerA = ActivatorUtilities.CreateInstance<DeliverySchedulerWorker>(_services);
+            var workerB = ActivatorUtilities.CreateInstance<DeliverySchedulerWorker>(_services);
+            var runA = workerA.StartAsync(cts.Token);
+            var runB = workerB.StartAsync(cts.Token);
+
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (DateTime.UtcNow < deadline)
+            {
+                await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+                var count = await conn.ExecuteScalarAsync<long>(
+                    "SELECT COUNT(*) FROM outbox_messages WHERE type = @t AND event_id = @e",
+                    new { t = OutboxMessageType.DeliveryReady, e = @event.Id });
+
+                if (count == 1)
+                    break;
+
+                await Task.Delay(100);
+            }
+
+            await Task.WhenAll(workerA.StopAsync(CancellationToken.None), workerB.StopAsync(CancellationToken.None));
+            await Task.WhenAll(runA, runB);
+
+            await using var verifyConn = new NpgsqlConnection(_fixture.ConnectionString);
+            var outboxRows = await verifyConn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM outbox_messages WHERE type = @t AND event_id = @e",
+                new { t = OutboxMessageType.DeliveryReady, e = @event.Id });
+
+            Assert.Equal(1, outboxRows);
         }
 
         [Fact]

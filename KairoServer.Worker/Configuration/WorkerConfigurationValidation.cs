@@ -11,8 +11,14 @@ namespace KairoServer.Worker.Configuration
             => option.EnableOutboxPublisher
                || option.EnableContractMatcher
                || option.EnableDeliveryDispatcher
+               || option.EnableDeliveryScheduler
                || option.EnableDeliveryRecovery
                || option.EnableRetentionCleanup;
+
+        public static bool IsDeliverySchedulerValid(DeliverySchedulerOption option)
+            => option.BatchSize > 0
+               && option.PollDelay > TimeSpan.Zero
+               && option.EmptyPollDelay > TimeSpan.Zero;
 
         public static bool IsDeliveryConsumerValid(DeliveryOption option)
             => !string.IsNullOrWhiteSpace(option.DurableName)

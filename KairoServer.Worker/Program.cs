@@ -87,6 +87,13 @@ builder.Services
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DeliveryDispatcherOption>>().Value);
 
 builder.Services
+    .AddOptions<DeliverySchedulerOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.DeliveryScheduler))
+    .Validate(WorkerConfigurationValidation.IsDeliverySchedulerValid, "DeliveryScheduler configuration is invalid.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DeliverySchedulerOption>>().Value);
+
+builder.Services
     .AddOptions<DeliveryOrderingOption>()
     .Bind(builder.Configuration.GetSection(KairoConfigurationSections.DeliveryOrdering))
     .Validate(KairoConfigurationValidation.IsOrderingValid, "DeliveryOrdering configuration is invalid.")
@@ -290,6 +297,11 @@ if (workerRuntime.EnableContractMatcher)
 if (workerRuntime.EnableDeliveryDispatcher)
 {
     builder.Services.AddHostedService<DeliveryDispatcherWorker>();
+}
+
+if (workerRuntime.EnableDeliveryScheduler)
+{
+    builder.Services.AddHostedService<DeliverySchedulerWorker>();
 }
 
 if (workerRuntime.EnableDeliveryRecovery)

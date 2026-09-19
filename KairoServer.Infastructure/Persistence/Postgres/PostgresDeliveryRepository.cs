@@ -266,6 +266,94 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        public async Task<Result<IReadOnlyList<Delivery>>> ClaimDueForSchedulingAsync(
+            DateTimeOffset now,
+            int batchSize,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (!uow.IsTransactionOpen)
+                    throw new InvalidOperationException("Transaction is not open.");
+
+                if (batchSize <= 0)
+                    return Result.Success<IReadOnlyList<Delivery>>(Array.Empty<Delivery>());
+
+                const string sql = """
+                    WITH due AS (
+                        SELECT id
+                        FROM deliveries
+                        WHERE next_attempt_at IS NOT NULL
+                          AND next_attempt_at <= @Now
+                          AND status = ANY(@EligibleStatuses)
+                        ORDER BY next_attempt_at ASC, created_at ASC, id ASC
+                        LIMIT @BatchSize
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE deliveries d
+                    SET status = @PendingStatus,
+                        next_attempt_at = NULL,
+                        updated_at = @Now
+                    FROM due
+                    WHERE d.id = due.id
+                    RETURNING
+                        d.id,
+                        d.event_id AS EventId,
+                        d.contract_id AS ContractId,
+                        d.customer_id AS CustomerId,
+                        d.event_type AS EventType,
+                        d.payload::text AS Payload,
+                        d.auth_ref AS AuthenticationReference,
+                        d.auth_version AS AuthenticationVersion,
+                        d.transformation_version AS TransformationVersion,
+                        d.schema_version AS SchemaVersion,
+                        d.transformation_config::text AS TransformationConfig,
+                        d.rate_limit_per_second AS RateLimitPerSecond,
+                        d.rate_limit_per_minute AS RateLimitPerMinute,
+                        d.rate_limit_burst AS RateLimitBurst,
+                        d.ordering_enabled AS OrderingEnabled,
+                        d.ordering_key AS OrderingKey,
+                        d.destination_type AS DestinationType,
+                        d.destination_config::text AS DestinationConfig,
+                        d.status,
+                        d.attempt_count AS AttemptCount,
+                        d.last_error AS LastError,
+                        d.next_attempt_at AS NextAttemptAt,
+                        d.created_at AS CreatedAt,
+                        d.updated_at AS UpdatedAt;
+                    """;
+
+                var rows = await uow.GetConnection()!.QueryAsync<DeliveryRow>(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        Now = now,
+                        BatchSize = batchSize,
+                        PendingStatus = DeliveryStatus.Pending.ToString(),
+                        EligibleStatuses = new[]
+                        {
+                            DeliveryStatus.Pending.ToString(),
+                            DeliveryStatus.Failed.ToString(),
+                        },
+                    },
+                    uow.GetTransaction(),
+                    cancellationToken: cancellationToken));
+
+                var deliveries = new List<Delivery>();
+                foreach (var row in rows)
+                {
+                    deliveries.Add(MapDelivery(row));
+                }
+
+                return Result.Success<IReadOnlyList<Delivery>>(deliveries);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<IReadOnlyList<Delivery>>(ex);
+            }
+        }
+
         public async Task<Result<int>> RecoverStaleInFlightAsync(
             DateTimeOffset staleBefore,
             DateTimeOffset now,

@@ -17,6 +17,7 @@ using KairoServer.Infastructure.Messaging.Nats;
 using KairoServer.Infastructure.Persistence.Caching;
 using KairoServer.Infastructure.Persistence.Postgres;
 using KairoServer.Worker.Matching;
+using KairoServer.Worker.Deliveries;
 using KairoServer.Worker.Outbox;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -148,6 +149,13 @@ namespace KairoServer.IntegrationTests
                 ClaimTtl = TimeSpan.FromSeconds(30),
             });
 
+            services.AddSingleton(new DeliverySchedulerOption
+            {
+                BatchSize = 32,
+                PollDelay = TimeSpan.FromMilliseconds(100),
+                EmptyPollDelay = TimeSpan.FromMilliseconds(150),
+            });
+
             services.AddSingleton<INatsConnection>(sp =>
                 new NatsConnection(NatsOpts.Default with { Url = natsOption.Url, Name = natsOption.Name }));
             services.AddSingleton<INatsJSContext>(sp =>
@@ -184,6 +192,8 @@ namespace KairoServer.IntegrationTests
                          "014_add_outbox_retry_metadata.sql",
                          "015_add_outbox_claim_indexes.sql",
                          "016_add_delivery_contract_snapshots.sql",
+                         "017_add_contract_snapshot_columns.sql",
+                         "018_add_delivery_scheduler_indexes.sql",
                      })
             {
                 var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

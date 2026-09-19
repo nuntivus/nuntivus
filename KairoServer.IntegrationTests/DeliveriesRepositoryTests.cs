@@ -243,6 +243,60 @@ namespace KairoServer.IntegrationTests
             Assert.Equal(DeliveryStatus.Dead, deadRows.Items[0].Status);
         }
 
+        [Fact]
+        public async Task ClaimDueForSchedulingAsync_Claims_Due_Deliveries_And_Normalizes_State()
+        {
+            var (eventId, contractId, customerId) = await SeedAsync();
+            var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
+            var now = DateTimeOffset.UtcNow;
+
+            var duePending = DeliveryFactory.CreatePending(eventId, contractId, customerId, "orders.created", "{}", destination, now);
+            var dueFailed = DeliveryFactory.CreatePending(await SeedExtraEventAsync(), contractId, customerId, "orders.created", "{}", destination, now.AddSeconds(1));
+            var futurePending = DeliveryFactory.CreatePending(await SeedExtraEventAsync(), contractId, customerId, "orders.created", "{}", destination, now.AddSeconds(2));
+
+            await InsertAsync(duePending);
+            await InsertAsync(dueFailed);
+            await InsertAsync(futurePending);
+
+            var expectedDueFailedUpdatedAt = dueFailed.UpdatedAt;
+            dueFailed.MarkInFlight(now.AddSeconds(3));
+            dueFailed.MarkFailed("retry", now.AddSeconds(-2), now.AddSeconds(4));
+            await UpdateAsync(dueFailed, expectedDueFailedUpdatedAt);
+
+            Assert.True(await ScheduleNextAttemptAsync(duePending.Id, duePending.UpdatedAt, now.AddSeconds(-1)));
+            Assert.True(await ScheduleNextAttemptAsync(futurePending.Id, futurePending.UpdatedAt, now.AddMinutes(2)));
+
+            var claimed = await ClaimDueAsync(now, batchSize: 10);
+
+            Assert.Equal(2, claimed.Count);
+            Assert.Contains(claimed, d => d.Id == duePending.Id);
+            Assert.Contains(claimed, d => d.Id == dueFailed.Id);
+            Assert.All(claimed, d =>
+            {
+                Assert.Equal(DeliveryStatus.Pending, d.Status);
+                Assert.Null(d.NextAttemptAt);
+            });
+        }
+
+        [Fact]
+        public async Task ClaimDueForSchedulingAsync_Does_Not_Claim_Already_Claimed_Deliveries()
+        {
+            var (eventId, contractId, customerId) = await SeedAsync();
+            var destination = new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}");
+            var now = DateTimeOffset.UtcNow;
+
+            var due = DeliveryFactory.CreatePending(eventId, contractId, customerId, "orders.created", "{}", destination, now);
+            await InsertAsync(due);
+            Assert.True(await ScheduleNextAttemptAsync(due.Id, due.UpdatedAt, now.AddSeconds(-1)));
+
+            var first = await ClaimDueAsync(now, batchSize: 10);
+            var second = await ClaimDueAsync(now.AddSeconds(1), batchSize: 10);
+
+            Assert.Single(first);
+            Assert.Equal(due.Id, first[0].Id);
+            Assert.Empty(second);
+        }
+
         private async Task<int> InsertAsync(Delivery delivery)
         {
             var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
@@ -250,6 +304,28 @@ namespace KairoServer.IntegrationTests
             uow.Begin(true);
             var repo = new PostgresDeliveryRepository(factory);
             var result = await repo.InsertPendingAsync(new[] { delivery }, uow, CancellationToken.None);
+            uow.Commit();
+            return result.EnsureValue();
+        }
+
+        private async Task<bool> ScheduleNextAttemptAsync(Guid deliveryId, DateTimeOffset expectedUpdatedAt, DateTimeOffset nextAttemptAt)
+        {
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            using var uow = new PostgresUnitOfWork(factory);
+            uow.Begin(true);
+            var repo = new PostgresDeliveryRepository(factory);
+            var result = await repo.ScheduleNextAttemptAsync(deliveryId, expectedUpdatedAt, nextAttemptAt, uow, CancellationToken.None);
+            uow.Commit();
+            return result.EnsureValue();
+        }
+
+        private async Task<IReadOnlyList<Delivery>> ClaimDueAsync(DateTimeOffset now, int batchSize)
+        {
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            using var uow = new PostgresUnitOfWork(factory);
+            uow.Begin(true);
+            var repo = new PostgresDeliveryRepository(factory);
+            var result = await repo.ClaimDueForSchedulingAsync(now, batchSize, uow, CancellationToken.None);
             uow.Commit();
             return result.EnsureValue();
         }

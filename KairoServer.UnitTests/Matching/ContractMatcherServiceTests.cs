@@ -139,6 +139,9 @@ namespace KairoServer.UnitTests.Matching
             public Task<Result<bool>> ScheduleNextAttemptAsync(Guid deliveryId, DateTimeOffset expectedUpdatedAt, DateTimeOffset nextAttemptAt, IUnitOfWork uow, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(true));
 
+            public Task<Result<IReadOnlyList<Delivery>>> ClaimDueForSchedulingAsync(DateTimeOffset now, int batchSize, IUnitOfWork uow, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success<IReadOnlyList<Delivery>>(Array.Empty<Delivery>()));
+
             public Task<Result<int>> RecoverStaleInFlightAsync(DateTimeOffset staleBefore, DateTimeOffset now, int batchSize, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(0));
         }

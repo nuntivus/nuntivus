@@ -40,6 +40,12 @@ namespace KairoServer.Worker.Observability
         private static readonly Counter<long> WorkerProcessedCounter =
             KairoTelemetry.Meter.CreateCounter<long>("kairo.worker.processed.count");
 
+        private static readonly Counter<long> DeliverySchedulerClaimedCounter =
+            KairoTelemetry.Meter.CreateCounter<long>("kairo.delivery.scheduler.claimed.count");
+
+        private static readonly Counter<long> DeliverySchedulerOutcomeCounter =
+            KairoTelemetry.Meter.CreateCounter<long>("kairo.delivery.scheduler.outcome.count");
+
         public static void TrackIngestionThroughput(string subject)
         {
             IngestionThroughputCounter.Add(1, new TagList
@@ -147,6 +153,22 @@ namespace KairoServer.Worker.Observability
             WorkerProcessedCounter.Add(1, new TagList
             {
                 { KairoTelemetry.WorkerTag, worker },
+                { "outcome", outcome },
+            });
+        }
+
+        public static void TrackDeliverySchedulerClaimed(int count)
+        {
+            if (count <= 0)
+                return;
+
+            DeliverySchedulerClaimedCounter.Add(count);
+        }
+
+        public static void TrackDeliverySchedulerOutcome(string outcome)
+        {
+            DeliverySchedulerOutcomeCounter.Add(1, new TagList
+            {
                 { "outcome", outcome },
             });
         }
