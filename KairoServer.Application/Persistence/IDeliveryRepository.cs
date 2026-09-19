@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Common;
 using KairoServer.Domain.Deliveries;
@@ -27,6 +28,10 @@ namespace KairoServer.Application.Persistence
         /// row does not exist.
         /// </summary>
         Task<Result<Delivery?>> GetByIdAsync(
+            Guid deliveryId,
+            CancellationToken cancellationToken);
+
+        Task<Result<DeliveryQueryView?>> GetQueryByIdAsync(
             Guid deliveryId,
             CancellationToken cancellationToken);
 
@@ -87,6 +92,10 @@ namespace KairoServer.Application.Persistence
         Task<Result<PagedResult<Delivery>>> ListDeadAsync(
             int page,
             int pageSize,
+            CancellationToken cancellationToken);
+
+        Task<Result<PagedResult<DeliveryQueryView>>> ListQueryAsync(
+            DeliveryListQuery query,
             CancellationToken cancellationToken);
 
         Task<Result<bool>> ScheduleNextAttemptAsync(

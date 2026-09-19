@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Matching;
 using KairoServer.Application.Persistence;
@@ -119,6 +120,9 @@ namespace KairoServer.UnitTests.Matching
             public Task<Result<Delivery?>> GetByIdAsync(Guid deliveryId, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success<Delivery?>(null));
 
+            public Task<Result<DeliveryQueryView?>> GetQueryByIdAsync(Guid deliveryId, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success<DeliveryQueryView?>(null));
+
             public Task<Result<Delivery?>> TryClaimForDispatchAsync(Guid deliveryId, DateTimeOffset expectedUpdatedAt, DateTimeOffset now, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success<Delivery?>(null));
 
@@ -139,6 +143,9 @@ namespace KairoServer.UnitTests.Matching
 
             public Task<Result<PagedResult<Delivery>>> ListDeadAsync(int page, int pageSize, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(PagedResult<Delivery>.Create(Array.Empty<Delivery>(), page, pageSize, 0)));
+
+            public Task<Result<PagedResult<DeliveryQueryView>>> ListQueryAsync(DeliveryListQuery query, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(PagedResult<DeliveryQueryView>.Create(Array.Empty<DeliveryQueryView>(), query.Page, query.PageSize, 0)));
 
             public Task<Result<DeliveryRateLimitPermit>> TryAcquireRateLimitPermitAsync(Guid contractId, ContractRateLimit rateLimit, DateTimeOffset now, IUnitOfWork uow, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(DeliveryRateLimitPermit.Allow()));

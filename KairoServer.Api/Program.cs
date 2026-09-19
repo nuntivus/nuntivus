@@ -2,6 +2,7 @@ using KairoServer.Application.Caching;
 using KairoServer.Application.Contracts;
 using KairoServer.Application.Contracts.Destinations;
 using KairoServer.Application.Customers;
+using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Events;
 using KairoServer.Application.Persistence;
@@ -154,6 +155,7 @@ builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<IEventDefinitionService, EventDefinitionService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContractService, ContractService>();
+builder.Services.AddScoped<IDeliveryQueryService, DeliveryQueryService>();
 builder.Services.AddScoped<IDeliveryRecoveryService, DeliveryRecoveryService>();
 builder.Services.AddSingleton<IEventPublishRequestValidator, EventPublishRequestValidator>();
 

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
@@ -142,6 +143,75 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        public async Task<Result<DeliveryQueryView?>> GetQueryByIdAsync(
+            Guid deliveryId,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                    SELECT
+                        d.id                     AS Id,
+                        d.event_id               AS EventId,
+                        d.customer_id            AS CustomerId,
+                        d.contract_id            AS ContractId,
+                        d.event_type             AS EventType,
+                        d.status                 AS Status,
+                        d.attempt_count          AS AttemptCount,
+                        d.last_error             AS LastError,
+                        d.next_attempt_at        AS NextAttemptAt,
+                        d.created_at             AS CreatedAt,
+                        d.updated_at             AS UpdatedAt,
+                        COALESCE(a.total_attempts, 0)      AS TotalAttempts,
+                        COALESCE(a.successful_attempts, 0) AS SuccessfulAttempts,
+                        COALESCE(a.failed_attempts, 0)     AS FailedAttempts,
+                        a.last_attempt_at        AS LastAttemptAt,
+                        lf.failure_category      AS LatestFailureCategory,
+                        COALESCE(lf.error, d.last_error) AS LatestFailureError,
+                        lf.completed_at          AS LatestFailureAt
+                    FROM deliveries d
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            COUNT(*)::int AS total_attempts,
+                            COUNT(*) FILTER (WHERE succeeded)::int AS successful_attempts,
+                            COUNT(*) FILTER (WHERE NOT succeeded)::int AS failed_attempts,
+                            MAX(completed_at) AS last_attempt_at
+                        FROM delivery_attempts da
+                        WHERE da.delivery_id = d.id
+                    ) a ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            failure_category,
+                            error,
+                            completed_at
+                        FROM delivery_attempts da
+                        WHERE da.delivery_id = d.id
+                            AND da.succeeded = FALSE
+                        ORDER BY da.attempt_number DESC
+                        LIMIT 1
+                    ) lf ON TRUE
+                    WHERE d.id = @Id;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                var row = await connection.QuerySingleOrDefaultAsync<DeliveryQueryRow>(new CommandDefinition(
+                    sql,
+                    new { Id = deliveryId },
+                    cancellationToken: cancellationToken));
+
+                if (row is null)
+                    return Result.Success<DeliveryQueryView?>(null);
+
+                return Result.Success<DeliveryQueryView?>(MapDeliveryQuery(row));
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<DeliveryQueryView?>(ex);
+            }
+        }
+
         public async Task<Result<Delivery?>> TryClaimForDispatchAsync(
             Guid deliveryId,
             DateTimeOffset expectedUpdatedAt,
@@ -217,6 +287,125 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             catch (Exception ex)
             {
                 return Result.Failure<Delivery?>(ex);
+            }
+        }
+
+        public async Task<Result<PagedResult<DeliveryQueryView>>> ListQueryAsync(
+            DeliveryListQuery query,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (query.Page < 1)
+                    return Result.Failure<PagedResult<DeliveryQueryView>>("validation", "page must be greater than or equal to 1.");
+                if (query.PageSize < 1)
+                    return Result.Failure<PagedResult<DeliveryQueryView>>("validation", "pageSize must be greater than or equal to 1.");
+
+                var sortBy = string.IsNullOrWhiteSpace(query.SortBy)
+                    ? "updatedat"
+                    : query.SortBy.Trim().ToLowerInvariant();
+                var sortDirection = string.Equals(query.SortDirection, "asc", StringComparison.OrdinalIgnoreCase)
+                    ? "ASC"
+                    : "DESC";
+
+                var orderByColumn = sortBy switch
+                {
+                    "createdat" => "d.created_at",
+                    _ => "d.updated_at",
+                };
+
+                var sql = $"""
+                    SELECT
+                        d.id                     AS Id,
+                        d.event_id               AS EventId,
+                        d.customer_id            AS CustomerId,
+                        d.contract_id            AS ContractId,
+                        d.event_type             AS EventType,
+                        d.status                 AS Status,
+                        d.attempt_count          AS AttemptCount,
+                        d.last_error             AS LastError,
+                        d.next_attempt_at        AS NextAttemptAt,
+                        d.created_at             AS CreatedAt,
+                        d.updated_at             AS UpdatedAt,
+                        COALESCE(a.total_attempts, 0)      AS TotalAttempts,
+                        COALESCE(a.successful_attempts, 0) AS SuccessfulAttempts,
+                        COALESCE(a.failed_attempts, 0)     AS FailedAttempts,
+                        a.last_attempt_at        AS LastAttemptAt,
+                        lf.failure_category      AS LatestFailureCategory,
+                        COALESCE(lf.error, d.last_error) AS LatestFailureError,
+                        lf.completed_at          AS LatestFailureAt
+                    FROM deliveries d
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            COUNT(*)::int AS total_attempts,
+                            COUNT(*) FILTER (WHERE succeeded)::int AS successful_attempts,
+                            COUNT(*) FILTER (WHERE NOT succeeded)::int AS failed_attempts,
+                            MAX(completed_at) AS last_attempt_at
+                        FROM delivery_attempts da
+                        WHERE da.delivery_id = d.id
+                    ) a ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            failure_category,
+                            error,
+                            completed_at
+                        FROM delivery_attempts da
+                        WHERE da.delivery_id = d.id
+                            AND da.succeeded = FALSE
+                        ORDER BY da.attempt_number DESC
+                        LIMIT 1
+                    ) lf ON TRUE
+                    WHERE (@EventId IS NULL OR d.event_id = @EventId)
+                        AND (@CustomerId IS NULL OR d.customer_id = @CustomerId)
+                        AND (@ContractId IS NULL OR d.contract_id = @ContractId)
+                        AND (@Status IS NULL OR d.status = @Status)
+                        AND (@CreatedFrom IS NULL OR d.created_at >= @CreatedFrom)
+                        AND (@CreatedTo IS NULL OR d.created_at <= @CreatedTo)
+                    ORDER BY {orderByColumn} {sortDirection}, d.id DESC
+                    OFFSET @Offset LIMIT @PageSize;
+
+                    SELECT COUNT(*)
+                    FROM deliveries d
+                    WHERE (@EventId IS NULL OR d.event_id = @EventId)
+                        AND (@CustomerId IS NULL OR d.customer_id = @CustomerId)
+                        AND (@ContractId IS NULL OR d.contract_id = @ContractId)
+                        AND (@Status IS NULL OR d.status = @Status)
+                        AND (@CreatedFrom IS NULL OR d.created_at >= @CreatedFrom)
+                        AND (@CreatedTo IS NULL OR d.created_at <= @CreatedTo);
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                using var multi = await connection.QueryMultipleAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        query.EventId,
+                        CustomerId = string.IsNullOrWhiteSpace(query.CustomerId) ? null : query.CustomerId,
+                        query.ContractId,
+                        Status = query.Status?.ToString(),
+                        query.CreatedFrom,
+                        query.CreatedTo,
+                        Offset = (query.Page - 1) * query.PageSize,
+                        query.PageSize,
+                    },
+                    cancellationToken: cancellationToken));
+
+                var rows = (await multi.ReadAsync<DeliveryQueryRow>()).AsList();
+                var totalCount = await multi.ReadSingleAsync<long>();
+
+                var mapped = new List<DeliveryQueryView>(rows.Count);
+                foreach (var row in rows)
+                {
+                    mapped.Add(MapDeliveryQuery(row));
+                }
+
+                return Result.Success(PagedResult<DeliveryQueryView>.Create(mapped, query.Page, query.PageSize, totalCount));
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<PagedResult<DeliveryQueryView>>(ex);
             }
         }
 
@@ -1236,6 +1425,54 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public string? Metadata { get; set; }
             public DateTimeOffset StartedAt { get; set; }
             public DateTimeOffset CompletedAt { get; set; }
+        }
+
+        private sealed class DeliveryQueryRow
+        {
+            public Guid Id { get; set; }
+            public Guid EventId { get; set; }
+            public string CustomerId { get; set; } = string.Empty;
+            public Guid ContractId { get; set; }
+            public string EventType { get; set; } = string.Empty;
+            public string Status { get; set; } = string.Empty;
+            public int AttemptCount { get; set; }
+            public string? LastError { get; set; }
+            public DateTimeOffset? NextAttemptAt { get; set; }
+            public DateTimeOffset CreatedAt { get; set; }
+            public DateTimeOffset UpdatedAt { get; set; }
+            public int TotalAttempts { get; set; }
+            public int SuccessfulAttempts { get; set; }
+            public int FailedAttempts { get; set; }
+            public DateTimeOffset? LastAttemptAt { get; set; }
+            public string? LatestFailureCategory { get; set; }
+            public string? LatestFailureError { get; set; }
+            public DateTimeOffset? LatestFailureAt { get; set; }
+        }
+
+        private static DeliveryQueryView MapDeliveryQuery(DeliveryQueryRow row)
+        {
+            var latestFailure = row.LatestFailureError is null && row.LatestFailureCategory is null && row.LatestFailureAt is null
+                ? null
+                : new DeliveryLatestFailureView(row.LatestFailureCategory, row.LatestFailureError, row.LatestFailureAt);
+
+            return new DeliveryQueryView(
+                row.Id,
+                row.EventId,
+                row.CustomerId,
+                row.ContractId,
+                row.EventType,
+                Enum.Parse<DeliveryStatus>(row.Status),
+                row.AttemptCount,
+                row.LastError,
+                row.NextAttemptAt,
+                row.CreatedAt,
+                row.UpdatedAt,
+                new DeliveryAttemptSummaryView(
+                    row.TotalAttempts,
+                    row.SuccessfulAttempts,
+                    row.FailedAttempts,
+                    row.LastAttemptAt),
+                latestFailure);
         }
 
         private sealed class DeliveryReplayJobRow

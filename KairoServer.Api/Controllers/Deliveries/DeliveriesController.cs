@@ -4,9 +4,11 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Api.Common;
+using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Common;
 using KairoServer.Common.Logging;
+using KairoServer.Domain.Deliveries;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KairoServer.Api.Controllers.Deliveries
@@ -16,14 +18,59 @@ namespace KairoServer.Api.Controllers.Deliveries
     public sealed class DeliveriesController : Controller
     {
         private readonly IDeliveryRecoveryService _recovery;
+        private readonly IDeliveryQueryService _queries;
         private readonly IAppLogger<DeliveriesController> _logger;
 
         public DeliveriesController(
             IDeliveryRecoveryService recovery,
+            IDeliveryQueryService queries,
             IAppLogger<DeliveriesController> logger)
         {
             _recovery = recovery;
+            _queries = queries;
             _logger = logger;
+        }
+
+        [HttpGet("{id:guid}")]
+        public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
+        {
+            var result = await _queries.GetByIdAsync(id, cancellationToken);
+            return result.ToOk();
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> List(
+            [FromQuery] DeliveryListApiRequest request,
+            CancellationToken cancellationToken)
+        {
+            DeliveryStatus? status = null;
+            if (!string.IsNullOrWhiteSpace(request.Status))
+            {
+                if (!Enum.TryParse<DeliveryStatus>(request.Status, ignoreCase: true, out var parsedStatus))
+                {
+                    return new BadRequestObjectResult(ApiErrorResponse.From(new[]
+                    {
+                        Error.Validation("status is invalid.")
+                    }));
+                }
+
+                status = parsedStatus;
+            }
+
+            var query = new DeliveryListQuery(
+                request.EventId,
+                request.CustomerId,
+                request.ContractId,
+                status,
+                request.CreatedFrom,
+                request.CreatedTo,
+                request.SortBy,
+                request.SortDirection,
+                request.Page,
+                request.PageSize);
+
+            var result = await _queries.ListAsync(query, cancellationToken);
+            return result.ToPagedOk();
         }
 
         [HttpPost("{id:guid}/retry")]
