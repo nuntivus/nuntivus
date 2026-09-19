@@ -48,7 +48,9 @@ namespace KairoServer.Infastructure.Configuration
         }
 
         public static bool IsEndpointSecurityValid(HttpDestinationSecurityOption option)
-            => option.MaxResponseBodyBytes > 0;
+            => option.MaxResponseBodyBytes > 0
+               && option.MaxHeaders > 0
+               && option.MaxConfigurationBytes > 0;
 
         public static bool IsRetryPolicyValid(DeliveryDispatcherOption option)
             => option.MaxAttempts > 0

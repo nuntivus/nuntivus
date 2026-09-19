@@ -120,6 +120,27 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Publish_with_oversized_metadata_returns_400()
+        {
+            using var metadataDoc = JsonDocument.Parse($"{{\"blob\":\"{new string('x', 80_000)}\"}}");
+
+            var response = await _client.PostAsJsonAsync(
+                "/events",
+                new PublishEventRequest(
+                    IdempotencyKey: "idem-security-metadata-1",
+                    Type: "orders.created",
+                    Source: "orders-api",
+                    Timestamp: DateTimeOffset.UtcNow,
+                    Metadata: metadataDoc.RootElement.Clone(),
+                    Payload: JsonDocument.Parse("{\"orderId\":\"o-1\"}").RootElement.Clone()));
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+            Assert.Equal("validation", error!.Code);
+            Assert.Contains("metadata exceeds", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
         public async Task Publish_same_source_and_idempotency_key_is_idempotent()
         {
             var source = Guid.NewGuid().ToString("D");

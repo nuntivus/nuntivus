@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using KairoServer.Application.Security;
 using KairoServer.Common;
@@ -111,6 +112,13 @@ namespace KairoServer.Application.Contracts.Destinations
                     "Destination headers and protectedHeaders cannot define the same header name."));
             }
 
+            var headerCountValidation = ValidateHeaderCount(
+                headersResult.Value,
+                secretHeadersResult.Value,
+                protectedHeadersResult.Value);
+            if (headerCountValidation.IsFailure)
+                return Result<Destination>.Fail(headerCountValidation.Errors);
+
             var authResult = NormalizeAuthentication(authType, http.Authentication);
             if (authResult.IsFailure)
                 return Result<Destination>.Fail(authResult.Errors);
@@ -134,6 +142,10 @@ namespace KairoServer.Application.Contracts.Destinations
                 http.TimeoutSeconds);
 
             var json = JsonSerializer.Serialize(normalized);
+            var configSizeValidation = ValidateConfigurationSize(json);
+            if (configSizeValidation.IsFailure)
+                return Result<Destination>.Fail(configSizeValidation.Errors);
+
             return Result.Success(new Destination(DomainDestinationType.Http, json));
         }
 
@@ -274,9 +286,48 @@ namespace KairoServer.Application.Contracts.Destinations
                 nextConfig.ProtectedHeaders,
                 nextConfig.TimeoutSeconds);
 
+            var rotatedJson = JsonSerializer.Serialize(rotatedConfig);
+            var configSizeValidation = ValidateConfigurationSize(rotatedJson);
+            if (configSizeValidation.IsFailure)
+                return Result<Destination>.Fail(configSizeValidation.Errors);
+
             return Result.Success(new Destination(
                 DomainDestinationType.Http,
-                JsonSerializer.Serialize(rotatedConfig)));
+                rotatedJson));
+        }
+
+        private Result ValidateHeaderCount(
+            IReadOnlyDictionary<string, string> headers,
+            IReadOnlyDictionary<string, string> secretHeaders,
+            IReadOnlyDictionary<string, string> protectedHeaders)
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var key in headers.Keys)
+                names.Add(key);
+            foreach (var key in secretHeaders.Keys)
+                names.Add(key);
+            foreach (var key in protectedHeaders.Keys)
+                names.Add(key);
+
+            if (names.Count > _security.MaxHeaders)
+            {
+                return Result.Failure(Error.Validation(
+                    $"Destination headers exceed maximum allowed count of {_security.MaxHeaders}."));
+            }
+
+            return Result.Success();
+        }
+
+        private Result ValidateConfigurationSize(string configurationJson)
+        {
+            var size = Encoding.UTF8.GetByteCount(configurationJson);
+            if (size > _security.MaxConfigurationBytes)
+            {
+                return Result.Failure(Error.Validation(
+                    $"Destination configuration exceeds maximum allowed size of {_security.MaxConfigurationBytes} bytes."));
+            }
+
+            return Result.Success();
         }
 
         private Result<HttpAuthentication> NormalizeAuthentication(string authType, HttpAuthentication authentication)

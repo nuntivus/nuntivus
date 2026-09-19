@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Linq;
 using Dapper;
 using KairoServer.Api.Common;
 using KairoServer.Api.Controllers.Events;
@@ -98,6 +99,29 @@ namespace KairoServer.IntegrationTests
                         new HttpAuthentication("none"))));
 
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
+
+        [Fact]
+        public async Task Create_with_too_many_event_types_returns_400()
+        {
+            await CreateCustomerAsync("acme");
+
+            var eventTypes = Enumerable.Range(1, 101)
+                .Select(i => $"orders.created.{i}")
+                .ToArray();
+
+            var resp = await _client.PostAsJsonAsync("/v1/contracts",
+                new CreateContractRequest(
+                    "acme",
+                    eventTypes,
+                    new HttpDestinationConfig(
+                        "https://hooks.example.com/acme",
+                        new HttpAuthentication("none"))));
+
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+            var err = await resp.Content.ReadFromJsonAsync<ApiErrorResponse>();
+            Assert.Equal("validation", err!.Code);
+            Assert.Contains("at most", err.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]

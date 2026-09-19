@@ -123,7 +123,7 @@ builder.Services
 
         KairoConfigurationValidation.ApplySafeEndpointDefaults(options, builder.Environment.IsProduction());
     })
-    .Validate(KairoConfigurationValidation.IsEndpointSecurityValid, "EndpointSecurity:MaxResponseBodyBytes must be greater than zero.")
+    .Validate(KairoConfigurationValidation.IsEndpointSecurityValid, "EndpointSecurity:MaxResponseBodyBytes, MaxHeaders, and MaxConfigurationBytes must be greater than zero.")
     .ValidateOnStart();
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<HttpDestinationSecurityOption>>().Value);
 
