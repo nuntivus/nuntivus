@@ -26,6 +26,7 @@
     <File Path="migration/020_create_delivery_replay_jobs.sql" />
     <File Path="migration/021_create_audit_logs.sql" />
     <File Path="migration/022_add_contract_name.sql" />
+    <File Path="migration/023_create_destination_health.sql" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path="../../../Desktop/AI_CONTEXT.md" />

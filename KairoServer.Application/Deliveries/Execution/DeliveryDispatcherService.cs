@@ -1,7 +1,9 @@
 using System;
+using System.Globalization;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Deliveries.Health;
 using KairoServer.Application.Observability;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
@@ -230,6 +232,7 @@ namespace KairoServer.Application.Deliveries.Execution
             var completedAt = DateTimeOffset.UtcNow;
 
             var (finalizedNow, retry) = ClassifyRetry(execution, attemptNumber, completedAt);
+            var destinationLatencyMs = ResolveDestinationLatencyMs(execution);
             var attempt = DeliveryAttempt.Create(
                 delivery.Id,
                 attemptNumber,
@@ -254,6 +257,7 @@ namespace KairoServer.Application.Deliveries.Execution
             }
 
             _unitOfWork.Begin(true);
+            DestinationHealthView? destinationHealth = null;
             try
             {
                 var updateResult = await _deliveries.UpdateAsync(
@@ -279,6 +283,20 @@ namespace KairoServer.Application.Deliveries.Execution
                 }
 
                 (await _deliveries.AddAttemptAsync(attempt, _unitOfWork, cancellationToken)).EnsureSuccess();
+
+                var destinationHealthResult = await _deliveries.UpsertDestinationHealthAsync(
+                    new DestinationHealthObservation(
+                        delivery.ContractId,
+                        delivery.CustomerId,
+                        delivery.DestinationType.ToString(),
+                        execution.Succeeded,
+                        completedAt,
+                        destinationLatencyMs),
+                    _unitOfWork,
+                    cancellationToken);
+                destinationHealthResult.EnsureSuccess();
+                destinationHealth = destinationHealthResult.Value;
+
                 _unitOfWork.Commit();
             }
             catch (Exception ex)
@@ -315,6 +333,7 @@ namespace KairoServer.Application.Deliveries.Execution
                     delivery.ContractId,
                     cancellationToken);
                 await TryTrackDestinationLatencyAsync(delivery, execution, "delivered", cancellationToken);
+                await TryTrackDestinationHealthStatusAsync(destinationHealth, cancellationToken);
                 await _metrics.TrackDispatchOutcomeAsync(
                     "delivered",
                     delivery.EventId,
@@ -348,6 +367,7 @@ namespace KairoServer.Application.Deliveries.Execution
                     delivery.ContractId,
                     cancellationToken);
                 await TryTrackDestinationLatencyAsync(delivery, execution, "failed_terminal", cancellationToken);
+                await TryTrackDestinationHealthStatusAsync(destinationHealth, cancellationToken);
                 await _metrics.TrackDeadDeliveryCountAsync(
                     delivery.EventId,
                     delivery.Id,
@@ -384,6 +404,7 @@ namespace KairoServer.Application.Deliveries.Execution
                 delivery.ContractId,
                 cancellationToken);
             await TryTrackDestinationLatencyAsync(delivery, execution, "failed_retry", cancellationToken);
+            await TryTrackDestinationHealthStatusAsync(destinationHealth, cancellationToken);
             await _metrics.TrackRetryCountAsync(
                 delivery.EventId,
                 delivery.Id,
@@ -411,16 +432,44 @@ namespace KairoServer.Application.Deliveries.Execution
             if (!execution.Metadata.TryGetValue("destinationLatencyMs", out var rawValue))
                 return;
 
-            if (!double.TryParse(rawValue, out var destinationLatencyMs))
+            var destinationLatencyMs = ResolveDestinationLatencyMs(execution);
+            if (!destinationLatencyMs.HasValue)
                 return;
 
             await _metrics.TrackDestinationLatencyAsync(
                 delivery.DestinationType.ToString().ToLowerInvariant(),
-                TimeSpan.FromMilliseconds(destinationLatencyMs),
+                TimeSpan.FromMilliseconds(destinationLatencyMs.Value),
                 outcome,
                 delivery.EventId,
                 delivery.Id,
                 delivery.ContractId,
+                cancellationToken);
+        }
+
+        private static double? ResolveDestinationLatencyMs(DeliveryExecutionResult execution)
+        {
+            if (execution.Metadata is null)
+                return null;
+
+            if (!execution.Metadata.TryGetValue("destinationLatencyMs", out var rawValue))
+                return null;
+
+            return double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : null;
+        }
+
+        private async ValueTask TryTrackDestinationHealthStatusAsync(
+            DestinationHealthView? destinationHealth,
+            CancellationToken cancellationToken)
+        {
+            if (destinationHealth is null)
+                return;
+
+            await _metrics.TrackDestinationHealthStatusAsync(
+                destinationHealth.Status.ToString().ToLowerInvariant(),
+                destinationHealth.CustomerId,
+                destinationHealth.ContractId,
                 cancellationToken);
         }
 

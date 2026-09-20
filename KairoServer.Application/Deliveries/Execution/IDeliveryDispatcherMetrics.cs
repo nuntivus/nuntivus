@@ -53,5 +53,11 @@ namespace KairoServer.Application.Deliveries.Execution
             Guid deliveryId,
             Guid contractId,
             CancellationToken cancellationToken);
+
+        ValueTask TrackDestinationHealthStatusAsync(
+            string status,
+            string customerId,
+            Guid contractId,
+            CancellationToken cancellationToken);
     }
 }

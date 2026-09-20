@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Deliveries.Health;
 using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Common;
@@ -155,6 +156,19 @@ namespace KairoServer.Application.Persistence
             DeliveryReplayJobStatus status,
             int replayedCount,
             string? error,
+            CancellationToken cancellationToken);
+
+        Task<Result<DestinationHealthView?>> GetDestinationHealthByContractIdAsync(
+            Guid contractId,
+            CancellationToken cancellationToken);
+
+        Task<Result<IReadOnlyList<DestinationHealthView>>> ListDestinationHealthByCustomerIdAsync(
+            string customerId,
+            CancellationToken cancellationToken);
+
+        Task<Result<DestinationHealthView>> UpsertDestinationHealthAsync(
+            DestinationHealthObservation observation,
+            IUnitOfWork uow,
             CancellationToken cancellationToken);
     }
 }

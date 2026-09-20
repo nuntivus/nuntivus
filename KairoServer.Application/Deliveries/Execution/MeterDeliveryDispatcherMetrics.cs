@@ -20,6 +20,7 @@ namespace KairoServer.Application.Deliveries.Execution
         private static readonly Histogram<double> DispatchLatencyMs = KairoTelemetry.Meter.CreateHistogram<double>("kairo.delivery.dispatch.latency.ms");
         private static readonly Histogram<double> DeliveryLatencyMs = KairoTelemetry.Meter.CreateHistogram<double>("kairo.delivery.latency.ms");
         private static readonly Histogram<double> DestinationLatencyMs = KairoTelemetry.Meter.CreateHistogram<double>("kairo.delivery.destination.latency.ms");
+        private static readonly Counter<long> DestinationHealthStatusCounter = KairoTelemetry.Meter.CreateCounter<long>("kairo.delivery.destination.health.status");
 
         public ValueTask TrackDispatchOutcomeAsync(
             string outcome,
@@ -124,6 +125,23 @@ namespace KairoServer.Application.Deliveries.Execution
             CancellationToken cancellationToken)
         {
             DeadDeliveryCounter.Add(1, CreateCorrelationTags("dead", eventId, deliveryId, contractId));
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask TrackDestinationHealthStatusAsync(
+            string status,
+            string customerId,
+            Guid contractId,
+            CancellationToken cancellationToken)
+        {
+            var tags = new TagList
+            {
+                { "status", status },
+                { KairoTelemetry.CustomerIdTag, customerId },
+                { KairoTelemetry.ContractIdTag, contractId.ToString("D") },
+            };
+
+            DestinationHealthStatusCounter.Add(1, tags);
             return ValueTask.CompletedTask;
         }
 

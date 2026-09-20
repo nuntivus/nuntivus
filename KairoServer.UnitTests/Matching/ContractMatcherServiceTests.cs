@@ -4,6 +4,7 @@ using System.Data;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Contracts;
+using KairoServer.Application.Deliveries.Health;
 using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Events.Queries;
@@ -184,6 +185,27 @@ namespace KairoServer.UnitTests.Matching
 
             public Task<Result<bool>> CompleteReplayJobAsync(Guid replayJobId, DeliveryReplayJobStatus status, int replayedCount, string? error, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(true));
+
+            public Task<Result<DestinationHealthView?>> GetDestinationHealthByContractIdAsync(Guid contractId, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success<DestinationHealthView?>(null));
+
+            public Task<Result<IReadOnlyList<DestinationHealthView>>> ListDestinationHealthByCustomerIdAsync(string customerId, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success<IReadOnlyList<DestinationHealthView>>(Array.Empty<DestinationHealthView>()));
+
+            public Task<Result<DestinationHealthView>> UpsertDestinationHealthAsync(DestinationHealthObservation observation, IUnitOfWork uow, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(new DestinationHealthView(
+                    observation.ContractId,
+                    observation.CustomerId,
+                    observation.DestinationType,
+                    observation.Succeeded ? 0 : 1,
+                    observation.Succeeded ? observation.AttemptedAt : null,
+                    observation.Succeeded ? null : observation.AttemptedAt,
+                    observation.AttemptedAt,
+                    observation.LatencyMs,
+                    observation.LatencyMs,
+                    observation.LatencyMs.HasValue ? 1 : 0,
+                    observation.Succeeded ? DestinationHealthStatus.Healthy : DestinationHealthStatus.Degraded,
+                    observation.AttemptedAt)));
         }
 
         private sealed class FakeOutboxRepository : IOutboxRepository

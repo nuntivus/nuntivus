@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using KairoServer.Application.Deliveries.Health;
 using KairoServer.Domain.Contracts;
 using KairoServer.Domain.Deliveries;
 using KairoServer.Infastructure.Persistence.Postgres;
@@ -297,6 +298,57 @@ namespace KairoServer.IntegrationTests
             Assert.Empty(second);
         }
 
+        [Fact]
+        public async Task UpsertDestinationHealthAsync_Tracks_Failures_Success_And_Rolling_Latency()
+        {
+            var (_, contractId, customerId) = await SeedAsync();
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            var repo = new PostgresDeliveryRepository(factory);
+
+            var t1 = DateTimeOffset.UtcNow;
+            await UpsertDestinationHealthAsync(
+                repo,
+                factory,
+                new DestinationHealthObservation(contractId, customerId, "Http", false, t1, 100));
+
+            var t2 = t1.AddSeconds(1);
+            await UpsertDestinationHealthAsync(
+                repo,
+                factory,
+                new DestinationHealthObservation(contractId, customerId, "Http", false, t2, 200));
+
+            var t3 = t2.AddSeconds(1);
+            await UpsertDestinationHealthAsync(
+                repo,
+                factory,
+                new DestinationHealthObservation(contractId, customerId, "Http", false, t3, null));
+
+            var t4 = t3.AddSeconds(1);
+            await UpsertDestinationHealthAsync(
+                repo,
+                factory,
+                new DestinationHealthObservation(contractId, customerId, "Http", true, t4, 300));
+
+            var byContract = (await repo.GetDestinationHealthByContractIdAsync(contractId, CancellationToken.None)).EnsureValue();
+            Assert.NotNull(byContract);
+            Assert.Equal(contractId, byContract!.ContractId);
+            Assert.Equal(customerId, byContract.CustomerId);
+            Assert.Equal(DestinationHealthStatus.Healthy, byContract.Status);
+            Assert.Equal(0, byContract.ConsecutiveFailures);
+            Assert.True(byContract.LastSuccessAt.HasValue);
+            Assert.True(byContract.LastFailureAt.HasValue);
+            Assert.True((byContract.LastSuccessAt!.Value - t4).Duration() < TimeSpan.FromMilliseconds(1));
+            Assert.True((byContract.LastFailureAt!.Value - t3).Duration() < TimeSpan.FromMilliseconds(1));
+            Assert.True((byContract.LastAttemptAt - t4).Duration() < TimeSpan.FromMilliseconds(1));
+            Assert.Equal(300d, byContract.LastLatencyMs);
+            Assert.Equal(200d, byContract.AverageLatencyMs);
+            Assert.Equal(3, byContract.LatencySampleCount);
+
+            var byCustomer = (await repo.ListDestinationHealthByCustomerIdAsync(customerId, CancellationToken.None)).EnsureValue();
+            Assert.Single(byCustomer);
+            Assert.Equal(contractId, byCustomer[0].ContractId);
+        }
+
         private async Task<int> InsertAsync(Delivery delivery)
         {
             var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
@@ -306,6 +358,17 @@ namespace KairoServer.IntegrationTests
             var result = await repo.InsertPendingAsync(new[] { delivery }, uow, CancellationToken.None);
             uow.Commit();
             return result.EnsureValue();
+        }
+
+        private static async Task UpsertDestinationHealthAsync(
+            PostgresDeliveryRepository repo,
+            PostgresDatabaseConnectionFactory factory,
+            DestinationHealthObservation observation)
+        {
+            using var uow = new PostgresUnitOfWork(factory);
+            uow.Begin(true);
+            (await repo.UpsertDestinationHealthAsync(observation, uow, CancellationToken.None)).EnsureSuccess();
+            uow.Commit();
         }
 
         private async Task<bool> ScheduleNextAttemptAsync(Guid deliveryId, DateTimeOffset expectedUpdatedAt, DateTimeOffset nextAttemptAt)

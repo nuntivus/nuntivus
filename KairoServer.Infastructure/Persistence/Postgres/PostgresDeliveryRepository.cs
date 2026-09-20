@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using KairoServer.Application.Deliveries.Health;
 using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Persistence;
@@ -954,6 +955,233 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        public async Task<Result<DestinationHealthView?>> GetDestinationHealthByContractIdAsync(
+            Guid contractId,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                    SELECT
+                        contract_id          AS ContractId,
+                        customer_id          AS CustomerId,
+                        destination_type     AS DestinationType,
+                        consecutive_failures AS ConsecutiveFailures,
+                        last_success_at      AS LastSuccessAt,
+                        last_failure_at      AS LastFailureAt,
+                        last_attempt_at      AS LastAttemptAt,
+                        last_latency_ms      AS LastLatencyMs,
+                        avg_latency_ms       AS AverageLatencyMs,
+                        latency_sample_count AS LatencySampleCount,
+                        health_status        AS Status,
+                        updated_at           AS UpdatedAt
+                    FROM destination_health
+                    WHERE contract_id = @ContractId;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                var row = await connection.QuerySingleOrDefaultAsync<DestinationHealthRow>(new CommandDefinition(
+                    sql,
+                    new { ContractId = contractId },
+                    cancellationToken: cancellationToken));
+
+                if (row is null)
+                    return Result.Success<DestinationHealthView?>(null);
+
+                return Result.Success<DestinationHealthView?>(MapDestinationHealth(row));
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<DestinationHealthView?>(ex);
+            }
+        }
+
+        public async Task<Result<IReadOnlyList<DestinationHealthView>>> ListDestinationHealthByCustomerIdAsync(
+            string customerId,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                    SELECT
+                        contract_id          AS ContractId,
+                        customer_id          AS CustomerId,
+                        destination_type     AS DestinationType,
+                        consecutive_failures AS ConsecutiveFailures,
+                        last_success_at      AS LastSuccessAt,
+                        last_failure_at      AS LastFailureAt,
+                        last_attempt_at      AS LastAttemptAt,
+                        last_latency_ms      AS LastLatencyMs,
+                        avg_latency_ms       AS AverageLatencyMs,
+                        latency_sample_count AS LatencySampleCount,
+                        health_status        AS Status,
+                        updated_at           AS UpdatedAt
+                    FROM destination_health
+                    WHERE customer_id = @CustomerId
+                    ORDER BY
+                        CASE health_status
+                            WHEN 'Unhealthy' THEN 2
+                            WHEN 'Degraded' THEN 1
+                            ELSE 0
+                        END DESC,
+                        updated_at DESC,
+                        contract_id;
+                    """;
+
+                using var connection = _connectionFactory.CreateConnection();
+                connection.Open();
+
+                var rows = await connection.QueryAsync<DestinationHealthRow>(new CommandDefinition(
+                    sql,
+                    new { CustomerId = customerId },
+                    cancellationToken: cancellationToken));
+
+                var result = new List<DestinationHealthView>();
+                foreach (var row in rows)
+                {
+                    result.Add(MapDestinationHealth(row));
+                }
+
+                return Result.Success<IReadOnlyList<DestinationHealthView>>(result);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<IReadOnlyList<DestinationHealthView>>(ex);
+            }
+        }
+
+        public async Task<Result<DestinationHealthView>> UpsertDestinationHealthAsync(
+            DestinationHealthObservation observation,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (!uow.IsTransactionOpen)
+                    throw new InvalidOperationException("Transaction is not open.");
+
+                const string sql = """
+                    INSERT INTO destination_health
+                    (
+                        contract_id,
+                        customer_id,
+                        destination_type,
+                        consecutive_failures,
+                        last_success_at,
+                        last_failure_at,
+                        last_attempt_at,
+                        last_latency_ms,
+                        avg_latency_ms,
+                        latency_sample_count,
+                        health_status,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES
+                    (
+                        @ContractId,
+                        @CustomerId,
+                        @DestinationType,
+                        CASE WHEN @Succeeded THEN 0 ELSE 1 END,
+                        CASE WHEN @Succeeded THEN @AttemptedAt ELSE NULL END,
+                        CASE WHEN @Succeeded THEN NULL ELSE @AttemptedAt END,
+                        @AttemptedAt,
+                        @LatencyMs,
+                        @LatencyMs,
+                        CASE WHEN @LatencyMs IS NULL THEN 0 ELSE 1 END,
+                        CASE
+                            WHEN @Succeeded THEN 'Healthy'
+                            ELSE 'Degraded'
+                        END,
+                        @Now,
+                        @Now
+                    )
+                    ON CONFLICT (contract_id) DO UPDATE
+                    SET
+                        customer_id = EXCLUDED.customer_id,
+                        destination_type = EXCLUDED.destination_type,
+                        consecutive_failures = CASE
+                            WHEN @Succeeded THEN 0
+                            ELSE destination_health.consecutive_failures + 1
+                        END,
+                        last_success_at = CASE
+                            WHEN @Succeeded THEN @AttemptedAt
+                            ELSE destination_health.last_success_at
+                        END,
+                        last_failure_at = CASE
+                            WHEN @Succeeded THEN destination_health.last_failure_at
+                            ELSE @AttemptedAt
+                        END,
+                        last_attempt_at = @AttemptedAt,
+                        last_latency_ms = CASE
+                            WHEN @LatencyMs IS NULL THEN destination_health.last_latency_ms
+                            ELSE @LatencyMs
+                        END,
+                        avg_latency_ms = CASE
+                            WHEN @LatencyMs IS NULL THEN destination_health.avg_latency_ms
+                            WHEN destination_health.latency_sample_count <= 0 OR destination_health.avg_latency_ms IS NULL THEN @LatencyMs
+                            ELSE (
+                                (destination_health.avg_latency_ms * destination_health.latency_sample_count)
+                                + @LatencyMs
+                            ) / (destination_health.latency_sample_count + 1)
+                        END,
+                        latency_sample_count = destination_health.latency_sample_count + CASE
+                            WHEN @LatencyMs IS NULL THEN 0
+                            ELSE 1
+                        END,
+                        health_status = CASE
+                            WHEN (CASE
+                                WHEN @Succeeded THEN 0
+                                ELSE destination_health.consecutive_failures + 1
+                            END) >= 3 THEN 'Unhealthy'
+                            WHEN (CASE
+                                WHEN @Succeeded THEN 0
+                                ELSE destination_health.consecutive_failures + 1
+                            END) >= 1 THEN 'Degraded'
+                            ELSE 'Healthy'
+                        END,
+                        updated_at = @Now
+                    RETURNING
+                        contract_id          AS ContractId,
+                        customer_id          AS CustomerId,
+                        destination_type     AS DestinationType,
+                        consecutive_failures AS ConsecutiveFailures,
+                        last_success_at      AS LastSuccessAt,
+                        last_failure_at      AS LastFailureAt,
+                        last_attempt_at      AS LastAttemptAt,
+                        last_latency_ms      AS LastLatencyMs,
+                        avg_latency_ms       AS AverageLatencyMs,
+                        latency_sample_count AS LatencySampleCount,
+                        health_status        AS Status,
+                        updated_at           AS UpdatedAt;
+                    """;
+
+                var now = DateTimeOffset.UtcNow;
+                var row = await uow.GetConnection()!.QuerySingleAsync<DestinationHealthRow>(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        observation.ContractId,
+                        observation.CustomerId,
+                        observation.DestinationType,
+                        observation.Succeeded,
+                        observation.AttemptedAt,
+                        observation.LatencyMs,
+                        Now = now,
+                    },
+                    uow.GetTransaction(),
+                    cancellationToken: cancellationToken));
+
+                return Result.Success(MapDestinationHealth(row));
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<DestinationHealthView>(ex);
+            }
+        }
+
         public async Task<Result<IReadOnlyList<DeliveryAttempt>>> GetAttemptsByDeliveryIdAsync(
             Guid deliveryId,
             CancellationToken cancellationToken)
@@ -1474,6 +1702,37 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     row.LastAttemptAt),
                 latestFailure);
         }
+
+        private sealed class DestinationHealthRow
+        {
+            public Guid ContractId { get; set; }
+            public string CustomerId { get; set; } = string.Empty;
+            public string DestinationType { get; set; } = string.Empty;
+            public int ConsecutiveFailures { get; set; }
+            public DateTimeOffset? LastSuccessAt { get; set; }
+            public DateTimeOffset? LastFailureAt { get; set; }
+            public DateTimeOffset LastAttemptAt { get; set; }
+            public double? LastLatencyMs { get; set; }
+            public double? AverageLatencyMs { get; set; }
+            public long LatencySampleCount { get; set; }
+            public string Status { get; set; } = string.Empty;
+            public DateTimeOffset UpdatedAt { get; set; }
+        }
+
+        private static DestinationHealthView MapDestinationHealth(DestinationHealthRow row) =>
+            new(
+                row.ContractId,
+                row.CustomerId,
+                row.DestinationType,
+                row.ConsecutiveFailures,
+                row.LastSuccessAt,
+                row.LastFailureAt,
+                row.LastAttemptAt,
+                row.LastLatencyMs,
+                row.AverageLatencyMs,
+                row.LatencySampleCount,
+                Enum.Parse<DestinationHealthStatus>(row.Status),
+                row.UpdatedAt);
 
         private sealed class DeliveryReplayJobRow
         {
