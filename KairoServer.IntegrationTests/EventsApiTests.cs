@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Dapper;
 using KairoServer.Api.Common;
 using KairoServer.Api.Controllers.Events;
+using KairoServer.Api.Controllers.Sources;
 using Npgsql;
 
 namespace KairoServer.IntegrationTests
@@ -181,6 +182,112 @@ namespace KairoServer.IntegrationTests
             Assert.NotNull(firstBody);
             Assert.NotNull(secondBody);
             Assert.Equal(firstBody!.Id, secondBody!.Id);
+        }
+
+        [Fact]
+        public async Task Publish_normalizes_source_identity_before_idempotency_check()
+        {
+            var sourceGuid = Guid.NewGuid();
+            var sourceUpper = sourceGuid.ToString("D").ToUpperInvariant();
+            var sourceLower = sourceGuid.ToString("D");
+            var idempotencyKey = "idem-publish-normalized-source-1";
+            var occurredAt = DateTimeOffset.UtcNow;
+
+            var first = await _client.PostAsJsonAsync(
+                "/v1/events",
+                new PublishEventRequest(
+                    IdempotencyKey: idempotencyKey,
+                    Type: "orders.created",
+                    Source: $"  {sourceUpper}  ",
+                    Timestamp: occurredAt,
+                    Metadata: null,
+                    Payload: JsonDocument.Parse("{\"orderId\":\"o-42\"}").RootElement.Clone()));
+
+            var second = await _client.PostAsJsonAsync(
+                "/v1/events",
+                new PublishEventRequest(
+                    IdempotencyKey: idempotencyKey,
+                    Type: "orders.created",
+                    Source: sourceLower,
+                    Timestamp: occurredAt,
+                    Metadata: null,
+                    Payload: JsonDocument.Parse("{\"orderId\":\"o-42\"}").RootElement.Clone()));
+
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+            var firstBody = await first.Content.ReadFromJsonAsync<PublishEventResponse>();
+            var secondBody = await second.Content.ReadFromJsonAsync<PublishEventResponse>();
+            Assert.NotNull(firstBody);
+            Assert.NotNull(secondBody);
+            Assert.Equal(firstBody!.Id, secondBody!.Id);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            await conn.OpenAsync();
+
+            var persistedSource = await conn.ExecuteScalarAsync<string>(
+                "SELECT source_id::text FROM events WHERE id = @id;",
+                new { id = Guid.Parse(firstBody.Id) });
+
+            Assert.Equal(sourceLower, persistedSource);
+        }
+
+        [Fact]
+        public async Task Generic_webhook_ingest_accepts_and_is_idempotent_for_same_source_and_key()
+        {
+            var source = Guid.NewGuid().ToString("D");
+            var idempotencyKey = "webhook-idem-1";
+            var occurredAt = DateTimeOffset.UtcNow;
+
+            var first = await _client.PostAsJsonAsync(
+                $"/v1/sources/webhooks/{source}",
+                new WebhookIngestRequest(
+                    IdempotencyKey: idempotencyKey,
+                    Type: "orders.webhook.created",
+                    Timestamp: occurredAt,
+                    Metadata: JsonDocument.Parse("{\"traceId\":\"w-1\"}").RootElement.Clone(),
+                    Payload: JsonDocument.Parse("{\"orderId\":\"o-900\"}").RootElement.Clone()));
+
+            var second = await _client.PostAsJsonAsync(
+                $"/v1/sources/webhooks/{source}",
+                new WebhookIngestRequest(
+                    IdempotencyKey: idempotencyKey,
+                    Type: "orders.webhook.created",
+                    Timestamp: occurredAt,
+                    Metadata: JsonDocument.Parse("{\"traceId\":\"w-1\"}").RootElement.Clone(),
+                    Payload: JsonDocument.Parse("{\"orderId\":\"o-900\"}").RootElement.Clone()));
+
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+            var firstBody = await first.Content.ReadFromJsonAsync<PublishEventResponse>();
+            var secondBody = await second.Content.ReadFromJsonAsync<PublishEventResponse>();
+            Assert.NotNull(firstBody);
+            Assert.NotNull(secondBody);
+            Assert.Equal(firstBody!.Id, secondBody!.Id);
+        }
+
+        [Fact]
+        public async Task Generic_webhook_ingest_supports_header_fallback_for_idempotency_and_type()
+        {
+            var source = Guid.NewGuid().ToString("D");
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"/v1/sources/webhooks/{source}");
+            request.Headers.Add("X-Kairo-Idempotency-Key", "webhook-idem-header-1");
+            request.Headers.Add("X-Kairo-Event-Type", "orders.webhook.header");
+            request.Content = JsonContent.Create(new WebhookIngestRequest(
+                IdempotencyKey: null,
+                Type: null,
+                Timestamp: DateTimeOffset.UtcNow,
+                Metadata: null,
+                Payload: JsonDocument.Parse("{\"orderId\":\"o-901\"}").RootElement.Clone()));
+
+            var response = await _client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var body = await response.Content.ReadFromJsonAsync<PublishEventResponse>();
+            Assert.NotNull(body);
+            Assert.Equal("accepted", body!.Status);
         }
 
         [Fact]

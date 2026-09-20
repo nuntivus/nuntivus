@@ -8,8 +8,10 @@ using KairoServer.Application.Events;
 using KairoServer.Application.Events.Queries;
 using KairoServer.Application.Persistence;
 using KairoServer.Application.Security;
+using KairoServer.Application.Sources;
 using KairoServer.Api.Common;
 using KairoServer.Api.Controllers.Events;
+using KairoServer.Api.Controllers.Sources;
 using KairoServer.Infastructure.Configuration;
 using KairoServer.Infastructure.Caching;
 using KairoServer.Infastructure.Deliveries.Http;
@@ -179,12 +181,17 @@ builder.Services.AddScoped<IEventDefinitionRepository>(sp => new CachedEventDefi
 
 builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<IEventQueryService, EventQueryService>();
+builder.Services.AddScoped<ISourceAdapter, HttpApiSourceAdapter>();
+builder.Services.AddScoped<ISourceAdapter, GenericWebhookSourceAdapter>();
+builder.Services.AddScoped<ISourceAdapterRegistry, SourceAdapterRegistry>();
+builder.Services.AddScoped<ISourceIngestionService, SourceIngestionService>();
 builder.Services.AddScoped<IEventDefinitionService, EventDefinitionService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IDeliveryQueryService, DeliveryQueryService>();
 builder.Services.AddScoped<IDeliveryRecoveryService, DeliveryRecoveryService>();
 builder.Services.AddSingleton<IEventPublishRequestValidator, EventPublishRequestValidator>();
+builder.Services.AddSingleton<IWebhookIngestRequestValidator, WebhookIngestRequestValidator>();
 
 builder.Services.AddSingleton<IEndpointSecurityPolicy, EndpointSecurityPolicy>();
 

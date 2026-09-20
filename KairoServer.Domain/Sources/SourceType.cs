@@ -7,6 +7,7 @@
     public enum SourceType
     {
         HTTP_API,
+        GENERIC_WEBHOOK,
         SDK_APPLICATION,
         STRIPE_WEBHOOK_INTEGRATION,
         KAFKA,

@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Common;
 using KairoServer.Application.Security;
 using KairoServer.Domain.Sources;
 
@@ -10,13 +11,6 @@ namespace KairoServer.Application.Sources
     /// that translate a transport-specific producer notion into a canonical
     /// <see cref="SourceId"/> plus a normalized event payload.
     /// </summary>
-    /// <remarks>
-    /// This interface intentionally has no implementations yet. It exists to formalize
-    /// the boundary between transport-specific ingestion and the canonical domain,
-    /// and to prepare the Source model for adapters. Concrete adapter contracts
-    /// (payload shape, delivery semantics) will be added when the first adapter
-    /// beyond the current HTTP API is implemented.
-    /// </remarks>
     public interface ISourceAdapter
     {
         /// <summary>
@@ -30,10 +24,9 @@ namespace KairoServer.Application.Sources
         EndpointSecurityContext SecurityContext { get; }
 
         /// <summary>
-        /// Resolves the canonical <see cref="SourceId"/> for the given adapter-specific context.
-        /// Adapters are responsible for enforcing that the returned id is stable and
-        /// consistent with <see cref="SourceId"/> identity rules.
+        /// Normalizes an adapter-specific context into the canonical source event
+        /// representation consumed by the shared ingestion pipeline.
         /// </summary>
-        Task<SourceId> ResolveSourceIdAsync(object adapterContext, CancellationToken cancellationToken);
+        Task<Result<CanonicalSourceEvent>> NormalizeAsync(object adapterContext, CancellationToken cancellationToken);
     }
 }

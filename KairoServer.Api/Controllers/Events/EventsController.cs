@@ -1,5 +1,6 @@
 using KairoServer.Application.Events;
 using KairoServer.Application.Events.Queries;
+using KairoServer.Application.Sources;
 using KairoServer.Api.Common;
 using KairoServer.Common.Extensions;
 using KairoServer.Common.Logging;
@@ -15,17 +16,20 @@ namespace KairoServer.Api.Controllers.Events
     {
         private readonly IEventService _events;
         private readonly IEventQueryService _eventQueries;
+        private readonly ISourceIngestionService _sourceIngestion;
         private readonly IAppLogger<EventsController> _logger;
         private readonly IEventPublishRequestValidator _validator;
 
         public EventsController(
             IEventService events,
             IEventQueryService eventQueries,
+            ISourceIngestionService sourceIngestion,
             IAppLogger<EventsController> logger,
             IEventPublishRequestValidator validator)
         {
             _events = events;
             _eventQueries = eventQueries;
+            _sourceIngestion = sourceIngestion;
             _logger = logger;
             _validator = validator;
         }
@@ -75,18 +79,18 @@ namespace KairoServer.Api.Controllers.Events
                 request.Type,
                 request.Source);
 
-            var result = await _events.PublishAsync(
-                request.IdempotencyKey,
-                request.Type,
-                request.Source,
-                request.Payload.EnsureJsonObject(),
-                request.Timestamp,
-                request.Metadata.EnsureJsonObject(),
+            var result = await _sourceIngestion.IngestAsync(
+                Domain.Sources.SourceType.HTTP_API,
+                new HttpApiSourceEventContext(
+                    request.IdempotencyKey,
+                    request.Type,
+                    request.Source,
+                    request.Timestamp,
+                    request.Payload.EnsureJsonObject(),
+                    request.Metadata.EnsureJsonObject()),
                 cancellationToken);
 
-            var eventId = result.EnsureValue();
-
-            return Ok(new PublishEventResponse(eventId.ToString(), "accepted"));
+            return result.ToActionResult(HttpContext, ack => Ok(new PublishEventResponse(ack.EventId, ack.Status)));
         }
 
         [HttpPost("{id:guid}/replay")]
