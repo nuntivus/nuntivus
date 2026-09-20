@@ -14,9 +14,11 @@ using KairoServer.Domain.Customers;
 using KairoServer.Domain.Deliveries;
 using KairoServer.Domain.Events;
 using KairoServer.Domain.Outbox;
+using KairoServer.Infastructure.Messaging.Nats;
 using KairoServer.Worker.Deliveries;
 using KairoServer.Worker.Outbox;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using NATS.Client.Core;
 using NATS.Client.JetStream;
 using NATS.Client.JetStream.Models;
@@ -370,6 +372,197 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Outbox_worker_recovers_after_crash_before_publish()
+        {
+            var js = _services.GetRequiredService<INatsJSContext>();
+            var natsOption = _services.GetRequiredService<NatsOption>();
+            await EnsureStreamAsync(js, natsOption);
+
+            var subject = $"delivery.crash.before.{Guid.NewGuid():N}";
+            var message = await SeedOutboxMessageAsync(subject);
+
+            await using (var crashedServices = _fixture.BuildServiceProvider(configureServices: services =>
+            {
+                services.RemoveAll<IEventBusPublisher>();
+                services.AddSingleton<IEventBusPublisher>(new AlwaysFailPublisher());
+            }))
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                var worker = ActivatorUtilities.CreateInstance<OutboxPublisherWorker>(crashedServices);
+                var runTask = worker.StartAsync(cts.Token);
+
+                var deadline = DateTime.UtcNow.AddSeconds(8);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (await ReadAttemptCountAsync(message.Id) > 0)
+                        break;
+
+                    await Task.Delay(150);
+                }
+
+                await worker.StopAsync(CancellationToken.None);
+                await runTask;
+            }
+
+            Assert.Null(await ReadProcessedAtAsync(message.Id));
+            await ForceOutboxRetryNowAsync(message.Id);
+
+            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(35)))
+            {
+                var worker = ActivatorUtilities.CreateInstance<OutboxPublisherWorker>(_services);
+                var runTask = worker.StartAsync(cts.Token);
+
+                var deadline = DateTime.UtcNow.AddSeconds(30);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (await ReadProcessedAtAsync(message.Id) is not null)
+                        break;
+
+                    await Task.Delay(200);
+                }
+
+                await worker.StopAsync(CancellationToken.None);
+                await runTask;
+            }
+
+            Assert.NotNull(await ReadProcessedAtAsync(message.Id));
+            var consumed = await FetchCountAsync(js, natsOption.Stream, subject, $"before-{Guid.NewGuid():N}", expected: 2);
+            Assert.Equal(1, consumed);
+        }
+
+        [Fact]
+        public async Task Outbox_worker_recovers_after_crash_after_jetstream_ack()
+        {
+            var js = _services.GetRequiredService<INatsJSContext>();
+            var natsOption = _services.GetRequiredService<NatsOption>();
+            await EnsureStreamAsync(js, natsOption);
+
+            var subject = $"delivery.crash.afterack.{Guid.NewGuid():N}";
+            var message = await SeedOutboxMessageAsync(subject);
+
+            await using (var crashedServices = _fixture.BuildServiceProvider(configureServices: services =>
+            {
+                services.RemoveAll<IEventBusPublisher>();
+                services.AddSingleton<IEventBusPublisher>(sp =>
+                {
+                    var inner = new NatsEventBusPublisher(
+                        sp.GetRequiredService<INatsJSContext>(),
+                        sp.GetRequiredService<NatsOption>(),
+                        sp.GetRequiredService<KairoServer.Common.Logging.IAppLogger<NatsEventBusPublisher>>());
+                    return new AckThenCrashPublisher(inner);
+                });
+            }))
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                var worker = ActivatorUtilities.CreateInstance<OutboxPublisherWorker>(crashedServices);
+                var runTask = worker.StartAsync(cts.Token);
+
+                var deadline = DateTime.UtcNow.AddSeconds(8);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (await ReadAttemptCountAsync(message.Id) > 0)
+                        break;
+
+                    await Task.Delay(150);
+                }
+
+                await worker.StopAsync(CancellationToken.None);
+                await runTask;
+            }
+
+            Assert.True(await ReadAttemptCountAsync(message.Id) > 0);
+            Assert.Null(await ReadProcessedAtAsync(message.Id));
+            await ForceOutboxRetryNowAsync(message.Id);
+
+            using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
+            {
+                var worker = ActivatorUtilities.CreateInstance<OutboxPublisherWorker>(_services);
+                var runTask = worker.StartAsync(cts.Token);
+
+                var deadline = DateTime.UtcNow.AddSeconds(15);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (await ReadProcessedAtAsync(message.Id) is not null)
+                        break;
+
+                    await Task.Delay(200);
+                }
+
+                await worker.StopAsync(CancellationToken.None);
+                await runTask;
+            }
+
+            Assert.True(await ReadAttemptCountAsync(message.Id) >= 1);
+            var consumed = await FetchCountAsync(js, natsOption.Stream, subject, $"afterack-{Guid.NewGuid():N}", expected: 3);
+            Assert.Equal(1, consumed);
+        }
+
+        [Fact]
+        public async Task Outbox_worker_recovers_after_nats_outage()
+        {
+            var js = _services.GetRequiredService<INatsJSContext>();
+            var natsOption = _services.GetRequiredService<NatsOption>();
+            await EnsureStreamAsync(js, natsOption);
+
+            var subject = $"delivery.nats.outage.{Guid.NewGuid():N}";
+            var message = await SeedOutboxMessageAsync(subject);
+
+            await _fixture.StopNatsAsync();
+
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                var worker = ActivatorUtilities.CreateInstance<OutboxPublisherWorker>(_services);
+                var runTask = worker.StartAsync(cts.Token);
+
+                var deadline = DateTime.UtcNow.AddSeconds(8);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (await ReadAttemptCountAsync(message.Id) > 0)
+                        break;
+
+                    await Task.Delay(150);
+                }
+
+                await worker.StopAsync(CancellationToken.None);
+                await runTask;
+            }
+            finally
+            {
+                await _fixture.StartNatsAsync();
+            }
+
+            Assert.Null(await ReadProcessedAtAsync(message.Id));
+            await ForceOutboxRetryNowAsync(message.Id);
+
+            await using (var recoveredServices = _fixture.BuildServiceProvider())
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                var worker = ActivatorUtilities.CreateInstance<OutboxPublisherWorker>(recoveredServices);
+                var runTask = worker.StartAsync(cts.Token);
+
+                var deadline = DateTime.UtcNow.AddSeconds(20);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (await ReadProcessedAtAsync(message.Id) is not null)
+                        break;
+
+                    await Task.Delay(250);
+                }
+
+                await worker.StopAsync(CancellationToken.None);
+                await runTask;
+
+                var recoveredJs = recoveredServices.GetRequiredService<INatsJSContext>();
+                var recoveredOptions = recoveredServices.GetRequiredService<NatsOption>();
+                var consumed = await FetchCountAsync(recoveredJs, recoveredOptions.Stream, subject, $"nats-outage-{Guid.NewGuid():N}", expected: 2);
+                Assert.Equal(1, consumed);
+            }
+
+            Assert.NotNull(await ReadProcessedAtAsync(message.Id));
+        }
+
+        [Fact]
         public async Task Publisher_failure_increments_attempt_and_leaves_row_unprocessed()
         {
             var js = _services.GetRequiredService<INatsJSContext>();
@@ -672,6 +865,79 @@ namespace KairoServer.IntegrationTests
             }
 
             return count;
+        }
+
+        private async Task<OutboxMessage> SeedOutboxMessageAsync(string subject)
+        {
+            var @event = await SeedEventAsync("orders.created", "{\"orderId\":\"o-chaos\"}");
+            var payload = JsonSerializer.Serialize(new DeliveryReady(
+                Guid.NewGuid(),
+                @event.Id,
+                Guid.NewGuid(),
+                "acme",
+                "orders.created",
+                "{\"orderId\":\"o-chaos\"}",
+                DateTimeOffset.UtcNow));
+
+            var message = OutboxMessage.Create(@event.Id, subject, payload, DateTimeOffset.UtcNow);
+
+            await using var scope = _services.CreateAsyncScope();
+            var repo = scope.ServiceProvider.GetRequiredService<IOutboxRepository>();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            uow.Begin(true);
+            (await repo.InsertAsync(message, uow, CancellationToken.None)).EnsureSuccess();
+            uow.Commit();
+
+            return message;
+        }
+
+        private async Task<int> ReadAttemptCountAsync(Guid outboxId)
+        {
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            return await conn.ExecuteScalarAsync<int>(
+                "SELECT attempt_count FROM outbox_messages WHERE id = @id",
+                new { id = outboxId });
+        }
+
+        private async Task<DateTime?> ReadProcessedAtAsync(Guid outboxId)
+        {
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            return await conn.ExecuteScalarAsync<DateTime?>(
+                "SELECT processed_at FROM outbox_messages WHERE id = @id",
+                new { id = outboxId });
+        }
+
+        private async Task ForceOutboxRetryNowAsync(Guid outboxId)
+        {
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            await conn.ExecuteAsync(
+                "UPDATE outbox_messages SET next_attempt_at = NOW(), claimed_by = NULL, claim_expires_at = NULL WHERE id = @id",
+                new { id = outboxId });
+        }
+
+        private sealed class AlwaysFailPublisher : IEventBusPublisher
+        {
+            public Task<KairoServer.Common.Result> PublishAsync(string subject, string payload, string messageId, CancellationToken cancellationToken)
+            {
+                throw new InvalidOperationException("Simulated crash before publish.");
+            }
+        }
+
+        private sealed class AckThenCrashPublisher : IEventBusPublisher
+        {
+            private readonly IEventBusPublisher _inner;
+
+            public AckThenCrashPublisher(IEventBusPublisher inner)
+            {
+                _inner = inner;
+            }
+
+            public async Task<KairoServer.Common.Result> PublishAsync(string subject, string payload, string messageId, CancellationToken cancellationToken)
+            {
+                var result = await _inner.PublishAsync(subject, payload, messageId, cancellationToken);
+                result.EnsureSuccess();
+                throw new InvalidOperationException("Simulated crash after JetStream ACK and before outbox mark-processed.");
+            }
         }
     }
 }

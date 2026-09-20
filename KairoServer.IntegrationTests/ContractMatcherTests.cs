@@ -497,6 +497,91 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Matcher_worker_restart_recovers_pending_message_without_duplicate_delivery()
+        {
+            await SeedCustomerAsync("acme");
+            await SeedContractAsync("acme", new[] { "orders.created" });
+            var @event = await SeedEventAsync("orders.created", "{\"restart\":true}");
+
+            var js = _services.GetRequiredService<INatsJSContext>();
+            var natsOption = _services.GetRequiredService<Infastructure.Messaging.Nats.NatsOption>();
+            await EnsureStreamAsync(js, natsOption);
+
+            var publisher = _services.GetRequiredService<IEventBusPublisher>();
+            var payload = JsonSerializer.Serialize(new EventAccepted(
+                @event.Id, @event.Type, @event.SourceId, @event.OccurredAt));
+            (await publisher.PublishAsync("event.accepted", payload, $"restart-{Guid.NewGuid():N}", CancellationToken.None)).EnsureSuccess();
+
+            using (var firstCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300)))
+            {
+                var firstRun = ActivatorUtilities.CreateInstance<ContractMatcherWorker>(_services);
+                var t1 = firstRun.StartAsync(firstCts.Token);
+                await Task.Delay(300);
+                await firstRun.StopAsync(CancellationToken.None);
+                await t1;
+            }
+
+            using (var secondCts = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
+            {
+                var secondRun = ActivatorUtilities.CreateInstance<ContractMatcherWorker>(_services);
+                var t2 = secondRun.StartAsync(secondCts.Token);
+
+                var deadline = DateTime.UtcNow.AddSeconds(15);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (await CountDeliveriesAsync(@event.Id) >= 1)
+                        break;
+
+                    await Task.Delay(200);
+                }
+
+                await secondRun.StopAsync(CancellationToken.None);
+                await t2;
+            }
+
+            Assert.Equal(1, await CountDeliveriesAsync(@event.Id));
+            Assert.Equal(1, await CountDeliveryReadyOutboxAsync(@event.Id));
+        }
+
+        [Fact]
+        public async Task Duplicate_jetstream_messages_are_safe_for_matcher()
+        {
+            await SeedCustomerAsync("acme");
+            await SeedContractAsync("acme", new[] { "orders.created" });
+            var @event = await SeedEventAsync("orders.created", "{\"duplicate\":true}");
+
+            var js = _services.GetRequiredService<INatsJSContext>();
+            var natsOption = _services.GetRequiredService<Infastructure.Messaging.Nats.NatsOption>();
+            await EnsureStreamAsync(js, natsOption);
+
+            var publisher = _services.GetRequiredService<IEventBusPublisher>();
+            var payload = JsonSerializer.Serialize(new EventAccepted(
+                @event.Id, @event.Type, @event.SourceId, @event.OccurredAt));
+
+            (await publisher.PublishAsync("event.accepted", payload, $"dup-a-{Guid.NewGuid():N}", CancellationToken.None)).EnsureSuccess();
+            (await publisher.PublishAsync("event.accepted", payload, $"dup-b-{Guid.NewGuid():N}", CancellationToken.None)).EnsureSuccess();
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var worker = ActivatorUtilities.CreateInstance<ContractMatcherWorker>(_services);
+            var runTask = worker.StartAsync(cts.Token);
+
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (await CountDeliveriesAsync(@event.Id) >= 1)
+                    break;
+
+                await Task.Delay(200);
+            }
+
+            await worker.StopAsync(CancellationToken.None);
+            await runTask;
+
+            Assert.Equal(1, await CountDeliveriesAsync(@event.Id));
+            Assert.Equal(1, await CountDeliveryReadyOutboxAsync(@event.Id));
+        }
+
+        [Fact]
         public async Task Two_workers_process_disjoint_messages_via_shared_durable()
         {
             await SeedCustomerAsync("acme");

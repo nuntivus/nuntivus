@@ -79,7 +79,9 @@ namespace KairoServer.IntegrationTests
         /// Builds a ServiceProvider mirroring KairoServer.Worker/Program.cs so
         /// tests can resolve the matcher service or host the worker.
         /// </summary>
-        public ServiceProvider BuildServiceProvider(string? matcherDurable = null)
+        public ServiceProvider BuildServiceProvider(
+            string? matcherDurable = null,
+            Action<IServiceCollection>? configureServices = null)
         {
             var services = new ServiceCollection();
 
@@ -164,8 +166,18 @@ namespace KairoServer.IntegrationTests
 
             services.AddSingleton<IEventBusPublisher, NatsEventBusPublisher>();
 
+            configureServices?.Invoke(services);
+
             return services.BuildServiceProvider();
         }
+
+        public Task StopPostgresAsync() => _postgres.StopAsync();
+
+        public Task StartPostgresAsync() => _postgres.StartAsync();
+
+        public Task StopNatsAsync() => _nats.StopAsync();
+
+        public Task StartNatsAsync() => _nats.StartAsync();
 
         private async Task ApplyMigrationsAsync()
         {

@@ -219,6 +219,58 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Dispatch_destination_outage_connection_refused_schedules_retry()
+        {
+            var (deliveryId, _) = await SeedDeliveryAsync("http://127.0.0.1:1/hook");
+
+            var dispatcher = BuildDispatcher(new DeliveryDispatcherOption
+            {
+                MaxAttempts = 5,
+                BaseBackoff = TimeSpan.FromSeconds(1),
+                MaxBackoff = TimeSpan.FromSeconds(1),
+            });
+
+            var result = await dispatcher.DispatchAsync(deliveryId, CancellationToken.None);
+            result.EnsureSuccess();
+
+            Assert.Equal(DeliveryDispatchOutcome.FailedRetry, result.Value);
+
+            var (status, attemptCount, _, nextAttemptAt) = await ReadDeliveryAsync(deliveryId);
+            Assert.Equal("Failed", status);
+            Assert.Equal(1, attemptCount);
+            Assert.NotNull(nextAttemptAt);
+
+            var attempt = Assert.Single(await ReadAttemptsAsync(deliveryId));
+            Assert.False(attempt.succeeded);
+            Assert.Equal("Transient", attempt.failure_category);
+            Assert.Null(attempt.HttpStatus);
+        }
+
+        [Fact]
+        public async Task Dispatch_after_service_restart_does_not_duplicate_logical_delivery()
+        {
+            var (deliveryId, _) = await SeedDeliveryAsync(_server.Url);
+            _server.Enqueue(Respond(HttpStatusCode.OK, "{\"ok\":true}"));
+
+            var firstDispatcher = BuildDispatcher();
+            var first = await firstDispatcher.DispatchAsync(deliveryId, CancellationToken.None);
+            first.EnsureSuccess();
+            Assert.Equal(DeliveryDispatchOutcome.Delivered, first.Value);
+
+            var restartedDispatcher = BuildDispatcher();
+            var second = await restartedDispatcher.DispatchAsync(deliveryId, CancellationToken.None);
+            second.EnsureSuccess();
+            Assert.Equal(DeliveryDispatchOutcome.AlreadyTerminal, second.Value);
+
+            var (status, attemptCount, _, nextAttemptAt) = await ReadDeliveryAsync(deliveryId);
+            Assert.Equal("Delivered", status);
+            Assert.Equal(1, attemptCount);
+            Assert.Null(nextAttemptAt);
+            Assert.Single(await ReadAttemptsAsync(deliveryId));
+            Assert.Single(_server.Received);
+        }
+
+        [Fact]
         public async Task Dispatch_exhausts_retries_becomes_terminal_after_max_attempts()
         {
             var (deliveryId, _) = await SeedDeliveryAsync(_server.Url);

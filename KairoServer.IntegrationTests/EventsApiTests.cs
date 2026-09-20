@@ -8,6 +8,7 @@ using Dapper;
 using KairoServer.Api.Common;
 using KairoServer.Api.Controllers.Events;
 using KairoServer.Api.Controllers.Sources;
+using KairoServer.Domain.Outbox;
 using Npgsql;
 
 namespace KairoServer.IntegrationTests
@@ -182,6 +183,48 @@ namespace KairoServer.IntegrationTests
             Assert.NotNull(firstBody);
             Assert.NotNull(secondBody);
             Assert.Equal(firstBody!.Id, secondBody!.Id);
+        }
+
+        [Fact]
+        public async Task Publish_persists_event_and_outbox_before_client_restart()
+        {
+            var source = Guid.NewGuid().ToString("D");
+            var idempotencyKey = $"idem-durable-{Guid.NewGuid():N}";
+
+            var response = await _client.PostAsJsonAsync(
+                "/v1/events",
+                new PublishEventRequest(
+                    IdempotencyKey: idempotencyKey,
+                    Type: "orders.created",
+                    Source: source,
+                    Timestamp: DateTimeOffset.UtcNow,
+                    Metadata: null,
+                    Payload: JsonDocument.Parse("{\"orderId\":\"o-durable\"}").RootElement.Clone()));
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var ack = await response.Content.ReadFromJsonAsync<PublishEventResponse>();
+            Assert.NotNull(ack);
+
+            var eventId = Guid.Parse(ack!.Id);
+
+            await using (var conn = new NpgsqlConnection(_fixture.ConnectionString))
+            {
+                await conn.OpenAsync();
+
+                var eventRows = await conn.ExecuteScalarAsync<long>(
+                    "SELECT COUNT(*) FROM events WHERE id = @id;",
+                    new { id = eventId });
+                var outboxRows = await conn.ExecuteScalarAsync<long>(
+                    "SELECT COUNT(*) FROM outbox_messages WHERE event_id = @id AND type = @type;",
+                    new { id = eventId, type = OutboxMessageType.EventAccepted });
+
+                Assert.Equal(1, eventRows);
+                Assert.Equal(1, outboxRows);
+            }
+
+            using var restartedClient = _fixture.CreateClient();
+            var getResponse = await restartedClient.GetAsync($"/v1/events/{eventId:D}");
+            Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         }
 
         [Fact]

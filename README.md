@@ -1423,6 +1423,23 @@ Kairo uses **at-least-once processing** across pipeline stages and enforces dete
 
 These guarantees provide repeat-safe behavior under retries, redeliveries, and operator replays without requiring exactly-once transport semantics.
 
+## Failure-Recovery Coverage (Chaos Integration)
+
+Kairo's integration suite validates at-least-once durability and safe recovery under controlled failure injection:
+
+| Failure mode | Expected guarantee |
+| --- | --- |
+| API process interruption after publish commit | Accepted event and `EventAccepted` outbox row remain persisted and queryable. |
+| Outbox crash before publish | Outbox row remains unprocessed, retry metadata is updated, and recovery worker eventually publishes once. |
+| Outbox crash after JetStream ACK (before mark processed) | Retry re-publishes with same outbox `MsgId`; JetStream dedupes and final state converges to one logical publish. |
+| Duplicate `event.accepted` JetStream messages | Matcher remains idempotent through `(event_id, contract_id)` delivery uniqueness and does not create duplicate logical deliveries. |
+| Matcher worker restart | Pending messages are safely resumed after restart with no duplicate deliveries. |
+| Delivery dispatcher/service restart | Already delivered rows are short-circuited (`Skipped`), preventing duplicate logical execution. |
+| PostgreSQL/NATS outage during outbox publish path | Processing retries while dependency is unavailable, then resumes automatically after dependency recovery. |
+| Destination outage | Delivery transitions to retryable failure with scheduled next attempt and recorded attempt metadata. |
+
+These tests exercise crash/restart/outage behavior directly and verify the core invariant: accepted events are durable, duplicate processing is safe, and duplicate logical deliveries are prevented.
+
 ---
 
 # Status
