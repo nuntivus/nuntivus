@@ -20,7 +20,8 @@ namespace KairoServer.Infastructure.Health
             "contract_delivery_ordering_state",
             "delivery_operation_audits",
             "delivery_replay_jobs",
-            "audit_logs"
+            "audit_logs",
+            "schema_migrations"
         ];
     }
 }

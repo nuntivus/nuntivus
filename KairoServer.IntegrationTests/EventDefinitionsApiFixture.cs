@@ -1,4 +1,3 @@
-using System.IO;
 using System.Threading.Tasks;
 using Dapper;
 using Microsoft.AspNetCore.Hosting;
@@ -53,12 +52,7 @@ namespace KairoServer.IntegrationTests
 
         private async Task ApplyMigrationsAsync()
         {
-            var sqlPath = Path.Combine(AppContext.BaseDirectory, "Migrations", "008_create_event_definitions.sql");
-            var sql = await File.ReadAllTextAsync(sqlPath);
-
-            await using var conn = new NpgsqlConnection(ConnectionString);
-            await conn.OpenAsync();
-            await conn.ExecuteAsync(sql);
+            await MigrationTestHelper.ApplyAllAsync(ConnectionString);
         }
     }
 

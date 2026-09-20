@@ -93,11 +93,27 @@ docker volume ls | grep kairo-
 Behavior:
 
 1. waits for PostgreSQL readiness
-2. creates `schema_migrations` table if missing
-3. applies each `0*.sql` migration once
-4. records applied file names
+2. runs `kairo-api --migrate` using the same migration runner used by API/worker startup validation
+3. validates migration filenames (`NNN_description.sql`) and deterministic ordering
+4. acquires a PostgreSQL advisory lock to prevent concurrent migration execution
+5. applies pending migrations transactionally
+6. records migration history in `schema_migrations` with version, checksum, apply time, and duration
 
 The API and worker start only after `migrate` completes successfully.
+
+API and worker startup default to migration validation in production. If schema history is invalid or pending migrations exist, startup fails fast.
+
+Operational controls:
+
+- `DatabaseMigrations__Mode` (`Disabled`, `Validate`, `Apply`)
+- `DatabaseMigrations__MigrationsPath` (default `Migrations`)
+- `KAIRO_DATABASE_MIGRATIONS_MODE` and `KAIRO_DATABASE_MIGRATIONS_PATH` env mappings
+
+Contributor workflow for new migrations:
+
+1. add a new forward-only SQL file in `migration/` using `NNN_description.sql`
+2. never edit an already-applied migration file
+3. validate with integration tests and a dry-run deployment before production rollout
 
 ## 7. Readiness and lifecycle
 

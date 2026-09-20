@@ -18,6 +18,7 @@ using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Messaging.Nats;
 using KairoServer.Infastructure.Persistence.Caching;
 using KairoServer.Infastructure.Persistence.Postgres;
+using KairoServer.Infastructure.Persistence.Postgres.Migrations;
 using KairoServer.Worker.Configuration;
 using KairoServer.Worker.Deliveries;
 using KairoServer.Worker.Matching;
@@ -67,6 +68,20 @@ builder.Services
     .Validate(KairoConfigurationValidation.HasPostgresConnection, "Configure Database:PostgresConnectionString (or ConnectionStrings:Postgres).")
     .ValidateOnStart();
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DatabaseOption>>().Value);
+
+builder.Services
+    .AddOptions<DatabaseMigrationsOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.DatabaseMigrations))
+    .PostConfigure(options =>
+    {
+        if (options.Mode == DatabaseMigrationMode.Disabled && builder.Environment.IsProduction())
+        {
+            options.Mode = DatabaseMigrationMode.Validate;
+        }
+    })
+    .Validate(options => !string.IsNullOrWhiteSpace(options.MigrationsPath), "DatabaseMigrations:MigrationsPath must not be empty.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DatabaseMigrationsOption>>().Value);
 
 builder.Services
     .AddOptions<CacheOption>()
@@ -212,6 +227,7 @@ builder.Services.AddOpenTelemetry()
 builder.Services.AddSingleton<IDatabaseConnectionFactory>(
     sp => new PostgresDatabaseConnectionFactory(
         sp.GetRequiredService<DatabaseOption>().PostgresConnectionString!));
+builder.Services.AddSingleton<IPostgresSchemaMigrationRunner, PostgresSchemaMigrationRunner>();
 
 builder.Services.AddSingleton<IOutboxReader, PostgresOutboxReader>();
 builder.Services.AddSingleton<IRetentionCleanupRepository, PostgresRetentionCleanupRepository>();
@@ -335,6 +351,8 @@ if (workerRuntime.EnableRetentionCleanup)
 }
 
 var app = builder.Build();
+
+await app.Services.EnsureDatabaseMigrationsAsync();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {

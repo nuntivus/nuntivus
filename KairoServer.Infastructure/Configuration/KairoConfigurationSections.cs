@@ -3,6 +3,7 @@ namespace KairoServer.Infastructure.Configuration
     public static class KairoConfigurationSections
     {
         public const string Database = "Database";
+        public const string DatabaseMigrations = "DatabaseMigrations";
         public const string HostOptions = "HostOptions";
         public const string ApiSecurity = "ApiSecurity";
         public const string Cache = "Cache";

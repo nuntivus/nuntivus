@@ -17,6 +17,7 @@ using KairoServer.Infastructure.Health;
 using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Persistence.Caching;
 using KairoServer.Infastructure.Persistence.Postgres;
+using KairoServer.Infastructure.Persistence.Postgres.Migrations;
 using KairoServer.Domain.Deliveries;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -52,6 +53,20 @@ builder.Services
     .Validate(KairoConfigurationValidation.HasPostgresConnection, "Configure Database:PostgresConnectionString (or ConnectionStrings:Postgres).")
     .ValidateOnStart();
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DatabaseOption>>().Value);
+
+builder.Services
+    .AddOptions<DatabaseMigrationsOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.DatabaseMigrations))
+    .PostConfigure(options =>
+    {
+        if (options.Mode == DatabaseMigrationMode.Disabled && builder.Environment.IsProduction())
+        {
+            options.Mode = DatabaseMigrationMode.Validate;
+        }
+    })
+    .Validate(options => !string.IsNullOrWhiteSpace(options.MigrationsPath), "DatabaseMigrations:MigrationsPath must not be empty.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<DatabaseMigrationsOption>>().Value);
 
 builder.Services
     .AddOptions<ApiSecurityOption>()
@@ -126,6 +141,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<IDatabaseConnectionFactory>(
     sp => new PostgresDatabaseConnectionFactory(
         sp.GetRequiredService<DatabaseOption>().PostgresConnectionString!));
+builder.Services.AddSingleton<IPostgresSchemaMigrationRunner, PostgresSchemaMigrationRunner>();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ICacheStore, InMemoryCacheStore>();
@@ -178,6 +194,15 @@ builder.Services.AddSingleton<IDestinationConfigHandler, HttpDestinationConfigHa
 builder.Services.AddSingleton<IDestinationConfigDispatcher, DestinationConfigDispatcher>();
 
 var app = builder.Build();
+
+var migrateOnly = args.Any(arg => string.Equals(arg, "--migrate", StringComparison.OrdinalIgnoreCase));
+if (migrateOnly)
+{
+    await app.Services.EnsureDatabaseMigrationsAsync(DatabaseMigrationMode.Apply);
+    return;
+}
+
+await app.Services.EnsureDatabaseMigrationsAsync();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

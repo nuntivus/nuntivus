@@ -1,4 +1,3 @@
-using System.IO;
 using System.Security.Claims;
 using Dapper;
 using Microsoft.AspNetCore.Builder;
@@ -61,35 +60,7 @@ namespace KairoServer.IntegrationTests
 
         private async Task ApplyMigrationsAsync()
         {
-            var migrationsDir = Path.Combine(AppContext.BaseDirectory, "Migrations");
-
-            await using var conn = new NpgsqlConnection(ConnectionString);
-            await conn.OpenAsync();
-
-            foreach (var file in new[]
-            {
-                "001_create_events.sql",
-                "003_create_customers.sql",
-                "004_create_contracts.sql",
-                "005_create_deliveries.sql",
-                "006_create_delivery_attempts.sql",
-                "009_create_contract_filters.sql",
-                "010_add_contract_payload_transformations.sql",
-                "011_add_delivery_rate_limits.sql",
-                "012_add_delivery_ordering.sql",
-                "013_add_retention_cleanup_indexes.sql",
-                "016_add_delivery_contract_snapshots.sql",
-                "017_add_contract_snapshot_columns.sql",
-                "018_add_delivery_scheduler_indexes.sql",
-                "019_add_delivery_operation_audits.sql",
-                "020_create_delivery_replay_jobs.sql",
-                "021_create_audit_logs.sql",
-                "022_add_contract_name.sql",
-            })
-            {
-                var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));
-                await conn.ExecuteAsync(sql);
-            }
+            await MigrationTestHelper.ApplyAllAsync(ConnectionString);
         }
 
         private sealed class TestPrincipalStartupFilter : IStartupFilter

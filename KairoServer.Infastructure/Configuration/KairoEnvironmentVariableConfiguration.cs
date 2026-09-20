@@ -25,6 +25,9 @@ namespace KairoServer.Infastructure.Configuration
                 ["Nats:Stream"] = Environment.GetEnvironmentVariable("KAIRO_NATS_STREAM"),
                 ["Nats:Subjects"] = Environment.GetEnvironmentVariable("KAIRO_NATS_SUBJECTS"),
                 ["OpenTelemetry:OtlpEndpoint"] = Environment.GetEnvironmentVariable("KAIRO_OTLP_ENDPOINT"),
+
+                ["DatabaseMigrations:Mode"] = Environment.GetEnvironmentVariable("KAIRO_DATABASE_MIGRATIONS_MODE"),
+                ["DatabaseMigrations:MigrationsPath"] = Environment.GetEnvironmentVariable("KAIRO_DATABASE_MIGRATIONS_PATH"),
             };
 
             var shutdownSeconds = Environment.GetEnvironmentVariable("KAIRO_SHUTDOWN_TIMEOUT_SECONDS");

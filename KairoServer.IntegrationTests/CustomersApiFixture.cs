@@ -58,15 +58,7 @@ namespace KairoServer.IntegrationTests
 
         private async Task ApplyMigrationsAsync()
         {
-            await using var conn = new NpgsqlConnection(ConnectionString);
-            await conn.OpenAsync();
-
-            foreach (var file in new[] { "003_create_customers.sql", "021_create_audit_logs.sql" })
-            {
-                var sqlPath = Path.Combine(AppContext.BaseDirectory, "Migrations", file);
-                var sql = await File.ReadAllTextAsync(sqlPath);
-                await conn.ExecuteAsync(sql);
-            }
+            await MigrationTestHelper.ApplyAllAsync(ConnectionString);
         }
     }
 

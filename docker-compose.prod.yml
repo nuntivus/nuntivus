@@ -36,40 +36,22 @@ services:
       start_period: 10s
 
   migrate:
-    image: ${KAIRO_POSTGRES_IMAGE}
+    image: kairo-api:${KAIRO_IMAGE_TAG}
     container_name: kairo-migrate
     restart: "no"
+    build:
+      context: .
+      dockerfile: KairoServer.Api/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      PGPASSWORD: ${KAIRO_POSTGRES_PASSWORD}
-      KAIRO_POSTGRES_DB: ${KAIRO_POSTGRES_DB}
-      KAIRO_POSTGRES_USER: ${KAIRO_POSTGRES_USER}
-    volumes:
-      - ./:/migrations:ro
-    entrypoint: ["/bin/sh", "-ec"]
-    command: |
-      psql -h postgres -U "$KAIRO_POSTGRES_USER" -d "$KAIRO_POSTGRES_DB" -v ON_ERROR_STOP=1 <<'SQL'
-      CREATE TABLE IF NOT EXISTS schema_migrations
-      (
-          filename TEXT PRIMARY KEY,
-          applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-      SQL
-
-      for file in /migrations/0*.sql; do
-        name="$(basename "$file")"
-        applied=$(psql -h postgres -U "$KAIRO_POSTGRES_USER" -d "$KAIRO_POSTGRES_DB" -tAc "SELECT 1 FROM schema_migrations WHERE filename='${name}'")
-        if [ "$applied" = "1" ]; then
-          echo "Skipping already-applied migration: $name"
-          continue
-        fi
-
-        echo "Applying migration: $name"
-        psql -h postgres -U "$KAIRO_POSTGRES_USER" -d "$KAIRO_POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$file"
-        psql -h postgres -U "$KAIRO_POSTGRES_USER" -d "$KAIRO_POSTGRES_DB" -v ON_ERROR_STOP=1 -c "INSERT INTO schema_migrations(filename) VALUES ('$name')"
-      done
+      ASPNETCORE_ENVIRONMENT: ${KAIRO_ENVIRONMENT}
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${KAIRO_POSTGRES_DB};Username=${KAIRO_POSTGRES_USER};Password=${KAIRO_POSTGRES_PASSWORD}
+      Database__PostgresConnectionString: Host=postgres;Port=5432;Database=${KAIRO_POSTGRES_DB};Username=${KAIRO_POSTGRES_USER};Password=${KAIRO_POSTGRES_PASSWORD}
+      DatabaseMigrations__Mode: Apply
+      DestinationCredentials__EncryptionKey: ${KAIRO_DESTINATION_CREDENTIALS_KEY}
+    command: ["--migrate"]
 
   api:
     image: kairo-api:${KAIRO_IMAGE_TAG}

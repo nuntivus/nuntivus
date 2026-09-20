@@ -1,4 +1,3 @@
-using System.IO;
 using System.Threading.Tasks;
 using Dapper;
 using Microsoft.AspNetCore.Hosting;
@@ -54,27 +53,7 @@ namespace KairoServer.IntegrationTests
 
         private async Task ApplyMigrationsAsync()
         {
-            var migrationsDir = Path.Combine(AppContext.BaseDirectory, "Migrations");
-
-            await using var conn = new NpgsqlConnection(ConnectionString);
-            await conn.OpenAsync();
-
-            foreach (var file in new[]
-            {
-                "001_create_events.sql",
-                "002_create_outbox_messages.sql",
-                "003_create_customers.sql",
-                "004_create_contracts.sql",
-                "005_create_deliveries.sql",
-                "006_create_delivery_attempts.sql",
-                "007_create_event_replays.sql",
-                "021_create_audit_logs.sql",
-                "022_add_contract_name.sql"
-            })
-            {
-                var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));
-                await conn.ExecuteAsync(sql);
-            }
+            await MigrationTestHelper.ApplyAllAsync(ConnectionString);
         }
     }
 

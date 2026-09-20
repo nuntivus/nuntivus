@@ -24,4 +24,8 @@
     <ProjectReference Include="..\KairoServer.Application\KairoServer.Application.csproj" />
     <ProjectReference Include="..\KairoServer.Infastructure\KairoServer.Infastructure.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\migration\*.sql" Link="Migrations\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

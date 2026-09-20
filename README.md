@@ -1250,6 +1250,8 @@ Supported `KAIRO_*` env mappings include:
 - `KAIRO_NATS_SUBJECTS` -> `Nats:Subjects`
 - `KAIRO_OTLP_ENDPOINT` -> `OpenTelemetry:OtlpEndpoint`
 - `KAIRO_SHUTDOWN_TIMEOUT_SECONDS` -> `HostOptions:ShutdownTimeout`
+- `KAIRO_DATABASE_MIGRATIONS_MODE` -> `DatabaseMigrations:Mode`
+- `KAIRO_DATABASE_MIGRATIONS_PATH` -> `DatabaseMigrations:MigrationsPath`
 
 ---
 
