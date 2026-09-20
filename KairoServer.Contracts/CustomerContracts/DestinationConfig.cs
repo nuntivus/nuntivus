@@ -11,5 +11,9 @@ namespace KairoServer.Contracts.CustomerContracts
     /// </summary>
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
     [JsonDerivedType(typeof(HttpDestinationConfig), typeDiscriminator: "http")]
+    [JsonDerivedType(typeof(KafkaDestinationConfig), typeDiscriminator: "kafka")]
+    [JsonDerivedType(typeof(NatsDestinationConfig), typeDiscriminator: "nats")]
+    [JsonDerivedType(typeof(RabbitMqDestinationConfig), typeDiscriminator: "rabbitmq")]
+    [JsonDerivedType(typeof(SqsDestinationConfig), typeDiscriminator: "sqs")]
     public abstract record DestinationConfig;
 }

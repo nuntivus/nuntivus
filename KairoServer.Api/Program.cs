@@ -191,6 +191,10 @@ builder.Services.AddSingleton<IEndpointSecurityPolicy, EndpointSecurityPolicy>()
 builder.Services.AddSingleton<IDestinationCredentialProtector, AesGcmDestinationCredentialProtector>();
 
 builder.Services.AddSingleton<IDestinationConfigHandler, HttpDestinationConfigHandler>();
+builder.Services.AddSingleton<IDestinationConfigHandler, KafkaDestinationConfigHandler>();
+builder.Services.AddSingleton<IDestinationConfigHandler, NatsDestinationConfigHandler>();
+builder.Services.AddSingleton<IDestinationConfigHandler, RabbitMqDestinationConfigHandler>();
+builder.Services.AddSingleton<IDestinationConfigHandler, SqsDestinationConfigHandler>();
 builder.Services.AddSingleton<IDestinationConfigDispatcher, DestinationConfigDispatcher>();
 
 var app = builder.Build();

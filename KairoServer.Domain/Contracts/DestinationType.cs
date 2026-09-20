@@ -5,6 +5,10 @@ namespace KairoServer.Domain.Contracts
     /// </summary>
     public enum DestinationType
     {
-        Http = 1
+        Http = 1,
+        Kafka = 2,
+        Nats = 3,
+        RabbitMq = 4,
+        Sqs = 5,
     }
 }

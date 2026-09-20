@@ -112,6 +112,10 @@ namespace KairoServer.Application.Contracts
         public static DtoDestinationType MapDestinationType(DomainDestinationType t) => t switch
         {
             DomainDestinationType.Http => DtoDestinationType.Http,
+            DomainDestinationType.Kafka => DtoDestinationType.Kafka,
+            DomainDestinationType.Nats => DtoDestinationType.Nats,
+            DomainDestinationType.RabbitMq => DtoDestinationType.RabbitMq,
+            DomainDestinationType.Sqs => DtoDestinationType.Sqs,
             _ => (DtoDestinationType)(int)t
         };
 
