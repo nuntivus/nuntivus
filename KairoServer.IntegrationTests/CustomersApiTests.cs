@@ -1,5 +1,7 @@
 using System.Net;
+using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Dapper;
 using KairoServer.Api.Common;
@@ -63,12 +65,25 @@ namespace KairoServer.IntegrationTests
         [Fact]
         public async Task Create_with_invalid_id_returns_400_validation()
         {
-            var resp = await _client.PostAsJsonAsync("/v1/customers",
-                new CreateCustomerRequest("A!", "bad"));
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/customers")
+            {
+                Content = JsonContent.Create(new CreateCustomerRequest("A!", "bad"))
+            };
+            request.Headers.Add(ApiErrorResponse.CorrelationIdHeader, "corr-validation");
+
+            var resp = await _client.SendAsync(request);
 
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
             var err = await resp.Content.ReadFromJsonAsync<ApiErrorResponse>();
             Assert.Equal("validation", err!.Code);
+            Assert.Equal(400, err.Status);
+            Assert.Equal("Validation failed.", err.Title);
+            Assert.True(err.Extensions.ContainsKey("requestId"));
+            Assert.Equal("corr-validation", err.Extensions["correlationId"]?.ToString());
+
+            var payload = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            Assert.True(payload.RootElement.TryGetProperty("errors", out var errors));
+            Assert.True(errors.GetArrayLength() > 0);
         }
 
         [Fact]
@@ -80,6 +95,8 @@ namespace KairoServer.IntegrationTests
             Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
             var err = await resp.Content.ReadFromJsonAsync<ApiErrorResponse>();
             Assert.Equal("conflict", err!.Code);
+            Assert.Equal(409, err.Status);
+            Assert.Equal("Conflict.", err.Title);
         }
 
         [Fact]
@@ -99,6 +116,10 @@ namespace KairoServer.IntegrationTests
         {
             var resp = await _client.GetAsync("/v1/customers/missing");
             Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+            var err = await resp.Content.ReadFromJsonAsync<ApiErrorResponse>();
+            Assert.Equal("not_found", err!.Code);
+            Assert.Equal(404, err.Status);
+            Assert.Equal("Resource not found.", err.Title);
         }
 
         [Fact]

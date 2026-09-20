@@ -38,7 +38,7 @@ namespace KairoServer.Api.Controllers.Customers
 
             var result = await _customers.CreateAsync(request.Id, request.Name, cancellationToken, GetActorId());
 
-            return result.ToActionResult(created =>
+            return result.ToActionResult(HttpContext, created =>
                 CreatedAtAction(nameof(GetById), new { id = created.Id }, created));
         }
 
@@ -46,7 +46,7 @@ namespace KairoServer.Api.Controllers.Customers
         public async Task<IActionResult> GetById(string id, CancellationToken cancellationToken)
         {
             var result = await _customers.GetByIdAsync(id, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpGet]
@@ -56,7 +56,7 @@ namespace KairoServer.Api.Controllers.Customers
         {
             var result = await _customers.ListAsync(pagination.Page, pagination.PageSize, cancellationToken);
 
-            return result.ToActionResult(paged =>
+            return result.ToActionResult(HttpContext, paged =>
             {
                 var body = new PagedResponse<CustomerView>(
                     paged.Items,
@@ -74,14 +74,14 @@ namespace KairoServer.Api.Controllers.Customers
         public async Task<IActionResult> Enable(string id, CancellationToken cancellationToken)
         {
             var result = await _customers.EnableAsync(id, cancellationToken, GetActorId());
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpPost("{id}/disable")]
         public async Task<IActionResult> Disable(string id, CancellationToken cancellationToken)
         {
             var result = await _customers.DisableAsync(id, cancellationToken, GetActorId());
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         private string? GetActorId()
@@ -102,7 +102,7 @@ namespace KairoServer.Api.Controllers.Customers
         {
             var result = await _contracts.ListByCustomerAsync(id, pagination.Page, pagination.PageSize, cancellationToken);
 
-            return result.ToActionResult(paged =>
+            return result.ToActionResult(HttpContext, paged =>
             {
                 var body = new PagedResponse<ContractView>(
                     paged.Items,

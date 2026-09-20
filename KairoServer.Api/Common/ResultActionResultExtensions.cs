@@ -13,21 +13,25 @@ namespace KairoServer.Api.Common
     {
         public static IActionResult ToActionResult<T>(
             this Result<T> result,
+            HttpContext httpContext,
             Func<T, IActionResult> onSuccess)
         {
             return result.IsSuccess
                 ? onSuccess(result.Value)
-                : ToErrorResult(result.Errors);
+                : ToErrorResult(result.Errors, httpContext);
         }
 
-        public static IActionResult ToOk<T>(this Result<T> result) =>
-            result.ToActionResult(v => new OkObjectResult(v));
+        public static IActionResult ToOk<T>(
+            this Result<T> result,
+            HttpContext httpContext) =>
+            result.ToActionResult(httpContext, v => new OkObjectResult(v));
 
         public static IActionResult ToPagedOk<TDomain, TDto>(
             this Result<PagedResult<TDomain>> result,
+            HttpContext httpContext,
             Func<TDomain, TDto> selector)
         {
-            return result.ToActionResult(p =>
+            return result.ToActionResult(httpContext, p =>
             {
                 var mapped = p.Map(selector);
                 var body = new PagedResponse<TDto>(
@@ -42,27 +46,20 @@ namespace KairoServer.Api.Common
             });
         }
 
-        public static IActionResult ToPagedOk<T>(this Result<PagedResult<T>> result) =>
-            result.ToPagedOk(x => x);
+        public static IActionResult ToPagedOk<T>(
+            this Result<PagedResult<T>> result,
+            HttpContext httpContext) =>
+            result.ToPagedOk(httpContext, x => x);
 
         private static IActionResult ToErrorResult(
-            System.Collections.Generic.IReadOnlyList<Error> errors)
+            System.Collections.Generic.IReadOnlyList<Error> errors,
+            HttpContext httpContext)
         {
-            var status = MapStatus(errors.Count > 0 ? errors[0].Code : "unexpected");
-            return new ObjectResult(ApiErrorResponse.From(errors))
+            var payload = ApiErrorResponse.From(errors, httpContext);
+            return new ObjectResult(payload)
             {
-                StatusCode = status
+                StatusCode = payload.Status
             };
         }
-
-        private static int MapStatus(string code) => code switch
-        {
-            "validation" => StatusCodes.Status400BadRequest,
-            "not_found" => StatusCodes.Status404NotFound,
-            "conflict" => StatusCodes.Status409Conflict,
-            "unauthorized" => StatusCodes.Status401Unauthorized,
-            "forbidden" => StatusCodes.Status403Forbidden,
-            _ => StatusCodes.Status500InternalServerError,
-        };
     }
 }

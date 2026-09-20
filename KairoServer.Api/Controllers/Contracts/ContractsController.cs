@@ -36,7 +36,7 @@ namespace KairoServer.Api.Controllers.Contracts
 
             var result = await _contracts.CreateAsync(request!, cancellationToken, GetActorId());
 
-            return result.ToActionResult(created =>
+            return result.ToActionResult(HttpContext, created =>
                 CreatedAtAction(nameof(GetById), new { id = created.Id }, created));
         }
 
@@ -44,21 +44,21 @@ namespace KairoServer.Api.Controllers.Contracts
         public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
         {
             var result = await _contracts.GetByIdAsync(id, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpPost("{id:guid}/enable")]
         public async Task<IActionResult> Enable(Guid id, CancellationToken cancellationToken)
         {
             var result = await _contracts.EnableAsync(id, cancellationToken, GetActorId());
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpPost("{id:guid}/disable")]
         public async Task<IActionResult> Disable(Guid id, CancellationToken cancellationToken)
         {
             var result = await _contracts.DisableAsync(id, cancellationToken, GetActorId());
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpPost("{id:guid}/credentials")]
@@ -68,7 +68,7 @@ namespace KairoServer.Api.Controllers.Contracts
             CancellationToken cancellationToken)
         {
             var result = await _contracts.UpdateCredentialsAsync(id, request, cancellationToken, GetActorId());
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpPost("{id:guid}/credentials/rotate")]
@@ -78,7 +78,7 @@ namespace KairoServer.Api.Controllers.Contracts
             CancellationToken cancellationToken)
         {
             var result = await _contracts.RotateCredentialsAsync(id, request, cancellationToken, GetActorId());
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         private string? GetActorId()

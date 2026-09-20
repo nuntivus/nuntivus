@@ -35,7 +35,7 @@ namespace KairoServer.Api.Controllers.Deliveries
         public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
         {
             var result = await _queries.GetByIdAsync(id, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpGet]
@@ -51,7 +51,7 @@ namespace KairoServer.Api.Controllers.Deliveries
                     return new BadRequestObjectResult(ApiErrorResponse.From(new[]
                     {
                         Error.Validation("status is invalid.")
-                    }));
+                    }, HttpContext));
                 }
 
                 status = parsedStatus;
@@ -70,7 +70,7 @@ namespace KairoServer.Api.Controllers.Deliveries
                 request.PageSize);
 
             var result = await _queries.ListAsync(query, cancellationToken);
-            return result.ToPagedOk();
+            return result.ToPagedOk(HttpContext);
         }
 
         [HttpPost("{id:guid}/retry")]
@@ -90,7 +90,7 @@ namespace KairoServer.Api.Controllers.Deliveries
                 SerializeRequestSnapshot(id, "retry", request, operatorId));
 
             var result = await _recovery.ManualRetryAsync(id, operation, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpPost("{id:guid}/requeue")]
@@ -110,7 +110,7 @@ namespace KairoServer.Api.Controllers.Deliveries
                 SerializeRequestSnapshot(id, "requeue", request, operatorId));
 
             var result = await _recovery.ManualRequeueAsync(id, operation, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpPost("{id:guid}/cancel")]
@@ -130,21 +130,21 @@ namespace KairoServer.Api.Controllers.Deliveries
                 SerializeRequestSnapshot(id, "cancel", request, operatorId));
 
             var result = await _recovery.ManualCancelAsync(id, operation, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpGet("{id:guid}/failure")]
         public async Task<IActionResult> GetFailure(Guid id, CancellationToken cancellationToken)
         {
             var result = await _recovery.GetFailureAsync(id, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpGet("{id:guid}/attempts")]
         public async Task<IActionResult> GetAttempts(Guid id, CancellationToken cancellationToken)
         {
             var result = await _recovery.GetAttemptsAsync(id, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpPost("replay-jobs")]
@@ -168,14 +168,14 @@ namespace KairoServer.Api.Controllers.Deliveries
                 request.BatchLimit);
 
             var result = await _recovery.SubmitReplayJobAsync(replayRequest, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpGet("replay-jobs/{id:guid}")]
         public async Task<IActionResult> GetReplayJob(Guid id, CancellationToken cancellationToken)
         {
             var result = await _recovery.GetReplayJobAsync(id, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         private string? GetOperatorId()
@@ -192,7 +192,7 @@ namespace KairoServer.Api.Controllers.Deliveries
         }
 
         private IActionResult UnauthorizedResult() =>
-            new ObjectResult(ApiErrorResponse.From(new[] { Error.Unauthorized("Authenticated operator principal is required.") }))
+            new ObjectResult(ApiErrorResponse.From(new[] { Error.Unauthorized("Authenticated operator principal is required.") }, HttpContext))
             {
                 StatusCode = 401
             };

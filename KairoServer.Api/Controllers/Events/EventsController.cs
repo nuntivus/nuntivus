@@ -36,7 +36,7 @@ namespace KairoServer.Api.Controllers.Events
             CancellationToken cancellationToken)
         {
             var result = await _eventQueries.GetByIdAsync(id, cancellationToken);
-            return result.ToActionResult(@event => Ok(MapEvent(@event)));
+            return result.ToActionResult(HttpContext, @event => Ok(MapEvent(@event)));
         }
 
         [HttpGet]
@@ -57,7 +57,7 @@ namespace KairoServer.Api.Controllers.Events
                 request.PageSize);
 
             var result = await _eventQueries.ListAsync(query, cancellationToken);
-            return result.ToPagedOk(MapEvent);
+            return result.ToPagedOk(HttpContext, MapEvent);
         }
 
         [HttpPost]
@@ -67,7 +67,7 @@ namespace KairoServer.Api.Controllers.Events
         {
             var validation = _validator.Validate(request);
             if (validation.IsFailure)
-                return new BadRequestObjectResult(ApiErrorResponse.From(validation.Errors));
+                return new BadRequestObjectResult(ApiErrorResponse.From(validation.Errors, HttpContext));
 
             _logger.Information(
                 "Received PublishEvent request (idempotencyKey {IdempotencyKey}, type {Type}, source {Source}).",
@@ -107,7 +107,7 @@ namespace KairoServer.Api.Controllers.Events
                 cancellationToken,
                 GetActorId());
 
-            return result.ToActionResult(replay => Ok(new ReplayEventResponse(
+            return result.ToActionResult(HttpContext, replay => Ok(new ReplayEventResponse(
                 replay.SourceEventId.ToString("D"),
                 replay.ReplayedEventId.ToString("D"),
                 replay.Created ? "accepted" : "already_replayed")));

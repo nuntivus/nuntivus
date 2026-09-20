@@ -34,7 +34,7 @@ namespace KairoServer.Api.Controllers.Events
                 request.Description,
                 cancellationToken);
 
-            return result.ToActionResult(created =>
+            return result.ToActionResult(HttpContext, created =>
                 CreatedAtAction(nameof(GetByEventType), new { eventType = created.EventType }, created));
         }
 
@@ -44,7 +44,7 @@ namespace KairoServer.Api.Controllers.Events
             CancellationToken cancellationToken)
         {
             var result = await _definitions.GetByEventTypeAsync(eventType, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpGet]
@@ -54,7 +54,7 @@ namespace KairoServer.Api.Controllers.Events
         {
             var result = await _definitions.ListAsync(pagination.Page, pagination.PageSize, cancellationToken);
 
-            return result.ToActionResult(paged =>
+            return result.ToActionResult(HttpContext, paged =>
             {
                 var body = new PagedResponse<EventDefinitionView>(
                     paged.Items,
@@ -81,7 +81,7 @@ namespace KairoServer.Api.Controllers.Events
                 request.CompatibilityMode,
                 cancellationToken);
 
-            return result.ToActionResult(created =>
+            return result.ToActionResult(HttpContext, created =>
                 CreatedAtAction(nameof(GetSchemaVersion), new { eventType, version = created.Version }, created));
         }
 
@@ -97,7 +97,7 @@ namespace KairoServer.Api.Controllers.Events
                 pagination.PageSize,
                 cancellationToken);
 
-            return result.ToActionResult(paged =>
+            return result.ToActionResult(HttpContext, paged =>
             {
                 var body = new PagedResponse<EventSchemaVersionView>(
                     paged.Items,
@@ -118,7 +118,7 @@ namespace KairoServer.Api.Controllers.Events
             CancellationToken cancellationToken)
         {
             var result = await _definitions.GetSchemaVersionAsync(eventType, version, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpPost("{eventType}/schemas/{version:int}/activate")]
@@ -128,7 +128,7 @@ namespace KairoServer.Api.Controllers.Events
             CancellationToken cancellationToken)
         {
             var result = await _definitions.ActivateSchemaVersionAsync(eventType, version, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
 
         [HttpPost("{eventType}/schemas/{version:int}/deprecate")]
@@ -138,7 +138,7 @@ namespace KairoServer.Api.Controllers.Events
             CancellationToken cancellationToken)
         {
             var result = await _definitions.DeprecateSchemaVersionAsync(eventType, version, cancellationToken);
-            return result.ToOk();
+            return result.ToOk(HttpContext);
         }
     }
 }
