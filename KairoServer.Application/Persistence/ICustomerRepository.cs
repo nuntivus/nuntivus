@@ -1,5 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Customers;
 using KairoServer.Common;
 using KairoServer.Domain.Customers;
 
@@ -22,8 +23,7 @@ namespace KairoServer.Application.Persistence
             CancellationToken cancellationToken);
 
         Task<Result<PagedResult<Customer>>> ListAsync(
-            int page,
-            int pageSize,
+            CustomerListQuery query,
             CancellationToken cancellationToken);
     }
 }

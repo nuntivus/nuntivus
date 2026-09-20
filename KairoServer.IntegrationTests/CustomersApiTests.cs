@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Linq;
 using Dapper;
 using KairoServer.Api.Common;
 using KairoServer.Api.Controllers.Customers;
@@ -156,6 +157,87 @@ namespace KairoServer.IntegrationTests
             Assert.Equal(2, body.Items.Count);
             Assert.True(body.HasPrevious);
             Assert.True(body.HasNext);
+        }
+
+        [Fact]
+        public async Task List_supports_filter_sort_and_time_range()
+        {
+            var now = DateTimeOffset.UtcNow;
+
+            await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest("acme", "Acme"));
+            await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest("beta", "Beta"));
+            await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest("gamma", "Gamma"));
+            await _client.PostAsync("/v1/customers/beta/disable", null);
+
+            await using (var conn = new NpgsqlConnection(_fixture.ConnectionString))
+            {
+                await conn.ExecuteAsync(
+                    """
+                    UPDATE customers
+                    SET created_at = CASE id
+                        WHEN 'acme' THEN @AcmeCreatedAt
+                        WHEN 'beta' THEN @BetaCreatedAt
+                        WHEN 'gamma' THEN @GammaCreatedAt
+                        ELSE created_at
+                    END
+                    WHERE id IN ('acme', 'beta', 'gamma');
+                    """,
+                    new
+                    {
+                        AcmeCreatedAt = now.AddMinutes(-25),
+                        BetaCreatedAt = now.AddMinutes(-20),
+                        GammaCreatedAt = now.AddMinutes(-15)
+                    });
+            }
+
+            var url =
+                "/v1/customers?enabled=true&search=a" +
+                $"&createdFrom={Uri.EscapeDataString(now.AddMinutes(-26).ToString("O"))}" +
+                $"&createdTo={Uri.EscapeDataString(now.AddMinutes(-14).ToString("O"))}" +
+                "&sortBy=name&sortDirection=asc&page=1&pageSize=10";
+
+            var resp = await _client.GetAsync(url);
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+            var body = await resp.Content.ReadFromJsonAsync<PagedResponse<CustomerView>>();
+            Assert.NotNull(body);
+            Assert.Equal(new[] { "acme", "gamma" }, body!.Items.Select(x => x.Id).ToArray());
+        }
+
+        [Fact]
+        public async Task List_with_createdAt_sort_uses_stable_id_tiebreaker()
+        {
+            var now = DateTimeOffset.UtcNow;
+
+            await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest("stable-b", "Stable B"));
+            await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest("stable-a", "Stable A"));
+
+            await using (var conn = new NpgsqlConnection(_fixture.ConnectionString))
+            {
+                await conn.ExecuteAsync(
+                    """
+                    UPDATE customers
+                    SET created_at = @CreatedAt
+                    WHERE id IN ('stable-a', 'stable-b');
+                    """,
+                    new { CreatedAt = now.AddMinutes(-10) });
+            }
+
+            var body = await _client.GetFromJsonAsync<PagedResponse<CustomerView>>(
+                "/v1/customers?search=stable&sortBy=createdAt&sortDirection=asc&page=1&pageSize=10");
+
+            Assert.NotNull(body);
+            Assert.Equal(new[] { "stable-a", "stable-b" }, body!.Items.Select(x => x.Id).Take(2).ToArray());
+        }
+
+        [Theory]
+        [InlineData("/v1/customers?sortBy=invalid")]
+        [InlineData("/v1/customers?sortDirection=sideways")]
+        [InlineData("/v1/customers?createdFrom=2026-01-02T00:00:00Z&createdTo=2026-01-01T00:00:00Z")]
+        public async Task List_with_invalid_query_conventions_returns_400(string url)
+        {
+            var resp = await _client.GetAsync(url);
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
         }
 
         [Theory]

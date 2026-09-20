@@ -215,23 +215,46 @@ namespace KairoServer.Application.Contracts
         }
 
         public async Task<Result<PagedResult<ContractView>>> ListByCustomerAsync(
-            string customerId,
-            int page,
-            int pageSize,
+            ContractListQuery query,
             CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(customerId))
+            if (query is null)
+                return Result.Failure<PagedResult<ContractView>>(Error.Validation("query is required."));
+
+            if (string.IsNullOrWhiteSpace(query.CustomerId))
                 return Result.Failure<PagedResult<ContractView>>(Error.Validation("customerId is required."));
 
-            if (page < 1)
+            if (query.Page < 1)
                 return Result.Failure<PagedResult<ContractView>>(
                     Error.Validation("page must be greater than or equal to 1."));
 
-            if (pageSize < 1 || pageSize > MaxPageSize)
+            if (query.PageSize < 1 || query.PageSize > MaxPageSize)
                 return Result.Failure<PagedResult<ContractView>>(
                     Error.Validation($"pageSize must be between 1 and {MaxPageSize}."));
 
-            var result = await _repository.ListByCustomerAsync(customerId, page, pageSize, cancellationToken);
+            if (query.CreatedFrom.HasValue && query.CreatedTo.HasValue && query.CreatedFrom > query.CreatedTo)
+            {
+                return Result.Failure<PagedResult<ContractView>>(
+                    Error.Validation("createdFrom must be less than or equal to createdTo."));
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.SortBy)
+                && !string.Equals(query.SortBy, "createdAt", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(query.SortBy, "updatedAt", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result.Failure<PagedResult<ContractView>>(
+                    Error.Validation("sortBy must be one of: createdAt, updatedAt."));
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.SortDirection)
+                && !string.Equals(query.SortDirection, "asc", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(query.SortDirection, "desc", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result.Failure<PagedResult<ContractView>>(
+                    Error.Validation("sortDirection must be one of: asc, desc."));
+            }
+
+            var result = await _repository.ListByCustomerAsync(query, cancellationToken);
             if (result.IsFailure)
                 return Result<PagedResult<ContractView>>.Fail(result.Errors);
 

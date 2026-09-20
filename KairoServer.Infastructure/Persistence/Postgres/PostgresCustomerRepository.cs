@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using KairoServer.Application.Customers;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Domain.Customers;
@@ -147,45 +149,102 @@ namespace KairoServer.Infastructure.Persistence.Postgres
         }
 
         public async Task<Result<PagedResult<Customer>>> ListAsync(
-            int page,
-            int pageSize,
+            CustomerListQuery query,
             CancellationToken cancellationToken)
         {
             try
             {
-                const string sql = """
-                    SELECT id, name, enabled, created_at, updated_at,
-                           COUNT(*) OVER() AS total_count
-                    FROM customers
-                    ORDER BY created_at DESC, id ASC
-                    LIMIT @PageSize OFFSET @Offset;
-                    """;
+                var where = new StringBuilder(" WHERE 1 = 1");
+                var parameters = new DynamicParameters();
 
-                var offset = (page - 1) * pageSize;
+                if (query.Enabled.HasValue)
+                {
+                    where.Append(" AND c.enabled = @Enabled");
+                    parameters.Add("Enabled", query.Enabled.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(query.Search))
+                {
+                    where.Append(" AND (c.id ILIKE @Search OR c.name ILIKE @Search)");
+                    parameters.Add("Search", $"%{query.Search.Trim()}%");
+                }
+
+                if (query.CreatedFrom.HasValue)
+                {
+                    where.Append(" AND c.created_at >= @CreatedFrom");
+                    parameters.Add("CreatedFrom", query.CreatedFrom.Value);
+                }
+
+                if (query.CreatedTo.HasValue)
+                {
+                    where.Append(" AND c.created_at <= @CreatedTo");
+                    parameters.Add("CreatedTo", query.CreatedTo.Value);
+                }
+
+                var sortColumn = ResolveSortColumn(query.SortBy);
+                var sortDirection = string.Equals(query.SortDirection, "asc", StringComparison.OrdinalIgnoreCase)
+                    ? "ASC"
+                    : "DESC";
+
+                var countSql = "SELECT COUNT(*) FROM customers c" + where;
+                parameters.Add("Offset", (query.Page - 1) * query.PageSize);
+                parameters.Add("PageSize", query.PageSize);
+
+                var pageSql = $"""
+                    SELECT
+                        c.id,
+                        c.name,
+                        c.enabled,
+                        c.created_at,
+                        c.updated_at
+                    FROM customers c
+                    {where}
+                    ORDER BY {sortColumn} {sortDirection}, c.id {sortDirection}
+                    OFFSET @Offset
+                    LIMIT @PageSize;
+                    """;
 
                 await using var connection = CreateConnection();
                 await connection.OpenAsync(cancellationToken);
 
-                var rows = await connection.QueryAsync<CustomerRowWithCount>(
+                var totalCount = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    countSql,
+                    parameters,
+                    cancellationToken: cancellationToken));
+
+                var rows = await connection.QueryAsync<CustomerRow>(
                     new CommandDefinition(
-                        sql,
-                        new { PageSize = pageSize, Offset = offset },
+                        pageSql,
+                        parameters,
                         cancellationToken: cancellationToken));
 
                 var materialized = new List<Customer>();
-                long totalCount = 0;
                 foreach (var row in rows)
                 {
-                    totalCount = row.total_count;
                     materialized.Add(row.ToDomain());
                 }
 
-                return Result.Success(PagedResult<Customer>.Create(materialized, page, pageSize, totalCount));
+                return Result.Success(PagedResult<Customer>.Create(materialized, query.Page, query.PageSize, totalCount));
             }
             catch (Exception ex)
             {
                 return Result.Failure<PagedResult<Customer>>(ex);
             }
+        }
+
+        private static string ResolveSortColumn(string? sortBy)
+        {
+            if (string.IsNullOrWhiteSpace(sortBy))
+                return "c.created_at";
+
+            if (string.Equals(sortBy, "id", StringComparison.OrdinalIgnoreCase))
+                return "c.id";
+            if (string.Equals(sortBy, "name", StringComparison.OrdinalIgnoreCase))
+                return "c.name";
+            if (string.Equals(sortBy, "updatedAt", StringComparison.OrdinalIgnoreCase))
+                return "c.updated_at";
+
+            return "c.created_at";
         }
 
         private readonly IDatabaseConnectionFactory _connectionFactory;
@@ -210,17 +269,5 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 Customer.Rehydrate(id, name, enabled, created_at, updated_at);
         }
 
-        private sealed class CustomerRowWithCount
-        {
-            public string id { get; set; } = string.Empty;
-            public string name { get; set; } = string.Empty;
-            public bool enabled { get; set; }
-            public DateTimeOffset created_at { get; set; }
-            public DateTimeOffset updated_at { get; set; }
-            public long total_count { get; set; }
-
-            public Customer ToDomain() =>
-                Customer.Rehydrate(id, name, enabled, created_at, updated_at);
-        }
     }
 }

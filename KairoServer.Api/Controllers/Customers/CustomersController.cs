@@ -2,6 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Security.Claims;
 using KairoServer.Api.Common;
+using KairoServer.Api.Controllers.Contracts;
 using KairoServer.Application.Contracts;
 using KairoServer.Application.Customers;
 using KairoServer.Common.Logging;
@@ -51,10 +52,20 @@ namespace KairoServer.Api.Controllers.Customers
 
         [HttpGet]
         public async Task<IActionResult> List(
-            [FromQuery] PagedRequest pagination,
+            [FromQuery] CustomerListApiRequest request,
             CancellationToken cancellationToken)
         {
-            var result = await _customers.ListAsync(pagination.Page, pagination.PageSize, cancellationToken);
+            var query = new CustomerListQuery(
+                request.Enabled,
+                request.Search,
+                request.CreatedFrom,
+                request.CreatedTo,
+                request.SortBy,
+                request.SortDirection,
+                request.Page,
+                request.PageSize);
+
+            var result = await _customers.ListAsync(query, cancellationToken);
 
             return result.ToActionResult(HttpContext, paged =>
             {
@@ -97,10 +108,21 @@ namespace KairoServer.Api.Controllers.Customers
         [HttpGet("{id}/contracts")]
         public async Task<IActionResult> ListContracts(
             string id,
-            [FromQuery] PagedRequest pagination,
+            [FromQuery] ContractListApiRequest request,
             CancellationToken cancellationToken)
         {
-            var result = await _contracts.ListByCustomerAsync(id, pagination.Page, pagination.PageSize, cancellationToken);
+            var query = new ContractListQuery(
+                id,
+                request.Enabled,
+                request.EventType,
+                request.CreatedFrom,
+                request.CreatedTo,
+                request.SortBy,
+                request.SortDirection,
+                request.Page,
+                request.PageSize);
+
+            var result = await _contracts.ListByCustomerAsync(query, cancellationToken);
 
             return result.ToActionResult(HttpContext, paged =>
             {

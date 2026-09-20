@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Contracts;
 using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Events.Queries;
@@ -107,8 +108,8 @@ namespace KairoServer.UnitTests.Matching
             public Task<Result<Contract?>> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success<Contract?>(null));
 
-            public Task<Result<PagedResult<Contract>>> ListByCustomerAsync(string customerId, int page, int pageSize, CancellationToken cancellationToken) =>
-                Task.FromResult(Result.Success(PagedResult<Contract>.Create(Array.Empty<Contract>(), page, pageSize, 0)));
+            public Task<Result<PagedResult<Contract>>> ListByCustomerAsync(ContractListQuery query, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(PagedResult<Contract>.Create(Array.Empty<Contract>(), query.Page, query.PageSize, 0)));
 
             public Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(string eventType, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(_matches));

@@ -50,7 +50,8 @@ namespace KairoServer.IntegrationTests
             {
                 cfg.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["ConnectionStrings:Postgres"] = ConnectionString
+                    ["ConnectionStrings:Postgres"] = ConnectionString,
+                    ["Database:PostgresConnectionString"] = ConnectionString
                 });
             });
         }

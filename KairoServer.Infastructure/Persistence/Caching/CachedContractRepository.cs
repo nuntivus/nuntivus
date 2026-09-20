@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Caching;
+using KairoServer.Application.Contracts;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Domain.Contracts;
@@ -41,11 +42,12 @@ namespace KairoServer.Infastructure.Persistence.Caching
                 cancellationToken);
 
         public Task<Result<PagedResult<Contract>>> ListByCustomerAsync(
-            string customerId, int page, int pageSize, CancellationToken cancellationToken) =>
+            ContractListQuery query,
+            CancellationToken cancellationToken) =>
             _cache.GetOrCreateAsync(
-                $"{CacheKeys.ContractsByCustomer}:{customerId}:{page}:{pageSize}",
+                $"{CacheKeys.ContractsByCustomer}:{query.CustomerId}:{query.Enabled}:{query.EventType}:{query.CreatedFrom:O}:{query.CreatedTo:O}:{query.SortBy}:{query.SortDirection}:{query.Page}:{query.PageSize}",
                 _ttl,
-                ct => _inner.ListByCustomerAsync(customerId, page, pageSize, ct),
+                ct => _inner.ListByCustomerAsync(query, ct),
                 cancellationToken);
 
         public Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(

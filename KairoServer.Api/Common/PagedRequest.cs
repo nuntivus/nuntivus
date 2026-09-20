@@ -8,8 +8,12 @@ namespace KairoServer.Api.Common
     /// </summary>
     public class PagedRequest
     {
-        public int Page { get; set; } = 1;
+        public const int DefaultPage = 1;
+        public const int DefaultPageSize = 20;
+        public const int MaxPageSize = 100;
 
-        public int PageSize { get; set; } = 20;
+        public int Page { get; set; } = DefaultPage;
+
+        public int PageSize { get; set; } = DefaultPageSize;
     }
 }

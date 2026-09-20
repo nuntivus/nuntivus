@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Caching;
+using KairoServer.Application.Customers;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Domain.Customers;
@@ -38,7 +39,7 @@ namespace KairoServer.Infastructure.Persistence.Caching
                 ct => _inner.GetByIdAsync(id, ct),
                 cancellationToken);
 
-        public Task<Result<PagedResult<Customer>>> ListAsync(int page, int pageSize, CancellationToken cancellationToken) =>
-            _inner.ListAsync(page, pageSize, cancellationToken);
+        public Task<Result<PagedResult<Customer>>> ListAsync(CustomerListQuery query, CancellationToken cancellationToken) =>
+            _inner.ListAsync(query, cancellationToken);
     }
 }

@@ -112,19 +112,46 @@ namespace KairoServer.Application.Customers
         }
 
         public async Task<Result<PagedResult<CustomerView>>> ListAsync(
-            int page,
-            int pageSize,
+            CustomerListQuery query,
             CancellationToken cancellationToken)
         {
-            if (page < 1)
+            if (query is null)
+                return Result.Failure<PagedResult<CustomerView>>(
+                    Error.Validation("query is required."));
+
+            if (query.Page < 1)
                 return Result.Failure<PagedResult<CustomerView>>(
                     Error.Validation("page must be greater than or equal to 1."));
 
-            if (pageSize < 1 || pageSize > MaxPageSize)
+            if (query.PageSize < 1 || query.PageSize > MaxPageSize)
                 return Result.Failure<PagedResult<CustomerView>>(
                     Error.Validation($"pageSize must be between 1 and {MaxPageSize}."));
 
-            var result = await _repository.ListAsync(page, pageSize, cancellationToken);
+            if (query.CreatedFrom.HasValue && query.CreatedTo.HasValue && query.CreatedFrom > query.CreatedTo)
+            {
+                return Result.Failure<PagedResult<CustomerView>>(
+                    Error.Validation("createdFrom must be less than or equal to createdTo."));
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.SortBy)
+                && !string.Equals(query.SortBy, "id", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(query.SortBy, "name", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(query.SortBy, "createdAt", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(query.SortBy, "updatedAt", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result.Failure<PagedResult<CustomerView>>(
+                    Error.Validation("sortBy must be one of: id, name, createdAt, updatedAt."));
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.SortDirection)
+                && !string.Equals(query.SortDirection, "asc", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(query.SortDirection, "desc", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result.Failure<PagedResult<CustomerView>>(
+                    Error.Validation("sortDirection must be one of: asc, desc."));
+            }
+
+            var result = await _repository.ListAsync(query, cancellationToken);
             if (result.IsFailure)
                 return Result<PagedResult<CustomerView>>.Fail(result.Errors);
 

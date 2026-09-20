@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using KairoServer.Application.Contracts;
 using KairoServer.Common;
 using KairoServer.Domain.Contracts;
 
@@ -23,9 +24,7 @@ namespace KairoServer.Application.Persistence
             CancellationToken cancellationToken);
 
         Task<Result<PagedResult<Contract>>> ListByCustomerAsync(
-            string customerId,
-            int page,
-            int pageSize,
+            ContractListQuery query,
             CancellationToken cancellationToken);
 
         /// <summary>

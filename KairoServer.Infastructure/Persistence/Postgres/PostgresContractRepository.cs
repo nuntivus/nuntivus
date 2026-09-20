@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
+using KairoServer.Application.Contracts;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Domain.Contracts;
@@ -110,7 +112,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
             catch (Exception ex)
             {
-                return Result.Failure(ex);
+                return Result.Failure(Error.Unexpected(ex.Message));
             }
         }
 
@@ -256,21 +258,68 @@ namespace KairoServer.Infastructure.Persistence.Postgres
         }
 
         public async Task<Result<PagedResult<Contract>>> ListByCustomerAsync(
-            string customerId,
-            int page,
-            int pageSize,
+            ContractListQuery query,
             CancellationToken cancellationToken)
         {
             try
             {
-                const string sql = """
-                    SELECT id, customer_id, enabled, ordering_enabled, ordering_key_selector, destination_type, destination_config, transformation_config::text AS transformation_config,
-                           rate_limit_per_second, rate_limit_per_minute, rate_limit_burst,
-                           created_at, updated_at,
-                           COUNT(*) OVER() AS total_count
-                    FROM contracts
-                    WHERE customer_id = @CustomerId
-                    ORDER BY created_at DESC, id ASC
+                var where = new StringBuilder(" WHERE c.customer_id = @CustomerId");
+                var parameters = new DynamicParameters();
+                parameters.Add("CustomerId", query.CustomerId);
+
+                if (query.Enabled.HasValue)
+                {
+                    where.Append(" AND c.enabled = @Enabled");
+                    parameters.Add("Enabled", query.Enabled.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(query.EventType))
+                {
+                    where.Append(" AND EXISTS (");
+                    where.Append("SELECT 1 FROM contract_event_types cetf ");
+                    where.Append("WHERE cetf.contract_id = c.id AND cetf.event_type = @EventType)");
+                    parameters.Add("EventType", query.EventType.Trim());
+                }
+
+                if (query.CreatedFrom.HasValue)
+                {
+                    where.Append(" AND c.created_at >= @CreatedFrom");
+                    parameters.Add("CreatedFrom", query.CreatedFrom.Value);
+                }
+
+                if (query.CreatedTo.HasValue)
+                {
+                    where.Append(" AND c.created_at <= @CreatedTo");
+                    parameters.Add("CreatedTo", query.CreatedTo.Value);
+                }
+
+                var sortColumn = ResolveContractSortColumn(query.SortBy);
+                var sortDirection = string.Equals(query.SortDirection, "asc", StringComparison.OrdinalIgnoreCase)
+                    ? "ASC"
+                    : "DESC";
+
+                var countSql = "SELECT COUNT(*) FROM contracts c" + where;
+                parameters.Add("Offset", (query.Page - 1) * query.PageSize);
+                parameters.Add("PageSize", query.PageSize);
+
+                var pageSql = $"""
+                    SELECT
+                        c.id,
+                        c.customer_id,
+                        c.enabled,
+                        c.ordering_enabled,
+                        c.ordering_key_selector,
+                        c.destination_type,
+                        c.destination_config,
+                        c.transformation_config::text AS transformation_config,
+                        c.rate_limit_per_second,
+                        c.rate_limit_per_minute,
+                        c.rate_limit_burst,
+                        c.created_at,
+                        c.updated_at
+                    FROM contracts c
+                    {where}
+                    ORDER BY {sortColumn} {sortDirection}, c.id {sortDirection}
                     LIMIT @PageSize OFFSET @Offset;
                     """;
 
@@ -293,22 +342,23 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     ORDER BY scope ASC, rule_order ASC;
                     """;
 
-                var offset = (page - 1) * pageSize;
-
                 await using var connection = CreateConnection();
                 await connection.OpenAsync(cancellationToken);
 
-                var rows = await connection.QueryAsync<ContractRowWithCount>(new CommandDefinition(
-                    sql,
-                    new { CustomerId = customerId, PageSize = pageSize, Offset = offset },
+                var totalCount = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    countSql,
+                    parameters,
                     cancellationToken: cancellationToken));
 
-                var rowList = new List<ContractRowWithCount>(rows);
-                long totalCount = 0;
+                var rows = await connection.QueryAsync<ContractRow>(new CommandDefinition(
+                    pageSql,
+                    parameters,
+                    cancellationToken: cancellationToken));
+
+                var rowList = new List<ContractRow>(rows);
                 var ids = new List<Guid>(rowList.Count);
                 foreach (var r in rowList)
                 {
-                    totalCount = r.total_count;
                     ids.Add(r.id);
                 }
 
@@ -372,12 +422,23 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 }
 
                 return Result.Success(
-                    PagedResult<Contract>.Create(materialized, page, pageSize, totalCount));
+                    PagedResult<Contract>.Create(materialized, query.Page, query.PageSize, totalCount));
             }
             catch (Exception ex)
             {
                 return Result.Failure<PagedResult<Contract>>(ex);
             }
+        }
+
+        private static string ResolveContractSortColumn(string? sortBy)
+        {
+            if (string.IsNullOrWhiteSpace(sortBy))
+                return "c.created_at";
+
+            if (string.Equals(sortBy, "updatedAt", StringComparison.OrdinalIgnoreCase))
+                return "c.updated_at";
+
+            return "c.created_at";
         }
 
         public async Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(
@@ -656,7 +717,9 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             {
                 using var doc = JsonDocument.Parse(destination.Configuration);
                 if (!doc.RootElement.TryGetProperty("Authentication", out var authentication)
-                    || !authentication.TryGetProperty("Credential", out var credential))
+                    || authentication.ValueKind != JsonValueKind.Object
+                    || !authentication.TryGetProperty("Credential", out var credential)
+                    || credential.ValueKind != JsonValueKind.Object)
                 {
                     return (null, null);
                 }
@@ -715,46 +778,6 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public int? rate_limit_burst { get; set; }
             public DateTimeOffset created_at { get; set; }
             public DateTimeOffset updated_at { get; set; }
-
-            public Contract ToDomain(
-                IEnumerable<string> eventTypes,
-                IEnumerable<ContractSchemaTarget> schemaTargets,
-                ContractFilter? filter)
-            {
-                var type = Enum.Parse<DestinationType>(destination_type, ignoreCase: true);
-                var destination = new Destination(type, destination_config);
-                return Contract.Rehydrate(
-                    id,
-                    customer_id,
-                    enabled,
-                    eventTypes,
-                    schemaTargets,
-                    filter,
-                    destination,
-                    created_at,
-                    updated_at,
-                    DeserializeTransformation(transformation_config),
-                    ContractRateLimit.Create(rate_limit_per_second, rate_limit_per_minute, rate_limit_burst),
-                    ordering_enabled ? ContractOrdering.Create(ordering_key_selector) : null);
-            }
-        }
-
-        private sealed class ContractRowWithCount
-        {
-            public Guid id { get; set; }
-            public string customer_id { get; set; } = string.Empty;
-            public bool enabled { get; set; }
-            public bool ordering_enabled { get; set; }
-            public string? ordering_key_selector { get; set; }
-            public string destination_type { get; set; } = string.Empty;
-            public string destination_config { get; set; } = string.Empty;
-            public string? transformation_config { get; set; }
-            public int? rate_limit_per_second { get; set; }
-            public int? rate_limit_per_minute { get; set; }
-            public int? rate_limit_burst { get; set; }
-            public DateTimeOffset created_at { get; set; }
-            public DateTimeOffset updated_at { get; set; }
-            public long total_count { get; set; }
 
             public Contract ToDomain(
                 IEnumerable<string> eventTypes,

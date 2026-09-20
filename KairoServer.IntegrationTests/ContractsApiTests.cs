@@ -666,6 +666,108 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task ListByCustomer_supports_filter_sort_and_time_range()
+        {
+            var now = DateTimeOffset.UtcNow;
+            await CreateCustomerAsync("acme");
+
+            var createdA = await (await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme", "orders.created")))
+                .Content.ReadFromJsonAsync<ContractCreated>();
+            var createdB = await (await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme", "orders.created")))
+                .Content.ReadFromJsonAsync<ContractCreated>();
+            var createdC = await (await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme", "orders.updated")))
+                .Content.ReadFromJsonAsync<ContractCreated>();
+
+            await _client.PostAsync($"/v1/contracts/{createdB!.Id}/disable", null);
+
+            await using (var conn = new NpgsqlConnection(_fixture.ConnectionString))
+            {
+                await conn.ExecuteAsync(
+                    """
+                    UPDATE contracts
+                    SET created_at = CASE id
+                        WHEN @IdA THEN @CreatedAtA
+                        WHEN @IdB THEN @CreatedAtB
+                        WHEN @IdC THEN @CreatedAtC
+                        ELSE created_at
+                    END
+                    WHERE id IN (@IdA, @IdB, @IdC);
+                    """,
+                    new
+                    {
+                        IdA = createdA!.Id,
+                        IdB = createdB.Id,
+                        IdC = createdC!.Id,
+                        CreatedAtA = now.AddMinutes(-25),
+                        CreatedAtB = now.AddMinutes(-20),
+                        CreatedAtC = now.AddMinutes(-15)
+                    });
+            }
+
+            var url =
+                "/v1/customers/acme/contracts?enabled=true&eventType=orders.created" +
+                $"&createdFrom={Uri.EscapeDataString(now.AddMinutes(-26).ToString("O"))}" +
+                $"&createdTo={Uri.EscapeDataString(now.AddMinutes(-14).ToString("O"))}" +
+                "&sortBy=createdAt&sortDirection=asc&page=1&pageSize=10";
+
+            var resp = await _client.GetAsync(url);
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+            var body = await resp.Content.ReadFromJsonAsync<PagedResponse<ContractView>>();
+            Assert.NotNull(body);
+            Assert.Single(body!.Items);
+            Assert.Equal(createdA.Id, body.Items[0].Id);
+        }
+
+        [Fact]
+        public async Task ListByCustomer_with_createdAt_sort_uses_stable_id_tiebreaker()
+        {
+            var now = DateTimeOffset.UtcNow;
+            await CreateCustomerAsync("acme");
+
+            var first = await (await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme", "orders.created")))
+                .Content.ReadFromJsonAsync<ContractCreated>();
+            var second = await (await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme", "orders.created")))
+                .Content.ReadFromJsonAsync<ContractCreated>();
+
+            await using (var conn = new NpgsqlConnection(_fixture.ConnectionString))
+            {
+                await conn.ExecuteAsync(
+                    """
+                    UPDATE contracts
+                    SET created_at = @CreatedAt
+                    WHERE id IN (@IdA, @IdB);
+                    """,
+                    new
+                    {
+                        IdA = first!.Id,
+                        IdB = second!.Id,
+                        CreatedAt = now.AddMinutes(-10)
+                    });
+            }
+
+            var body = await _client.GetFromJsonAsync<PagedResponse<ContractView>>(
+                "/v1/customers/acme/contracts?sortBy=createdAt&sortDirection=asc&page=1&pageSize=10");
+
+            Assert.NotNull(body);
+            var firstTwo = body!.Items.Take(2).Select(x => x.Id).ToArray();
+            var expected = new[] { first.Id, second.Id }.OrderBy(x => x).ToArray();
+            Assert.Equal(expected, firstTwo);
+        }
+
+        [Theory]
+        [InlineData("/v1/customers/acme/contracts?sortBy=invalid")]
+        [InlineData("/v1/customers/acme/contracts?sortDirection=sideways")]
+        [InlineData("/v1/customers/acme/contracts?createdFrom=2026-01-02T00:00:00Z&createdTo=2026-01-01T00:00:00Z")]
+        public async Task ListByCustomer_with_invalid_query_conventions_returns_400(string url)
+        {
+            await CreateCustomerAsync("acme");
+
+            var resp = await _client.GetAsync(url);
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
+
+        [Fact]
         public async Task Disable_then_Enable_toggles_state()
         {
             await CreateCustomerAsync("acme");
