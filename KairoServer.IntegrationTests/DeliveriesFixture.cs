@@ -70,6 +70,7 @@ namespace KairoServer.IntegrationTests
                 "018_add_delivery_scheduler_indexes.sql",
                 "019_add_delivery_operation_audits.sql",
                 "020_create_delivery_replay_jobs.sql",
+                "022_add_contract_name.sql",
             })
             {
                 var sql = await File.ReadAllTextAsync(Path.Combine(migrationsDir, file));

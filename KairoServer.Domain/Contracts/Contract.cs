@@ -17,6 +17,7 @@ namespace KairoServer.Domain.Contracts
 
         public Guid Id { get; }
         public string CustomerId { get; }
+        public string? Name { get; }
         public bool Enabled { get; private set; }
         public Destination Destination { get; private set; }
         public IReadOnlyCollection<string> EventTypes => _eventTypes;
@@ -31,6 +32,7 @@ namespace KairoServer.Domain.Contracts
         private Contract(
             Guid id,
             string customerId,
+            string? name,
             bool enabled,
             IEnumerable<string> eventTypes,
             IEnumerable<ContractSchemaTarget> schemaTargets,
@@ -44,6 +46,7 @@ namespace KairoServer.Domain.Contracts
         {
             Id = id;
             CustomerId = customerId;
+            Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
             Enabled = enabled;
             _eventTypes = new HashSet<string>(eventTypes, StringComparer.Ordinal);
             _schemaTargets = new List<ContractSchemaTarget>(schemaTargets);
@@ -73,7 +76,8 @@ namespace KairoServer.Domain.Contracts
             DateTimeOffset now,
             ContractPayloadTransformation? transformation = null,
             ContractRateLimit? rateLimit = null,
-            ContractOrdering? ordering = null)
+            ContractOrdering? ordering = null,
+            string? name = null)
         {
             if (string.IsNullOrWhiteSpace(customerId))
                 throw new ArgumentException("Customer id cannot be null or whitespace.", nameof(customerId));
@@ -116,6 +120,7 @@ namespace KairoServer.Domain.Contracts
             return new Contract(
                 Guid.NewGuid(),
                 customerId.Trim(),
+                name,
                 enabled: true,
                 materialized,
                 materializedSchemaTargets,
@@ -135,6 +140,7 @@ namespace KairoServer.Domain.Contracts
         public static Contract Rehydrate(
             Guid id,
             string customerId,
+            string? name,
             bool enabled,
             IEnumerable<string> eventTypes,
             IEnumerable<ContractSchemaTarget>? schemaTargets,
@@ -148,6 +154,7 @@ namespace KairoServer.Domain.Contracts
             new(
                 id,
                 customerId,
+                name,
                 enabled,
                 eventTypes,
                 schemaTargets ?? Array.Empty<ContractSchemaTarget>(),

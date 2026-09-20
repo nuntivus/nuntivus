@@ -42,5 +42,12 @@ namespace KairoServer.Application.Contracts
             UpdateContractCredentialsRequest request,
             CancellationToken cancellationToken,
             string? actorId = null);
+
+        Task<Result<ContractView>> ReplaceAsync(
+            Guid id,
+            UpdateContractRequest request,
+            DateTimeOffset expectedUpdatedAt,
+            CancellationToken cancellationToken,
+            string? actorId = null);
     }
 }

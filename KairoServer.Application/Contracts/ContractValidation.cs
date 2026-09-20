@@ -25,6 +25,7 @@ namespace KairoServer.Application.Contracts
         public const int MaxRateLimitBurst = 10_000_000;
         public const int FilterSelectorMaxLength = 200;
         public const int FilterValueMaxLength = 500;
+        public const int NameMaxLength = 200;
 
         private static readonly Regex FilterSelectorPattern = new(
             "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$",
@@ -36,6 +37,10 @@ namespace KairoServer.Application.Contracts
             && EventTypePattern.IsMatch(value);
 
         public static bool IsValidSchemaVersion(int version) => version > 0;
+
+        public static bool IsValidName(string? value) =>
+            string.IsNullOrWhiteSpace(value)
+            || value!.Trim().Length <= NameMaxLength;
 
         public static bool IsValidFilterSelector(string? value) =>
             !string.IsNullOrWhiteSpace(value)

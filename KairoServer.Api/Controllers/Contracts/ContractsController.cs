@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
@@ -44,7 +45,33 @@ namespace KairoServer.Api.Controllers.Contracts
         public async Task<IActionResult> GetById(Guid id, CancellationToken cancellationToken)
         {
             var result = await _contracts.GetByIdAsync(id, cancellationToken);
-            return result.ToOk(HttpContext);
+            return result.ToActionResult(HttpContext, contract =>
+            {
+                Response.Headers.ETag = BuildEtag(contract.UpdatedAt);
+                return Ok(contract);
+            });
+        }
+
+        [HttpPut("{id:guid}")]
+        public async Task<IActionResult> Replace(
+            Guid id,
+            [FromBody] UpdateContractRequest request,
+            CancellationToken cancellationToken)
+        {
+            if (!TryParseIfMatch(Request.Headers.IfMatch.ToString(), out var expectedUpdatedAt))
+            {
+                return new BadRequestObjectResult(ApiErrorResponse.From(new[]
+                {
+                    KairoServer.Common.Error.Validation("If-Match header with a valid contract ETag is required.")
+                }, HttpContext));
+            }
+
+            var result = await _contracts.ReplaceAsync(id, request, expectedUpdatedAt, cancellationToken, GetActorId());
+            return result.ToActionResult(HttpContext, contract =>
+            {
+                Response.Headers.ETag = BuildEtag(contract.UpdatedAt);
+                return Ok(contract);
+            });
         }
 
         [HttpPost("{id:guid}/enable")]
@@ -89,6 +116,30 @@ namespace KairoServer.Api.Controllers.Contracts
             return User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? User.FindFirstValue(ClaimTypes.Name)
                 ?? User.Identity?.Name;
+        }
+
+        private static string BuildEtag(DateTimeOffset updatedAt) =>
+            $"\"{updatedAt.UtcTicks.ToString("x", CultureInfo.InvariantCulture)}\"";
+
+        private static bool TryParseIfMatch(string? ifMatch, out DateTimeOffset expectedUpdatedAt)
+        {
+            expectedUpdatedAt = default;
+            if (string.IsNullOrWhiteSpace(ifMatch))
+                return false;
+
+            var token = ifMatch.Trim();
+            if (token.StartsWith("W/", StringComparison.OrdinalIgnoreCase))
+                token = token[2..].Trim();
+
+            token = token.Trim('"');
+            if (!long.TryParse(token, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var ticks))
+                return false;
+
+            if (ticks <= 0)
+                return false;
+
+            expectedUpdatedAt = new DateTimeOffset(ticks, TimeSpan.Zero);
+            return true;
         }
     }
 }

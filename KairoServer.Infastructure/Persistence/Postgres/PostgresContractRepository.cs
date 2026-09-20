@@ -38,6 +38,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     (
                         id,
                         customer_id,
+                        name,
                         enabled,
                         ordering_enabled,
                         ordering_key_selector,
@@ -56,6 +57,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     (
                         @Id,
                         @CustomerId,
+                        @Name,
                         @Enabled,
                         @OrderingEnabled,
                         @OrderingKeySelector,
@@ -82,6 +84,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     {
                         contract.Id,
                         contract.CustomerId,
+                        contract.Name,
                         contract.Enabled,
                         OrderingEnabled = contract.Ordering is not null,
                         OrderingKeySelector = contract.Ordering?.KeySelector,
@@ -128,7 +131,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
 
                 const string updateContract = """
                     UPDATE contracts
-                    SET enabled = @Enabled,
+                    SET name = @Name,
+                        enabled = @Enabled,
                         ordering_enabled = @OrderingEnabled,
                         ordering_key_selector = @OrderingKeySelector,
                         destination_type = @DestinationType,
@@ -156,6 +160,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     new
                     {
                         contract.Id,
+                        contract.Name,
                         contract.Enabled,
                         OrderingEnabled = contract.Ordering is not null,
                         OrderingKeySelector = contract.Ordering?.KeySelector,
@@ -202,7 +207,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             try
             {
                 const string sql = """
-                    SELECT id, customer_id, enabled, ordering_enabled, ordering_key_selector, destination_type, destination_config, transformation_config::text AS transformation_config,
+                    SELECT id, customer_id, name, enabled, ordering_enabled, ordering_key_selector, destination_type, destination_config, transformation_config::text AS transformation_config,
                            rate_limit_per_second, rate_limit_per_minute, rate_limit_burst,
                            created_at, updated_at
                     FROM contracts
@@ -306,6 +311,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     SELECT
                         c.id,
                         c.customer_id,
+                        c.name,
                         c.enabled,
                         c.ordering_enabled,
                         c.ordering_key_selector,
@@ -767,6 +773,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
         {
             public Guid id { get; set; }
             public string customer_id { get; set; } = string.Empty;
+            public string? name { get; set; }
             public bool enabled { get; set; }
             public bool ordering_enabled { get; set; }
             public string? ordering_key_selector { get; set; }
@@ -789,6 +796,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 return Contract.Rehydrate(
                     id,
                     customer_id,
+                    name,
                     enabled,
                     eventTypes,
                     schemaTargets,

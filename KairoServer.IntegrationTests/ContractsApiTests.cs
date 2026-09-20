@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -765,6 +766,136 @@ namespace KairoServer.IntegrationTests
 
             var resp = await _client.GetAsync(url);
             Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
+
+        [Fact]
+        public async Task GetById_returns_etag_header()
+        {
+            await CreateCustomerAsync("acme");
+            var create = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme"));
+            var created = await create.Content.ReadFromJsonAsync<ContractCreated>();
+
+            var resp = await _client.GetAsync($"/v1/contracts/{created!.Id}");
+
+            Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+            Assert.True(resp.Headers.ETag is not null);
+        }
+
+        [Fact]
+        public async Task Put_updates_contract_configuration_atomically_with_if_match()
+        {
+            await CreateCustomerAsync("acme");
+            var create = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme", "orders.created"));
+            var created = await create.Content.ReadFromJsonAsync<ContractCreated>();
+
+            var get = await _client.GetAsync($"/v1/contracts/{created!.Id}");
+            var etag = get.Headers.ETag;
+            Assert.NotNull(etag);
+
+            var update = new UpdateContractRequest(
+                Name: "Orders Contract v2",
+                EventTypes: new[] { "orders.created", "orders.updated" },
+                Configuration: new HttpDestinationConfig(
+                    "https://hooks.example.com/v2",
+                    new HttpAuthentication("hmac", new HttpCredential("ref", "secret.acme.v2", 2))),
+                SchemaTargets: null,
+                Filter: null,
+                Transformation: null,
+                RateLimit: new ContractRateLimitConfig(10, 60, 20),
+                Ordering: new ContractOrderingConfig("order.id"));
+
+            using var req = new HttpRequestMessage(HttpMethod.Put, $"/v1/contracts/{created.Id}")
+            {
+                Content = JsonContent.Create(update)
+            };
+            req.Headers.IfMatch.Add(etag!);
+
+            var put = await _client.SendAsync(req);
+            Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+            var body = await put.Content.ReadFromJsonAsync<ContractView>();
+            Assert.NotNull(body);
+            Assert.Equal("Orders Contract v2", body!.Name);
+            Assert.Contains("orders.updated", body.EventTypes);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var row = await conn.QuerySingleAsync<(string? Name, string AuthRef)>(
+                "SELECT name, auth_ref AS AuthRef FROM contracts WHERE id = @id;",
+                new { id = created.Id });
+
+            Assert.Equal("Orders Contract v2", row.Name);
+            Assert.Equal("secret.acme.v2", row.AuthRef);
+        }
+
+        [Fact]
+        public async Task Put_without_if_match_returns_400()
+        {
+            await CreateCustomerAsync("acme");
+            var create = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme", "orders.created"));
+            var created = await create.Content.ReadFromJsonAsync<ContractCreated>();
+
+            var update = new UpdateContractRequest(
+                Name: "n",
+                EventTypes: new[] { "orders.created" },
+                Configuration: new HttpDestinationConfig("https://hooks.example.com/v2", new HttpAuthentication("none")));
+
+            var resp = await _client.PutAsJsonAsync($"/v1/contracts/{created!.Id}", update);
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        }
+
+        [Fact]
+        public async Task Put_with_stale_if_match_returns_409_conflict()
+        {
+            await CreateCustomerAsync("acme");
+            var create = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme", "orders.created"));
+            var created = await create.Content.ReadFromJsonAsync<ContractCreated>();
+
+            var get = await _client.GetAsync($"/v1/contracts/{created!.Id}");
+            var etag = get.Headers.ETag;
+            Assert.NotNull(etag);
+
+            await _client.PostAsync($"/v1/contracts/{created.Id}/disable", null);
+
+            var update = new UpdateContractRequest(
+                Name: "n2",
+                EventTypes: new[] { "orders.created" },
+                Configuration: new HttpDestinationConfig("https://hooks.example.com/v2", new HttpAuthentication("none")));
+
+            using var req = new HttpRequestMessage(HttpMethod.Put, $"/v1/contracts/{created.Id}")
+            {
+                Content = JsonContent.Create(update)
+            };
+            req.Headers.IfMatch.Add(etag!);
+
+            var put = await _client.SendAsync(req);
+            Assert.Equal(HttpStatusCode.Conflict, put.StatusCode);
+        }
+
+        [Fact]
+        public async Task Put_rejects_schema_targets_not_present_in_event_types()
+        {
+            await CreateCustomerAsync("acme");
+            var create = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme", "orders.created"));
+            var created = await create.Content.ReadFromJsonAsync<ContractCreated>();
+            var get = await _client.GetAsync($"/v1/contracts/{created!.Id}");
+
+            var update = new UpdateContractRequest(
+                Name: "n3",
+                EventTypes: new[] { "orders.created" },
+                Configuration: new HttpDestinationConfig("https://hooks.example.com/v2", new HttpAuthentication("none")),
+                SchemaTargets: new[]
+                {
+                    new ContractSchemaTargetRequest("orders.updated", 1)
+                });
+
+            using var req = new HttpRequestMessage(HttpMethod.Put, $"/v1/contracts/{created.Id}")
+            {
+                Content = JsonContent.Create(update)
+            };
+            req.Headers.IfMatch.Add(get.Headers.ETag!);
+
+            var put = await _client.SendAsync(req);
+            Assert.Equal(HttpStatusCode.BadRequest, put.StatusCode);
         }
 
         [Fact]

@@ -15,5 +15,6 @@ namespace KairoServer.Contracts.CustomerContracts
         ContractFilterRequest? Filter = null,
         ContractPayloadTransformationRequest? Transformation = null,
         ContractRateLimitConfig? RateLimit = null,
-        ContractOrderingConfig? Ordering = null);
+        ContractOrderingConfig? Ordering = null,
+        string? Name = null);
 }

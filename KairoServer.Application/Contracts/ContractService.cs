@@ -59,6 +59,10 @@ namespace KairoServer.Application.Contracts
             if (request.EventTypes is null || request.EventTypes.Count == 0)
                 return Result.Failure<ContractCreated>(Error.Validation("At least one event type is required."));
 
+            if (!ContractValidation.IsValidName(request.Name))
+                return Result.Failure<ContractCreated>(Error.Validation(
+                    $"name must be null/empty or at most {ContractValidation.NameMaxLength} characters."));
+
             if (request.EventTypes.Count > ContractValidation.MaxEventTypesPerContract)
                 return Result.Failure<ContractCreated>(Error.Validation(
                     $"A contract can reference at most {ContractValidation.MaxEventTypesPerContract} event types."));
@@ -149,7 +153,8 @@ namespace KairoServer.Application.Contracts
                     now,
                     request.Transformation.ToDomain(),
                     request.RateLimit.ToDomain(),
-                    request.Ordering.ToDomain());
+                    request.Ordering.ToDomain(),
+                    request.Name);
 
                 _unitOfWork.Begin(true);
                 var insert = await _repository.InsertAsync(contract, _unitOfWork, cancellationToken);
@@ -273,6 +278,167 @@ namespace KairoServer.Application.Contracts
                 result.Value.Page,
                 result.Value.PageSize,
                 result.Value.TotalCount));
+        }
+
+        public async Task<Result<ContractView>> ReplaceAsync(
+            Guid id,
+            UpdateContractRequest request,
+            DateTimeOffset expectedUpdatedAt,
+            CancellationToken cancellationToken,
+            string? actorId = null)
+        {
+            if (id == Guid.Empty)
+                return Result.Failure<ContractView>(Error.Validation("Contract id is required."));
+
+            if (request is null)
+                return Result.Failure<ContractView>(Error.Validation("Request body is required."));
+
+            if (!ContractValidation.IsValidName(request.Name))
+                return Result.Failure<ContractView>(Error.Validation(
+                    $"name must be null/empty or at most {ContractValidation.NameMaxLength} characters."));
+
+            if (request.EventTypes is null || request.EventTypes.Count == 0)
+                return Result.Failure<ContractView>(Error.Validation("At least one event type is required."));
+
+            if (request.EventTypes.Count > ContractValidation.MaxEventTypesPerContract)
+                return Result.Failure<ContractView>(Error.Validation(
+                    $"A contract can reference at most {ContractValidation.MaxEventTypesPerContract} event types."));
+
+            foreach (var et in request.EventTypes)
+            {
+                if (!ContractValidation.IsValidEventType(et))
+                    return Result.Failure<ContractView>(Error.Validation(
+                        $"Invalid event type '{et}'. Use dotted lowercase identifiers (e.g. 'orders.created')."));
+            }
+
+            var schemaTargets = request.SchemaTargets ?? Array.Empty<ContractSchemaTargetRequest>();
+            if (schemaTargets.Count > 0)
+            {
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var target in schemaTargets)
+                {
+                    if (!ContractValidation.IsValidEventType(target.EventType))
+                        return Result.Failure<ContractView>(Error.Validation(
+                            $"Invalid schema target event type '{target.EventType}'."));
+
+                    if (!ContractValidation.IsValidSchemaVersion(target.Version))
+                        return Result.Failure<ContractView>(Error.Validation(
+                            $"Invalid schema target version for '{target.EventType}'."));
+
+                    if (!request.EventTypes.Contains(target.EventType, StringComparer.Ordinal))
+                        return Result.Failure<ContractView>(Error.Validation(
+                            $"Schema target event type '{target.EventType}' must exist in eventTypes."));
+
+                    if (!seen.Add(target.EventType))
+                        return Result.Failure<ContractView>(Error.Validation(
+                            $"Duplicate schema target for event type '{target.EventType}'."));
+
+                    var schemaLookup = await _eventDefinitions.GetSchemaVersionAsync(
+                        target.EventType,
+                        target.Version,
+                        cancellationToken);
+
+                    if (schemaLookup.IsFailure)
+                        return Result<ContractView>.Fail(schemaLookup.Errors);
+
+                    if (schemaLookup.Value is null)
+                        return Result.Failure<ContractView>(Error.NotFound(
+                            $"Schema version {target.Version} for '{target.EventType}' was not found."));
+                }
+            }
+
+            var filterValidation = ValidateFilter(request.Filter);
+            if (filterValidation.IsFailure)
+                return Result<ContractView>.Fail(filterValidation.Errors);
+
+            var transformationValidation = ValidateTransformation(request.Transformation);
+            if (transformationValidation.IsFailure)
+                return Result<ContractView>.Fail(transformationValidation.Errors);
+
+            var rateLimitValidation = ValidateRateLimit(request.RateLimit);
+            if (rateLimitValidation.IsFailure)
+                return Result<ContractView>.Fail(rateLimitValidation.Errors);
+
+            var orderingValidation = ValidateOrdering(request.Ordering);
+            if (orderingValidation.IsFailure)
+                return Result<ContractView>.Fail(orderingValidation.Errors);
+
+            var destinationResult = _destinations.Build(request.Configuration);
+            if (destinationResult.IsFailure)
+                return Result<ContractView>.Fail(destinationResult.Errors);
+
+            try
+            {
+                var lookup = await _repository.GetByIdAsync(id, cancellationToken);
+                if (lookup.IsFailure)
+                    return Result<ContractView>.Fail(lookup.Errors);
+
+                var existing = lookup.Value;
+                if (existing is null)
+                    return Result.Failure<ContractView>(Error.NotFound($"Contract '{id}' was not found."));
+
+                if (existing.UpdatedAt != expectedUpdatedAt)
+                    return Result.Failure<ContractView>(Error.Conflict("If-Match ETag does not match current contract version."));
+
+                var now = DateTimeOffset.UtcNow;
+                var domainSchemaTargets = new List<ContractSchemaTarget>(schemaTargets.Count);
+                foreach (var target in schemaTargets)
+                    domainSchemaTargets.Add(new ContractSchemaTarget(target.EventType, target.Version));
+
+                var updated = Contract.Rehydrate(
+                    existing.Id,
+                    existing.CustomerId,
+                    request.Name,
+                    existing.Enabled,
+                    request.EventTypes,
+                    domainSchemaTargets,
+                    request.Filter.ToDomain(),
+                    destinationResult.Value,
+                    existing.CreatedAt,
+                    now,
+                    request.Transformation.ToDomain(),
+                    request.RateLimit.ToDomain(),
+                    request.Ordering.ToDomain());
+
+                _unitOfWork.Begin(true);
+                var update = await _repository.UpdateAsync(updated, _unitOfWork, cancellationToken);
+                if (update.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<ContractView>.Fail(update.Errors);
+                }
+
+                var audit = BuildAudit(
+                    action: "updated",
+                    actorId: actorId,
+                    contract: updated,
+                    operationId: null,
+                    details: JsonSerializer.Serialize(new
+                    {
+                        updated.Id,
+                        updated.CustomerId,
+                        updated.Name,
+                        EventTypes = updated.EventTypes,
+                        DestinationType = updated.Destination.Type.ToString(),
+                    }),
+                    createdAt: now);
+                var auditInsert = await _auditLogs.AddAsync(audit, _unitOfWork, cancellationToken);
+                if (auditInsert.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<ContractView>.Fail(auditInsert.Errors);
+                }
+
+                _unitOfWork.Commit();
+                _logger.Information("Contract updated {ContractId}.", updated.Id);
+                return MapToView(updated);
+            }
+            catch (Exception ex)
+            {
+                _unitOfWork.Rollback();
+                _logger.Error(ex, "Failed to update contract {ContractId}.", id);
+                return Result.Failure<ContractView>(ex);
+            }
         }
 
         public Task<Result<ContractView>> EnableAsync(Guid id, CancellationToken cancellationToken, string? actorId = null) =>
@@ -485,7 +651,8 @@ namespace KairoServer.Application.Contracts
                 ContractMapping.MapDestinationType(contract.Destination.Type),
                 redactedConfig.Value,
                 contract.CreatedAt,
-                contract.UpdatedAt));
+                contract.UpdatedAt,
+                contract.Name));
         }
 
         private static Result ValidateOrdering(ContractOrderingConfig? ordering)

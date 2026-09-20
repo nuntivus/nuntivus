@@ -14,5 +14,6 @@ namespace KairoServer.Contracts.CustomerContracts
         ContractRateLimitConfig? RateLimit,
         ContractOrderingConfig? Ordering,
         DestinationType DestinationType,
-        DateTimeOffset CreatedAt);
+        DateTimeOffset CreatedAt,
+        string? Name = null);
 }

@@ -25,7 +25,8 @@ namespace KairoServer.Application.Contracts
                 MapDestinationType(c.Destination.Type),
                 c.Destination.Configuration,
                 c.CreatedAt,
-                c.UpdatedAt);
+                c.UpdatedAt,
+                c.Name);
 
         public static ContractCreated ToCreated(this Contract c) =>
             new(
@@ -39,7 +40,8 @@ namespace KairoServer.Application.Contracts
                 ToRateLimitConfig(c.RateLimit),
                 ToOrderingConfig(c.Ordering),
                 MapDestinationType(c.Destination.Type),
-                c.CreatedAt);
+                c.CreatedAt,
+                c.Name);
 
         public static ContractFilter? ToDomain(this ContractFilterRequest? filter)
         {

@@ -16,5 +16,6 @@ namespace KairoServer.Contracts.CustomerContracts
         DestinationType DestinationType,
         string DestinationConfiguration,
         DateTimeOffset CreatedAt,
-        DateTimeOffset UpdatedAt);
+        DateTimeOffset UpdatedAt,
+        string? Name = null);
 }
