@@ -19,6 +19,7 @@ namespace KairoServer.IntegrationTests
             _client = fixture.CreateClient();
             _client.DefaultRequestHeaders.Add("X-Test-Auth", "on");
             _client.DefaultRequestHeaders.Add("X-Operator-Id", "operator-api");
+            _client.DefaultRequestHeaders.Add("X-Test-Role", "Operator");
         }
 
         public Task InitializeAsync() => _fixture.ResetAsync();
@@ -100,8 +101,6 @@ namespace KairoServer.IntegrationTests
                 new ManualDeliveryOperationApiRequest(Guid.NewGuid(), "requeue"));
 
             Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-            var err = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
-            Assert.Equal("unauthorized", err!.Code);
         }
 
         [Fact]

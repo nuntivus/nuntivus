@@ -12,6 +12,7 @@ Quick automation script:
 The script also writes a backup `manifest.json` designed to stay compatible with future dashboard-based operations.
 
 - [Production configuration guide](./production-configuration.md)
+- [Admin authentication and RBAC](./admin-authentication.md)
 - [Backup guide](./backup.md)
 - [Restore guide](./restore.md)
 - [Upgrade guide](./upgrade.md)

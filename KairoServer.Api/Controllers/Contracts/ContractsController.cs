@@ -4,9 +4,11 @@ using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Api.Common;
+using KairoServer.Api.Security;
 using KairoServer.Application.Contracts;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.CustomerContracts;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KairoServer.Api.Controllers.Contracts
@@ -27,6 +29,7 @@ namespace KairoServer.Api.Controllers.Contracts
         }
 
         [HttpPost]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Create(
             [FromBody] CreateContractRequest request,
             CancellationToken cancellationToken)
@@ -53,6 +56,7 @@ namespace KairoServer.Api.Controllers.Contracts
         }
 
         [HttpPut("{id:guid}")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Replace(
             Guid id,
             [FromBody] UpdateContractRequest request,
@@ -75,6 +79,7 @@ namespace KairoServer.Api.Controllers.Contracts
         }
 
         [HttpPost("{id:guid}/enable")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Enable(Guid id, CancellationToken cancellationToken)
         {
             var result = await _contracts.EnableAsync(id, cancellationToken, GetActorId());
@@ -82,6 +87,7 @@ namespace KairoServer.Api.Controllers.Contracts
         }
 
         [HttpPost("{id:guid}/disable")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Disable(Guid id, CancellationToken cancellationToken)
         {
             var result = await _contracts.DisableAsync(id, cancellationToken, GetActorId());
@@ -89,6 +95,7 @@ namespace KairoServer.Api.Controllers.Contracts
         }
 
         [HttpPost("{id:guid}/credentials")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> UpdateCredentials(
             Guid id,
             [FromBody] UpdateContractCredentialsRequest request,
@@ -99,6 +106,7 @@ namespace KairoServer.Api.Controllers.Contracts
         }
 
         [HttpPost("{id:guid}/credentials/rotate")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> RotateCredentials(
             Guid id,
             [FromBody] UpdateContractCredentialsRequest request,

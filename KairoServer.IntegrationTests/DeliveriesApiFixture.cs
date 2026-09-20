@@ -76,11 +76,15 @@ namespace KairoServer.IntegrationTests
                             var operatorId = context.Request.Headers.TryGetValue("X-Operator-Id", out var op)
                                 ? op.ToString()
                                 : "operator-it";
+                            var role = context.Request.Headers.TryGetValue("X-Test-Role", out var requestedRole)
+                                ? requestedRole.ToString()
+                                : "Viewer";
 
                             var identity = new ClaimsIdentity(
                             [
                                 new Claim(ClaimTypes.NameIdentifier, operatorId),
                                 new Claim(ClaimTypes.Name, operatorId),
+                                new Claim(ClaimTypes.Role, role),
                             ],
                             "TestAuth");
                             context.User = new ClaimsPrincipal(identity);

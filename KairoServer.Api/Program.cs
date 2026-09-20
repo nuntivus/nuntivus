@@ -2,6 +2,7 @@ using KairoServer.Application.Caching;
 using KairoServer.Application.Contracts;
 using KairoServer.Application.Contracts.Destinations;
 using KairoServer.Application.Customers;
+using KairoServer.Application.Dashboard;
 using KairoServer.Application.Deliveries.Health;
 using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
@@ -11,6 +12,7 @@ using KairoServer.Application.Persistence;
 using KairoServer.Application.Security;
 using KairoServer.Application.Sources;
 using KairoServer.Api.Common;
+using KairoServer.Api.Security;
 using KairoServer.Api.Controllers.Events;
 using KairoServer.Api.Controllers.Sources;
 using KairoServer.Infastructure.Configuration;
@@ -22,6 +24,7 @@ using KairoServer.Infastructure.Persistence.Caching;
 using KairoServer.Infastructure.Persistence.Postgres;
 using KairoServer.Infastructure.Persistence.Postgres.Migrations;
 using KairoServer.Domain.Deliveries;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.Options;
@@ -127,6 +130,32 @@ builder.AddKairoLogging();
 
 builder.Services.AddControllers();
 
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        options.Authority = builder.Configuration["Authentication:Authority"];
+        options.Audience = builder.Configuration["Authentication:Audience"];
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(AdminAuthorizationPolicies.Viewer, policy =>
+        policy.RequireRole(
+            AdminAuthorizationPolicies.ViewerRole,
+            AdminAuthorizationPolicies.OperatorRole,
+            AdminAuthorizationPolicies.AdminRole));
+
+    options.AddPolicy(AdminAuthorizationPolicies.Operator, policy =>
+        policy.RequireRole(
+            AdminAuthorizationPolicies.OperatorRole,
+            AdminAuthorizationPolicies.AdminRole));
+
+    options.AddPolicy(AdminAuthorizationPolicies.Admin, policy =>
+        policy.RequireRole(AdminAuthorizationPolicies.AdminRole));
+});
+
 builder.Services.AddSingleton(new RequiredTablesReadinessOption
 {
     Schema = "public",
@@ -189,6 +218,10 @@ builder.Services.AddScoped<ISourceIngestionService, SourceIngestionService>();
 builder.Services.AddScoped<IEventDefinitionService, EventDefinitionService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContractService, ContractService>();
+builder.Services.AddScoped<IDashboardOverviewQueryService, DashboardOverviewQueryService>();
+builder.Services.AddScoped<ICustomerAdminSummaryQueryService, CustomerAdminSummaryQueryService>();
+builder.Services.AddScoped<IContractAdminSummaryQueryService, ContractAdminSummaryQueryService>();
+builder.Services.AddScoped<IAdminFailedDeliveryQueryService, AdminFailedDeliveryQueryService>();
 builder.Services.AddScoped<IDeliveryQueryService, DeliveryQueryService>();
 builder.Services.AddScoped<IDestinationHealthQueryService, DestinationHealthQueryService>();
 builder.Services.AddScoped<IDeliveryRecoveryService, DeliveryRecoveryService>();
@@ -228,6 +261,7 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

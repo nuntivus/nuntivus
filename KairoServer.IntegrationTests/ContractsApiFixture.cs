@@ -1,8 +1,11 @@
 using System.Threading.Tasks;
+using System.Security.Claims;
 using Dapper;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -55,11 +58,51 @@ namespace KairoServer.IntegrationTests
                     ["Database:PostgresConnectionString"] = ConnectionString
                 });
             });
+
+            builder.ConfigureServices(services =>
+            {
+                services.AddTransient<IStartupFilter, TestPrincipalStartupFilter>();
+            });
         }
 
         private async Task ApplyMigrationsAsync()
         {
             await MigrationTestHelper.ApplyAllAsync(ConnectionString);
+        }
+
+        private sealed class TestPrincipalStartupFilter : IStartupFilter
+        {
+            public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+            {
+                return app =>
+                {
+                    app.Use(async (context, nextMiddleware) =>
+                    {
+                        if (context.Request.Headers.TryGetValue("X-Test-Auth", out var value) && value == "on")
+                        {
+                            var operatorId = context.Request.Headers.TryGetValue("X-Operator-Id", out var op)
+                                ? op.ToString()
+                                : "operator-it";
+                            var role = context.Request.Headers.TryGetValue("X-Test-Role", out var requestedRole)
+                                ? requestedRole.ToString()
+                                : "Operator";
+
+                            var identity = new ClaimsIdentity(
+                            [
+                                new Claim(ClaimTypes.NameIdentifier, operatorId),
+                                new Claim(ClaimTypes.Name, operatorId),
+                                new Claim(ClaimTypes.Role, role),
+                            ],
+                            "TestAuth");
+                            context.User = new ClaimsPrincipal(identity);
+                        }
+
+                        await nextMiddleware();
+                    });
+
+                    next(app);
+                };
+            }
         }
     }
 

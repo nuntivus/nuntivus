@@ -4,11 +4,13 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Api.Common;
+using KairoServer.Api.Security;
 using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Common;
 using KairoServer.Common.Logging;
 using KairoServer.Domain.Deliveries;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KairoServer.Api.Controllers.Deliveries
@@ -74,6 +76,7 @@ namespace KairoServer.Api.Controllers.Deliveries
         }
 
         [HttpPost("{id:guid}/retry")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Retry(
             Guid id,
             [FromBody] ManualDeliveryOperationApiRequest request,
@@ -94,6 +97,7 @@ namespace KairoServer.Api.Controllers.Deliveries
         }
 
         [HttpPost("{id:guid}/requeue")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Requeue(
             Guid id,
             [FromBody] ManualDeliveryOperationApiRequest request,
@@ -114,6 +118,7 @@ namespace KairoServer.Api.Controllers.Deliveries
         }
 
         [HttpPost("{id:guid}/cancel")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Cancel(
             Guid id,
             [FromBody] ManualDeliveryOperationApiRequest request,
@@ -148,6 +153,7 @@ namespace KairoServer.Api.Controllers.Deliveries
         }
 
         [HttpPost("replay-jobs")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> CreateReplayJob(
             [FromBody] DeliveryReplayJobApiRequest request,
             CancellationToken cancellationToken)

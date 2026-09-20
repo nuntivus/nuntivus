@@ -3,11 +3,13 @@ using System.Threading.Tasks;
 using System.Security.Claims;
 using KairoServer.Api.Common;
 using KairoServer.Api.Controllers.Contracts;
+using KairoServer.Api.Security;
 using KairoServer.Application.Contracts;
 using KairoServer.Application.Customers;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.CustomerContracts;
 using KairoServer.Contracts.Customers;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KairoServer.Api.Controllers.Customers
@@ -31,6 +33,7 @@ namespace KairoServer.Api.Controllers.Customers
         }
 
         [HttpPost]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Create(
             [FromBody] CreateCustomerRequest request,
             CancellationToken cancellationToken)
@@ -82,6 +85,7 @@ namespace KairoServer.Api.Controllers.Customers
         }
 
         [HttpPost("{id}/enable")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Enable(string id, CancellationToken cancellationToken)
         {
             var result = await _customers.EnableAsync(id, cancellationToken, GetActorId());
@@ -89,6 +93,7 @@ namespace KairoServer.Api.Controllers.Customers
         }
 
         [HttpPost("{id}/disable")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Disable(string id, CancellationToken cancellationToken)
         {
             var result = await _customers.DisableAsync(id, cancellationToken, GetActorId());

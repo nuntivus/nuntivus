@@ -2,8 +2,10 @@ using KairoServer.Application.Events;
 using KairoServer.Application.Events.Queries;
 using KairoServer.Application.Sources;
 using KairoServer.Api.Common;
+using KairoServer.Api.Security;
 using KairoServer.Common.Extensions;
 using KairoServer.Common.Logging;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using System.Text.Json;
@@ -65,6 +67,7 @@ namespace KairoServer.Api.Controllers.Events
         }
 
         [HttpPost]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Publish(
             PublishEventRequest request,
             CancellationToken cancellationToken)
@@ -94,6 +97,7 @@ namespace KairoServer.Api.Controllers.Events
         }
 
         [HttpPost("{id:guid}/replay")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Replay(
             Guid id,
             ReplayEventRequest request,

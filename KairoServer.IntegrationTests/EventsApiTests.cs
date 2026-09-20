@@ -23,6 +23,8 @@ namespace KairoServer.IntegrationTests
         {
             _fixture = fixture;
             _client = fixture.CreateClient();
+            _client.DefaultRequestHeaders.Add("X-Test-Auth", "on");
+            _client.DefaultRequestHeaders.Add("X-Test-Role", "Operator");
         }
 
         public Task InitializeAsync() => _fixture.ResetAsync();
