@@ -194,7 +194,9 @@ namespace KairoServer.IntegrationTests
                          "016_add_delivery_contract_snapshots.sql",
                          "017_add_contract_snapshot_columns.sql",
                          "018_add_delivery_scheduler_indexes.sql",
+                          "019_add_delivery_operation_audits.sql",
                          "020_create_delivery_replay_jobs.sql",
+                          "021_create_audit_logs.sql",
                           "022_add_contract_name.sql",
                      })
             {

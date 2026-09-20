@@ -73,6 +73,7 @@ namespace KairoServer.IntegrationTests
                 "004_create_contracts.sql",
                 "005_create_deliveries.sql",
                 "006_create_delivery_attempts.sql",
+                "007_create_event_replays.sql",
                 "008_create_event_definitions.sql",
                 "009_create_contract_filters.sql",
                 "010_add_contract_payload_transformations.sql",
@@ -83,6 +84,9 @@ namespace KairoServer.IntegrationTests
                 "015_add_outbox_claim_indexes.sql",
                 "016_add_delivery_contract_snapshots.sql",
                 "017_add_contract_snapshot_columns.sql",
+                "018_add_delivery_scheduler_indexes.sql",
+                "019_add_delivery_operation_audits.sql",
+                "020_create_delivery_replay_jobs.sql",
                 "021_create_audit_logs.sql",
                 "022_add_contract_name.sql"
             })

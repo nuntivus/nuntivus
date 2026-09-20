@@ -8,14 +8,15 @@ using KairoServer.Application.Events;
 using KairoServer.Application.Events.Queries;
 using KairoServer.Application.Persistence;
 using KairoServer.Application.Security;
+using KairoServer.Api.Common;
 using KairoServer.Api.Controllers.Events;
 using KairoServer.Infastructure.Configuration;
 using KairoServer.Infastructure.Caching;
 using KairoServer.Infastructure.Deliveries.Http;
+using KairoServer.Infastructure.Health;
 using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Persistence.Caching;
 using KairoServer.Infastructure.Persistence.Postgres;
-using KairoServer.Api.Common;
 using KairoServer.Domain.Deliveries;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -108,8 +109,15 @@ builder.AddKairoLogging();
 
 builder.Services.AddControllers();
 
+builder.Services.AddSingleton(new RequiredTablesReadinessOption
+{
+    Schema = "public",
+    Tables = RequiredTablesReadinessDefaults.CoreTables,
+});
+
 builder.Services.AddHealthChecks()
-    .AddCheck<PostgresHealthCheck>("postgres", tags: new[] { "ready" })
+    .AddCheck<PostgresConnectionHealthCheck>("postgres", tags: new[] { "ready" })
+    .AddCheck<PostgresRequiredTablesHealthCheck>("migration_tables", tags: new[] { "ready" })
     .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: new[] { "live" });
 
 builder.Services.AddEndpointsApiExplorer();

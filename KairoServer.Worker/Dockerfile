@@ -3,8 +3,13 @@
 # This stage is used when running from VS in fast mode (Default for Debug configuration)
 FROM mcr.microsoft.com/dotnet/runtime:8.0 AS base
 WORKDIR /app
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends wget \
+	&& rm -rf /var/lib/apt/lists/*
 USER $APP_UID
 ENV DOTNET_EnableDiagnostics=0
+ENV ASPNETCORE_URLS=http://+:8081
+EXPOSE 8081
 
 
 # This stage is used to build the service project
@@ -31,4 +36,5 @@ RUN dotnet publish "./KairoServer.Worker.csproj" -c $BUILD_CONFIGURATION -o /app
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD wget -qO- http://localhost:8081/health/ready || exit 1
 ENTRYPOINT ["dotnet", "KairoServer.Worker.dll"]

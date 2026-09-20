@@ -13,6 +13,7 @@ using KairoServer.Infastructure.Caching;
 using KairoServer.Infastructure.Configuration;
 using KairoServer.Infastructure.Deliveries;
 using KairoServer.Infastructure.Deliveries.Http;
+using KairoServer.Infastructure.Health;
 using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Messaging.Nats;
 using KairoServer.Infastructure.Persistence.Caching;
@@ -22,6 +23,9 @@ using KairoServer.Worker.Deliveries;
 using KairoServer.Worker.Matching;
 using KairoServer.Worker.Outbox;
 using KairoServer.Worker.Retention;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Options;
 using NATS.Client.Core;
 using NATS.Client.JetStream;
@@ -29,7 +33,9 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.UseUrls(builder.Configuration["Health:Url"] ?? "http://0.0.0.0:8081");
 
 builder.Configuration.AddKairoEnvironmentVariableMappings();
 
@@ -277,6 +283,19 @@ builder.Services.AddSingleton<IDurableConsumerFactory, NatsDurableConsumerFactor
 
 builder.Services.AddSingleton<IEventBusPublisher, NatsEventBusPublisher>();
 
+builder.Services.AddSingleton(new RequiredTablesReadinessOption
+{
+    Schema = "public",
+    Tables = RequiredTablesReadinessDefaults.CoreTables,
+});
+
+builder.Services.AddHealthChecks()
+    .AddCheck<PostgresConnectionHealthCheck>("postgres", tags: new[] { "ready" })
+    .AddCheck<PostgresRequiredTablesHealthCheck>("migration_tables", tags: new[] { "ready" })
+    .AddCheck<NatsConnectionHealthCheck>("nats", tags: new[] { "ready" })
+    .AddCheck<JetStreamHealthCheck>("jetstream", tags: new[] { "ready" })
+    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: new[] { "live" });
+
 // Delivery execution boundary (HTTP transport for now).
 builder.Services.AddDeliveryExecution();
 
@@ -315,5 +334,16 @@ if (workerRuntime.EnableRetentionCleanup)
     builder.Services.AddHostedService<RetentionCleanupWorker>();
 }
 
-var host = builder.Build();
-host.Run();
+var app = builder.Build();
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("live"),
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+});
+
+app.Run();
