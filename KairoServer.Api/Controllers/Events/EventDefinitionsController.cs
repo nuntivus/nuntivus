@@ -60,6 +60,21 @@ namespace KairoServer.Api.Controllers.Events
             return result.ToPagedOk(HttpContext);
         }
 
+        [HttpPut("{eventType}")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
+        public async Task<IActionResult> UpdateDescription(
+            string eventType,
+            [FromBody] UpdateEventDefinitionDescriptionRequest request,
+            CancellationToken cancellationToken)
+        {
+            var result = await _definitions.UpdateDescriptionAsync(
+                eventType,
+                request?.Description,
+                cancellationToken);
+
+            return result.ToOk(HttpContext);
+        }
+
         [HttpPost("{eventType}/schemas")]
         [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> CreateSchemaDraft(

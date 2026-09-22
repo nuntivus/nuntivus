@@ -11,6 +11,10 @@ namespace KairoServer.Api.Controllers.Deliveries
 
         public Guid? ContractId { get; set; }
 
+        public string? DestinationType { get; set; }
+
+        public string? FailureCategory { get; set; }
+
         public string? Status { get; set; }
 
         public DateTimeOffset? CreatedFrom { get; set; }

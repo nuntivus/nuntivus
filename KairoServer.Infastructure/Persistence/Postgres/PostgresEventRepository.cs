@@ -480,6 +480,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         d.event_id               AS EventId,
                         d.customer_id            AS CustomerId,
                         d.contract_id            AS ContractId,
+                        d.destination_type       AS DestinationType,
                         d.event_type             AS EventType,
                         d.status                 AS Status,
                         d.attempt_count          AS AttemptCount,
@@ -570,6 +571,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public Guid EventId { get; set; }
             public string CustomerId { get; set; } = string.Empty;
             public Guid ContractId { get; set; }
+            public string DestinationType { get; set; } = string.Empty;
             public string EventType { get; set; } = string.Empty;
             public string Status { get; set; } = string.Empty;
             public int AttemptCount { get; set; }
@@ -597,6 +599,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 row.EventId,
                 row.CustomerId,
                 row.ContractId,
+                row.DestinationType,
                 row.EventType,
                 Enum.Parse<DeliveryStatus>(row.Status),
                 row.AttemptCount,

@@ -101,6 +101,8 @@ namespace KairoServer.Application.Dashboard
                     null,
                     null,
                     contractId,
+                    null,
+                    null,
                     status,
                     null,
                     null,

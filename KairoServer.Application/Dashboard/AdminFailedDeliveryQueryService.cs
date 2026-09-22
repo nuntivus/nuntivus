@@ -29,6 +29,8 @@ namespace KairoServer.Application.Dashboard
                     query.EventId,
                     query.CustomerId,
                     query.ContractId,
+                    null,
+                    null,
                     DeliveryStatus.Failed,
                     query.CreatedFrom,
                     query.CreatedTo,

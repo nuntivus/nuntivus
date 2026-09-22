@@ -49,6 +49,13 @@ namespace KairoServer.Infastructure.Persistence.Caching
                 ct => _inner.ListAsync(page, pageSize, ct),
                 cancellationToken);
 
+        public Task<Result<int>> UpdateDescriptionAsync(
+            string eventType,
+            string? description,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken) =>
+            _inner.UpdateDescriptionAsync(eventType, description, uow, cancellationToken);
+
         public Task<Result> InsertSchemaVersionAsync(
             EventSchemaVersion schemaVersion,
             IUnitOfWork uow,

@@ -21,6 +21,10 @@ namespace KairoServer.Application.Contracts
             ContractListQuery query,
             CancellationToken cancellationToken);
 
+        Task<Result<PagedResult<ContractView>>> ListAsync(
+            AdminContractListQuery query,
+            CancellationToken cancellationToken);
+
         Task<Result<ContractView>> EnableAsync(
             Guid id,
             CancellationToken cancellationToken,

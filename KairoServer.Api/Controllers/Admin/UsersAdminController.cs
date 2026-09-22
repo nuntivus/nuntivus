@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading;
@@ -22,6 +24,20 @@ namespace KairoServer.Api.Controllers.Admin
         public UsersAdminController(IAdminUserRoleService adminUsers)
         {
             _adminUsers = adminUsers;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> List(CancellationToken cancellationToken)
+        {
+            var result = await _adminUsers.ListAsync(cancellationToken);
+            return result.ToOk(HttpContext);
+        }
+
+        [HttpGet("{subject}")]
+        public async Task<IActionResult> GetBySubject(string subject, CancellationToken cancellationToken)
+        {
+            var result = await _adminUsers.GetAsync(subject, cancellationToken);
+            return result.ToOk(HttpContext);
         }
 
         [HttpGet("me")]
@@ -60,23 +76,30 @@ namespace KairoServer.Api.Controllers.Admin
             [FromBody] ReplaceAdminUserRolesRequest request,
             CancellationToken cancellationToken)
         {
-            var inputRoles = request.Roles ?? [];
-            var uniqueInputRoles = inputRoles
-                .Where(static role => !string.IsNullOrWhiteSpace(role))
-                .Select(static role => role.Trim())
-                .Distinct(System.StringComparer.OrdinalIgnoreCase)
-                .OrderBy(static role => role, System.StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            var normalizedRoles = AdminPermissionCatalog.NormalizeRoles(uniqueInputRoles);
+            var roleValidation = ValidateRoles(request.Roles);
+            if (roleValidation.IsFailure)
+                return roleValidation.ErrorResult!;
 
-            if (normalizedRoles.Count != uniqueInputRoles.Length)
+            var result = await _adminUsers.ReplaceAsync(
+                subject,
+                request.DisplayName,
+                roleValidation.Roles,
+                GetActorId(),
+                cancellationToken);
+
+            return result.ToOk(HttpContext);
+        }
+
+        [HttpPost]
+        [Authorize(Policy = AdminAuthorizationPolicies.Admin)]
+        public async Task<IActionResult> Create(
+            [FromBody] CreateAdminUserRequest request,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(request.Subject))
             {
-                var unknownRoles = uniqueInputRoles
-                    .Except(normalizedRoles, System.StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-
                 var payload = ApiErrorResponse.From(
-                    [Error.Validation($"Unknown roles: {string.Join(", ", unknownRoles)}")],
+                    [Error.Validation("subject is required.")],
                     HttpContext);
                 return new ObjectResult(payload)
                 {
@@ -84,10 +107,14 @@ namespace KairoServer.Api.Controllers.Admin
                 };
             }
 
+            var roleValidation = ValidateRoles(request.Roles);
+            if (roleValidation.IsFailure)
+                return roleValidation.ErrorResult!;
+
             var result = await _adminUsers.ReplaceAsync(
-                subject,
+                request.Subject,
                 request.DisplayName,
-                normalizedRoles,
+                roleValidation.Roles,
                 GetActorId(),
                 cancellationToken);
 
@@ -119,6 +146,34 @@ namespace KairoServer.Api.Controllers.Admin
             return User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? User.FindFirstValue(ClaimTypes.Name)
                 ?? User.Identity?.Name;
+        }
+
+        private (bool IsFailure, IActionResult? ErrorResult, IReadOnlyList<string> Roles) ValidateRoles(IReadOnlyList<string>? roles)
+        {
+            var inputRoles = roles ?? [];
+            var uniqueInputRoles = inputRoles
+                .Where(static role => !string.IsNullOrWhiteSpace(role))
+                .Select(static role => role.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static role => role, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            var normalizedRoles = AdminPermissionCatalog.NormalizeRoles(uniqueInputRoles);
+            if (normalizedRoles.Count == uniqueInputRoles.Length)
+                return (false, null, normalizedRoles);
+
+            var unknownRoles = uniqueInputRoles
+                .Except(normalizedRoles, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            var payload = ApiErrorResponse.From(
+                [Error.Validation($"Unknown roles: {string.Join(", ", unknownRoles)}")],
+                HttpContext);
+
+            return (true, new ObjectResult(payload)
+            {
+                StatusCode = payload.Status
+            }, Array.Empty<string>());
         }
     }
 }

@@ -8,6 +8,13 @@ namespace KairoServer.Application.Security
 {
     public interface IAdminUserRoleService
     {
+        Task<Result<IReadOnlyList<AdminUserRoleAssignmentView>>> ListAsync(
+            CancellationToken cancellationToken);
+
+        Task<Result<AdminUserRoleAssignmentView>> GetAsync(
+            string subject,
+            CancellationToken cancellationToken);
+
         Task<Result<AdminUserRoleAssignmentView>> ReplaceAsync(
             string subject,
             string? displayName,

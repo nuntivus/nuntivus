@@ -9,6 +9,9 @@ namespace KairoServer.Application.Persistence
 {
     public interface IAdminUserRoleRepository
     {
+        Task<Result<IReadOnlyList<AdminUserRoleAssignment>>> ListAsync(
+            CancellationToken cancellationToken);
+
         Task<Result> ReplaceAsync(
             string subject,
             string? displayName,

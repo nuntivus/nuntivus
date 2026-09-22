@@ -1,32 +1,37 @@
-import { Button, Card, Flex, Heading, Text, TextArea } from '@radix-ui/themes'
+import { AlertDialog, Button, Card, Flex, Heading, Spinner, Text, TextArea } from '@radix-ui/themes'
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
-import { signIn } from '../store/auth-slice'
+import { clearAuthError, loginWithToken } from '../store/auth-slice'
 
 export function LoginPage() {
   const [tokenInput, setTokenInput] = useState('')
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const location = useLocation()
-  const token = useAppSelector((state) => state.auth.token)
+  const { token, status, error } = useAppSelector((state) => state.auth)
 
   const redirectTo = (location.state as { from?: { pathname?: string } } | null)
     ?.from?.pathname
 
-  if (token) {
+  if (status === 'authenticated' && token) {
     return <Navigate to={redirectTo || '/'} replace />
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const restoringSession = status === 'loading' && !!token
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     if (!tokenInput.trim()) {
       return
     }
 
-    dispatch(signIn(tokenInput))
-    navigate(redirectTo || '/', { replace: true })
+    const result = await dispatch(loginWithToken(tokenInput))
+
+    if (loginWithToken.fulfilled.match(result)) {
+      navigate(redirectTo || '/', { replace: true })
+    }
   }
 
   return (
@@ -38,14 +43,44 @@ export function LoginPage() {
             <Text size="2" color="gray">
               Paste a JWT bearer token to start an authenticated admin session.
             </Text>
+
+            {restoringSession ? (
+              <Flex align="center" gap="2">
+                <Spinner size="2" />
+                <Text size="2" color="gray">
+                  Validating existing session...
+                </Text>
+              </Flex>
+            ) : null}
+
+            {error ? (
+              <AlertDialog.Root open>
+                <AlertDialog.Content maxWidth="520px">
+                  <AlertDialog.Title>Login failed</AlertDialog.Title>
+                  <AlertDialog.Description>{error}</AlertDialog.Description>
+                  <Flex justify="end" mt="4">
+                    <AlertDialog.Action>
+                      <Button variant="soft" onClick={() => dispatch(clearAuthError())}>
+                        Dismiss
+                      </Button>
+                    </AlertDialog.Action>
+                  </Flex>
+                </AlertDialog.Content>
+              </AlertDialog.Root>
+            ) : null}
+
             <TextArea
               value={tokenInput}
               onChange={(event) => setTokenInput(event.target.value)}
               placeholder="eyJhbGciOi..."
               rows={6}
+              disabled={restoringSession}
             />
-            <Button type="submit" disabled={!tokenInput.trim()}>
-              Sign in
+            <Button
+              type="submit"
+              disabled={!tokenInput.trim() || status === 'loading' || restoringSession}
+            >
+              {status === 'loading' ? 'Signing in...' : 'Sign in'}
             </Button>
           </Flex>
         </form>

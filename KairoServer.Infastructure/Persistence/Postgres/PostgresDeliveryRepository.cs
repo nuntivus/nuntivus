@@ -156,6 +156,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         d.event_id               AS EventId,
                         d.customer_id            AS CustomerId,
                         d.contract_id            AS ContractId,
+                        d.destination_type       AS DestinationType,
                         d.event_type             AS EventType,
                         d.status                 AS Status,
                         d.attempt_count          AS AttemptCount,
@@ -321,6 +322,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         d.event_id               AS EventId,
                         d.customer_id            AS CustomerId,
                         d.contract_id            AS ContractId,
+                        d.destination_type       AS DestinationType,
                         d.event_type             AS EventType,
                         d.status                 AS Status,
                         d.attempt_count          AS AttemptCount,
@@ -359,6 +361,17 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     WHERE (@EventId IS NULL OR d.event_id = @EventId)
                         AND (@CustomerId IS NULL OR d.customer_id = @CustomerId)
                         AND (@ContractId IS NULL OR d.contract_id = @ContractId)
+                        AND (@DestinationType IS NULL OR d.destination_type = @DestinationType)
+                        AND (
+                            @FailureCategory IS NULL
+                            OR EXISTS (
+                                SELECT 1
+                                FROM delivery_attempts daf
+                                WHERE daf.delivery_id = d.id
+                                    AND daf.succeeded = FALSE
+                                    AND daf.failure_category = @FailureCategory
+                            )
+                        )
                         AND (@Status IS NULL OR d.status = @Status)
                         AND (@CreatedFrom IS NULL OR d.created_at >= @CreatedFrom)
                         AND (@CreatedTo IS NULL OR d.created_at <= @CreatedTo)
@@ -370,6 +383,17 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     WHERE (@EventId IS NULL OR d.event_id = @EventId)
                         AND (@CustomerId IS NULL OR d.customer_id = @CustomerId)
                         AND (@ContractId IS NULL OR d.contract_id = @ContractId)
+                        AND (@DestinationType IS NULL OR d.destination_type = @DestinationType)
+                        AND (
+                            @FailureCategory IS NULL
+                            OR EXISTS (
+                                SELECT 1
+                                FROM delivery_attempts daf
+                                WHERE daf.delivery_id = d.id
+                                    AND daf.succeeded = FALSE
+                                    AND daf.failure_category = @FailureCategory
+                            )
+                        )
                         AND (@Status IS NULL OR d.status = @Status)
                         AND (@CreatedFrom IS NULL OR d.created_at >= @CreatedFrom)
                         AND (@CreatedTo IS NULL OR d.created_at <= @CreatedTo);
@@ -385,6 +409,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         query.EventId,
                         CustomerId = string.IsNullOrWhiteSpace(query.CustomerId) ? null : query.CustomerId,
                         query.ContractId,
+                        DestinationType = string.IsNullOrWhiteSpace(query.DestinationType) ? null : query.DestinationType,
+                        FailureCategory = string.IsNullOrWhiteSpace(query.FailureCategory) ? null : query.FailureCategory,
                         Status = query.Status?.ToString(),
                         query.CreatedFrom,
                         query.CreatedTo,
@@ -1661,6 +1687,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             public Guid EventId { get; set; }
             public string CustomerId { get; set; } = string.Empty;
             public Guid ContractId { get; set; }
+            public string DestinationType { get; set; } = string.Empty;
             public string EventType { get; set; } = string.Empty;
             public string Status { get; set; } = string.Empty;
             public int AttemptCount { get; set; }
@@ -1688,6 +1715,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 row.EventId,
                 row.CustomerId,
                 row.ContractId,
+                row.DestinationType,
                 row.EventType,
                 Enum.Parse<DeliveryStatus>(row.Status),
                 row.AttemptCount,

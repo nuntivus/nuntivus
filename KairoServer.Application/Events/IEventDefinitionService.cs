@@ -22,6 +22,11 @@ namespace KairoServer.Application.Events
             int pageSize,
             CancellationToken cancellationToken);
 
+        Task<Result<EventDefinitionView>> UpdateDescriptionAsync(
+            string eventType,
+            string? description,
+            CancellationToken cancellationToken);
+
         Task<Result<EventSchemaVersionView>> CreateSchemaDraftAsync(
             string eventType,
             int version,

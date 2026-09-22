@@ -112,6 +112,56 @@ namespace KairoServer.Application.Events
             return Result.Success(result.Value.Map(d => d.ToView()));
         }
 
+        public async Task<Result<EventDefinitionView>> UpdateDescriptionAsync(
+            string eventType,
+            string? description,
+            CancellationToken cancellationToken)
+        {
+            if (!EventDefinitionValidation.IsValidEventType(eventType))
+                return Result.Failure<EventDefinitionView>(Error.Validation("eventType is invalid."));
+
+            if (!EventDefinitionValidation.IsValidDescription(description))
+                return Result.Failure<EventDefinitionView>(Error.Validation(
+                    $"description must be at most {EventDefinitionValidation.DescriptionMaxLength} characters."));
+
+            var normalizedEventType = eventType.Trim();
+            var normalizedDescription = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+
+            try
+            {
+                _unitOfWork.Begin(true);
+
+                var updatedRows = await _repository.UpdateDescriptionAsync(
+                    normalizedEventType,
+                    normalizedDescription,
+                    _unitOfWork,
+                    cancellationToken);
+
+                if (updatedRows.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<EventDefinitionView>.Fail(updatedRows.Errors);
+                }
+
+                if (updatedRows.Value == 0)
+                {
+                    _unitOfWork.Rollback();
+                    return Result.Failure<EventDefinitionView>(Error.NotFound(
+                        $"Event definition '{normalizedEventType}' was not found."));
+                }
+
+                _unitOfWork.Commit();
+            }
+            catch (Exception ex)
+            {
+                _unitOfWork.Rollback();
+                _logger.Error(ex, "Failed to update event definition description for {EventType}.", normalizedEventType);
+                return Result.Failure<EventDefinitionView>(ex);
+            }
+
+            return await GetByEventTypeAsync(normalizedEventType, cancellationToken);
+        }
+
         public async Task<Result<EventSchemaVersionView>> CreateSchemaDraftAsync(
             string eventType,
             int version,

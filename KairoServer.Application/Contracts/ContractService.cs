@@ -280,6 +280,94 @@ namespace KairoServer.Application.Contracts
                 result.Value.TotalCount));
         }
 
+        public async Task<Result<PagedResult<ContractView>>> ListAsync(
+            AdminContractListQuery query,
+            CancellationToken cancellationToken)
+        {
+            if (query is null)
+                return Result.Failure<PagedResult<ContractView>>(Error.Validation("query is required."));
+
+            if (query.Page < 1)
+                return Result.Failure<PagedResult<ContractView>>(
+                    Error.Validation("page must be greater than or equal to 1."));
+
+            if (query.PageSize < 1 || query.PageSize > MaxPageSize)
+                return Result.Failure<PagedResult<ContractView>>(
+                    Error.Validation($"pageSize must be between 1 and {MaxPageSize}."));
+
+            if (query.CreatedFrom.HasValue && query.CreatedTo.HasValue && query.CreatedFrom > query.CreatedTo)
+            {
+                return Result.Failure<PagedResult<ContractView>>(
+                    Error.Validation("createdFrom must be less than or equal to createdTo."));
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.SortBy)
+                && !string.Equals(query.SortBy, "createdAt", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(query.SortBy, "updatedAt", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(query.SortBy, "name", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(query.SortBy, "customerId", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(query.SortBy, "destinationType", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result.Failure<PagedResult<ContractView>>(
+                    Error.Validation("sortBy must be one of: createdAt, updatedAt, name, customerId, destinationType."));
+            }
+
+            if (!string.IsNullOrWhiteSpace(query.SortDirection)
+                && !string.Equals(query.SortDirection, "asc", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(query.SortDirection, "desc", StringComparison.OrdinalIgnoreCase))
+            {
+                return Result.Failure<PagedResult<ContractView>>(
+                    Error.Validation("sortDirection must be one of: asc, desc."));
+            }
+
+            string? normalizedDestinationType = null;
+            if (!string.IsNullOrWhiteSpace(query.DestinationType))
+            {
+                if (!Enum.TryParse<KairoServer.Domain.Contracts.DestinationType>(query.DestinationType.Trim(), ignoreCase: true, out var destinationType))
+                {
+                    return Result.Failure<PagedResult<ContractView>>(
+                        Error.Validation("destinationType is invalid."));
+                }
+
+                normalizedDestinationType = destinationType.ToString();
+            }
+
+            string? normalizedEventType = null;
+            if (!string.IsNullOrWhiteSpace(query.EventType))
+            {
+                if (!ContractValidation.IsValidEventType(query.EventType))
+                {
+                    return Result.Failure<PagedResult<ContractView>>(
+                        Error.Validation("eventType is invalid. Use dotted lowercase identifiers (e.g. 'orders.created')."));
+                }
+
+                normalizedEventType = query.EventType.Trim();
+            }
+
+            var result = await _repository.ListAsync(
+                query with { DestinationType = normalizedDestinationType, EventType = normalizedEventType },
+                cancellationToken);
+
+            if (result.IsFailure)
+                return Result<PagedResult<ContractView>>.Fail(result.Errors);
+
+            var views = new List<ContractView>(result.Value.Items.Count);
+            foreach (var contract in result.Value.Items)
+            {
+                var mapped = MapToView(contract);
+                if (mapped.IsFailure)
+                    return Result<PagedResult<ContractView>>.Fail(mapped.Errors);
+
+                views.Add(mapped.Value);
+            }
+
+            return Result.Success(PagedResult<ContractView>.Create(
+                views,
+                result.Value.Page,
+                result.Value.PageSize,
+                result.Value.TotalCount));
+        }
+
         public async Task<Result<ContractView>> ReplaceAsync(
             Guid id,
             UpdateContractRequest request,

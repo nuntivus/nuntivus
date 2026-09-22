@@ -4,4 +4,7 @@ namespace KairoServer.Api.Controllers.Events
         string EventType,
         string DisplayName,
         string? Description);
+
+    public sealed record UpdateEventDefinitionDescriptionRequest(
+        string? Description);
 }

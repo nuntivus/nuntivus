@@ -8,6 +8,7 @@ namespace KairoServer.Application.Deliveries.Queries
         Guid EventId,
         string CustomerId,
         Guid ContractId,
+        string DestinationType,
         string EventType,
         DeliveryStatus Status,
         int AttemptCount,

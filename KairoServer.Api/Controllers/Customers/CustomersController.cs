@@ -58,6 +58,20 @@ namespace KairoServer.Api.Controllers.Customers
             return result.ToOk(HttpContext);
         }
 
+        [HttpPut("{id}")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
+        [SwaggerOperation(
+            Summary = "Update customer",
+            Description = "Updates customer information. Example request: { \"name\": \"Acme Corporation\" }.")]
+        public async Task<IActionResult> Update(
+            string id,
+            [FromBody] UpdateCustomerRequest request,
+            CancellationToken cancellationToken)
+        {
+            var result = await _customers.UpdateAsync(id, request.Name, cancellationToken, GetActorId());
+            return result.ToOk(HttpContext);
+        }
+
         [HttpGet]
         [SwaggerOperation(
             Summary = "List customers",

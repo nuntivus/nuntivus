@@ -50,6 +50,15 @@ namespace KairoServer.Infastructure.Persistence.Caching
                 ct => _inner.ListByCustomerAsync(query, ct),
                 cancellationToken);
 
+        public Task<Result<PagedResult<Contract>>> ListAsync(
+            AdminContractListQuery query,
+            CancellationToken cancellationToken) =>
+            _cache.GetOrCreateAsync(
+                $"{CacheKeys.ContractsByCustomer}:admin:{query.CustomerId}:{query.Enabled}:{query.DestinationType}:{query.EventType}:{query.Search}:{query.CreatedFrom:O}:{query.CreatedTo:O}:{query.SortBy}:{query.SortDirection}:{query.Page}:{query.PageSize}",
+                _ttl,
+                ct => _inner.ListAsync(query, ct),
+                cancellationToken);
+
         public Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(
             string eventType, CancellationToken cancellationToken) =>
             _cache.GetOrCreateAsync(

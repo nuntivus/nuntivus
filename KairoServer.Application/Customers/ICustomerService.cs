@@ -17,6 +17,12 @@ namespace KairoServer.Application.Customers
             string id,
             CancellationToken cancellationToken);
 
+        Task<Result<CustomerView>> UpdateAsync(
+            string id,
+            string name,
+            CancellationToken cancellationToken,
+            string? actorId = null);
+
         Task<Result<PagedResult<CustomerView>>> ListAsync(
             CustomerListQuery query,
             CancellationToken cancellationToken);

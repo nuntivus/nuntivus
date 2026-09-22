@@ -149,6 +149,44 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        public async Task<Result<int>> UpdateDescriptionAsync(
+            string eventType,
+            string? description,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (!uow.IsTransactionOpen)
+                    throw new InvalidOperationException("Transaction is not open.");
+
+                const string sql = """
+                    UPDATE event_definitions
+                    SET description = @Description
+                    WHERE event_type = @EventType;
+                    """;
+
+                var connection = uow.GetConnection()!;
+                var transaction = uow.GetTransaction()!;
+
+                var rows = await connection.ExecuteAsync(new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        EventType = eventType,
+                        Description = description,
+                    },
+                    transaction,
+                    cancellationToken: cancellationToken));
+
+                return Result.Success(rows);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<int>(ex);
+            }
+        }
+
         public async Task<Result> InsertSchemaVersionAsync(
             EventSchemaVersion schemaVersion,
             IUnitOfWork uow,

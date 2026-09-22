@@ -33,6 +33,64 @@ namespace KairoServer.Application.Security
             _logger = logger;
         }
 
+        public async Task<Result<IReadOnlyList<AdminUserRoleAssignmentView>>> ListAsync(
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                var result = await _repository.ListAsync(cancellationToken);
+                if (result.IsFailure)
+                    return Result<IReadOnlyList<AdminUserRoleAssignmentView>>.Fail(result.Errors);
+
+                var views = result.Value
+                    .Select(static value => new AdminUserRoleAssignmentView(
+                        value.Subject,
+                        value.DisplayName,
+                        value.Roles,
+                        value.CreatedAt,
+                        value.UpdatedAt))
+                    .ToArray();
+
+                return Result.Success<IReadOnlyList<AdminUserRoleAssignmentView>>(views);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to list admin users.");
+                return Result.Failure<IReadOnlyList<AdminUserRoleAssignmentView>>(ex);
+            }
+        }
+
+        public async Task<Result<AdminUserRoleAssignmentView>> GetAsync(
+            string subject,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(subject))
+                return Result.Failure<AdminUserRoleAssignmentView>(Error.Validation("subject is required."));
+
+            try
+            {
+                var result = await _repository.GetBySubjectAsync(subject.Trim(), cancellationToken);
+                if (result.IsFailure)
+                    return Result<AdminUserRoleAssignmentView>.Fail(result.Errors);
+
+                if (result.Value is null)
+                    return Result.Failure<AdminUserRoleAssignmentView>(Error.NotFound($"Admin user '{subject}' was not found."));
+
+                var value = result.Value;
+                return Result.Success(new AdminUserRoleAssignmentView(
+                    value.Subject,
+                    value.DisplayName,
+                    value.Roles,
+                    value.CreatedAt,
+                    value.UpdatedAt));
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to get admin user {Subject}.", subject);
+                return Result.Failure<AdminUserRoleAssignmentView>(ex);
+            }
+        }
+
         public async Task<Result<AdminUserRoleAssignmentView>> ReplaceAsync(
             string subject,
             string? displayName,

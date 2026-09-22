@@ -67,5 +67,18 @@ namespace KairoServer.Domain.Customers
             Enabled = false;
             UpdatedAt = now;
         }
+
+        public void Rename(string name, DateTimeOffset now)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("Customer name cannot be null or whitespace.", nameof(name));
+
+            var normalized = name.Trim();
+            if (string.Equals(Name, normalized, StringComparison.Ordinal))
+                return;
+
+            Name = normalized;
+            UpdatedAt = now;
+        }
     }
 }

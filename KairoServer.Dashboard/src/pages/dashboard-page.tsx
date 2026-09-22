@@ -1,35 +1,204 @@
-import { Badge, Card, Flex, Heading, Text } from '@radix-ui/themes'
-import { useReadinessStatusQuery } from '../features/system/use-readiness-status-query'
+import { Card, Flex, Heading, Separator, Text } from '@radix-ui/themes'
+import {
+  useDashboardOverviewQuery,
+  useRecentEventsQuery,
+  useRecentFailuresQuery,
+  useSuccessfulDeliveriesCountQuery,
+} from '../features/dashboard/use-dashboard-data'
+import { getApiErrorMessage } from '../services/api/api-client'
 
 export function DashboardPage() {
-  const readinessQuery = useReadinessStatusQuery()
+  const overviewQuery = useDashboardOverviewQuery()
+  const successfulQuery = useSuccessfulDeliveriesCountQuery()
+  const recentEventsQuery = useRecentEventsQuery()
+  const recentFailuresQuery = useRecentFailuresQuery()
 
-  const readinessStatus = readinessQuery.data?.status ?? 'loading'
-  const badgeColor =
-    readinessStatus.toLowerCase() === 'healthy' ? 'green' : 'amber'
+  const overview = overviewQuery.data
+  const recentEvents = recentEventsQuery.data ?? []
+  const recentFailures = recentFailuresQuery.data ?? []
 
   return (
     <Flex direction="column" gap="4">
       <Heading size="6">Overview</Heading>
+
+      <Flex gap="3" wrap="wrap">
+        <MetricCard
+          title="Event throughput summary"
+          unavailableMessage="Not available yet. Backend does not expose aggregate throughput in current APIs."
+        />
+
+        <MetricCard
+          title="Successful deliveries"
+          value={successfulQuery.data?.toString()}
+          loading={successfulQuery.isLoading}
+          error={getApiErrorMessage(
+            successfulQuery.error,
+            'Unable to load successful deliveries.',
+          )}
+        />
+
+        <MetricCard
+          title="Failed deliveries"
+          value={overview?.totalFailedDeliveries.toString()}
+          loading={overviewQuery.isLoading}
+          error={getApiErrorMessage(
+            overviewQuery.error,
+            'Unable to load failed deliveries.',
+          )}
+        />
+
+        <MetricCard
+          title="Retrying deliveries"
+          unavailableMessage="Not available yet. Backend does not expose a dedicated retrying-deliveries aggregate."
+        />
+
+        <MetricCard
+          title="Dead deliveries"
+          value={overview?.totalDeadDeliveries.toString()}
+          loading={overviewQuery.isLoading}
+          error={getApiErrorMessage(
+            overviewQuery.error,
+            'Unable to load dead deliveries.',
+          )}
+        />
+      </Flex>
+
+      <Flex gap="3" wrap="wrap">
+        <Card style={{ flex: '1 1 420px' }}>
+          <Flex direction="column" gap="3">
+            <Heading size="4">Recent events</Heading>
+            <Separator size="4" />
+
+            {recentEventsQuery.isLoading ? (
+              <Text size="2" color="gray">
+                Loading recent events...
+              </Text>
+            ) : recentEventsQuery.isError ? (
+              <Text size="2" color="red">
+                {getApiErrorMessage(recentEventsQuery.error, 'Unable to load recent events.')}
+              </Text>
+            ) : recentEvents.length === 0 ? (
+              <Text size="2" color="gray">
+                No events yet.
+              </Text>
+            ) : (
+              <Flex direction="column" gap="2">
+                {recentEvents.map((item) => (
+                  <Card key={item.id} variant="surface" size="1">
+                    <Flex direction="column" gap="1">
+                      <Text size="2" weight="medium">
+                        {item.type}
+                      </Text>
+                      <Text size="1" color="gray">
+                        Source: {item.source}
+                      </Text>
+                      <Text size="1" color="gray">
+                        Received: {new Date(item.receivedAt).toLocaleString()}
+                      </Text>
+                    </Flex>
+                  </Card>
+                ))}
+              </Flex>
+            )}
+          </Flex>
+        </Card>
+
+        <Card style={{ flex: '1 1 420px' }}>
+          <Flex direction="column" gap="3">
+            <Heading size="4">Recent failures</Heading>
+            <Separator size="4" />
+
+            {recentFailuresQuery.isLoading ? (
+              <Text size="2" color="gray">
+                Loading recent failures...
+              </Text>
+            ) : recentFailuresQuery.isError ? (
+              <Text size="2" color="red">
+                {getApiErrorMessage(
+                  recentFailuresQuery.error,
+                  'Unable to load recent failures.',
+                )}
+              </Text>
+            ) : recentFailures.length === 0 ? (
+              <Text size="2" color="gray">
+                No failures found.
+              </Text>
+            ) : (
+              <Flex direction="column" gap="2">
+                {recentFailures.map((item) => (
+                  <Card key={item.deliveryId} variant="surface" size="1">
+                    <Flex direction="column" gap="1">
+                      <Text size="2" weight="medium">
+                        {item.eventType}
+                      </Text>
+                      <Text size="1" color="gray">
+                        Customer: {item.customerId}
+                      </Text>
+                      <Text size="1" color="gray">
+                        Attempts: {item.attemptCount}
+                      </Text>
+                      <Text size="1" color="gray">
+                        Error: {item.lastError ?? 'n/a'}
+                      </Text>
+                    </Flex>
+                  </Card>
+                ))}
+              </Flex>
+            )}
+          </Flex>
+        </Card>
+      </Flex>
+
       <Card>
         <Flex direction="column" gap="3">
-          <Flex align="center" gap="2">
-            <Text size="2" weight="medium">
-              API readiness
-            </Text>
-            <Badge color={badgeColor}>{readinessStatus}</Badge>
-          </Flex>
-          {readinessQuery.isError ? (
-            <Text size="2" color="red">
-              Unable to read /health/ready from KairoServer.Api.
-            </Text>
-          ) : (
-            <Text size="2" color="gray">
-              Admin dashboard entry point is ready. API-powered widgets will be added here.
-            </Text>
-          )}
+          <Heading size="4">Destination health summary</Heading>
+          <Text size="2" color="gray">
+            Not available yet. A global destination-health summary endpoint is not exposed by the backend.
+          </Text>
         </Flex>
       </Card>
     </Flex>
+  )
+}
+
+interface MetricCardProps {
+  title: string
+  value?: string
+  loading?: boolean
+  error?: string
+  unavailableMessage?: string
+}
+
+function MetricCard({
+  title,
+  value,
+  loading,
+  error,
+  unavailableMessage,
+}: MetricCardProps) {
+  return (
+    <Card style={{ flex: '1 1 220px', minWidth: 220 }}>
+      <Flex direction="column" gap="2">
+        <Text size="2" color="gray">
+          {title}
+        </Text>
+
+        {unavailableMessage ? (
+          <Text size="2" color="gray">
+            {unavailableMessage}
+          </Text>
+        ) : loading ? (
+          <Text size="3">Loading...</Text>
+        ) : error ? (
+          <Text size="2" color="red">
+            {error}
+          </Text>
+        ) : (
+          <Text size="7" weight="bold">
+            {value ?? '0'}
+          </Text>
+        )}
+      </Flex>
+    </Card>
   )
 }

@@ -27,6 +27,10 @@ namespace KairoServer.Application.Persistence
             ContractListQuery query,
             CancellationToken cancellationToken);
 
+        Task<Result<PagedResult<Contract>>> ListAsync(
+            AdminContractListQuery query,
+            CancellationToken cancellationToken);
+
         /// <summary>
         /// Returns the ids of all enabled Contracts (with enabled Customers)
         /// whose subscribed event types include <paramref name="eventType"/>.

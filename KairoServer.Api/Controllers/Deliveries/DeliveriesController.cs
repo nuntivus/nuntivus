@@ -65,6 +65,8 @@ namespace KairoServer.Api.Controllers.Deliveries
                 request.EventId,
                 request.CustomerId,
                 request.ContractId,
+                request.DestinationType,
+                request.FailureCategory,
                 status,
                 request.CreatedFrom,
                 request.CreatedTo,

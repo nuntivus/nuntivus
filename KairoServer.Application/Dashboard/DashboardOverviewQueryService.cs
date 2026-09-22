@@ -68,6 +68,8 @@ namespace KairoServer.Application.Dashboard
                     null,
                     null,
                     null,
+                    null,
+                    null,
                     status,
                     null,
                     null,

@@ -119,6 +119,206 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        public async Task<Result<PagedResult<Contract>>> ListAsync(
+            AdminContractListQuery query,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                var where = new StringBuilder(" WHERE 1 = 1");
+                var parameters = new DynamicParameters();
+
+                if (!string.IsNullOrWhiteSpace(query.CustomerId))
+                {
+                    where.Append(" AND c.customer_id = @CustomerId");
+                    parameters.Add("CustomerId", query.CustomerId.Trim());
+                }
+
+                if (query.Enabled.HasValue)
+                {
+                    where.Append(" AND c.enabled = @Enabled");
+                    parameters.Add("Enabled", query.Enabled.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(query.DestinationType))
+                {
+                    where.Append(" AND c.destination_type = @DestinationType");
+                    parameters.Add("DestinationType", query.DestinationType.Trim());
+                }
+
+                if (!string.IsNullOrWhiteSpace(query.EventType))
+                {
+                    where.Append(" AND EXISTS (");
+                    where.Append("SELECT 1 FROM contract_event_types cetf ");
+                    where.Append("WHERE cetf.contract_id = c.id AND cetf.event_type = @EventType");
+                    where.Append(")");
+                    parameters.Add("EventType", query.EventType.Trim());
+                }
+
+                if (!string.IsNullOrWhiteSpace(query.Search))
+                {
+                    where.Append(" AND (");
+                    where.Append("CAST(c.id AS text) ILIKE @Search ");
+                    where.Append("OR c.customer_id ILIKE @Search ");
+                    where.Append("OR COALESCE(c.name, '') ILIKE @Search ");
+                    where.Append("OR EXISTS (");
+                    where.Append("SELECT 1 FROM contract_event_types cetf ");
+                    where.Append("WHERE cetf.contract_id = c.id AND cetf.event_type ILIKE @Search");
+                    where.Append(")");
+                    where.Append(")");
+                    parameters.Add("Search", $"%{query.Search.Trim()}%");
+                }
+
+                if (query.CreatedFrom.HasValue)
+                {
+                    where.Append(" AND c.created_at >= @CreatedFrom");
+                    parameters.Add("CreatedFrom", query.CreatedFrom.Value);
+                }
+
+                if (query.CreatedTo.HasValue)
+                {
+                    where.Append(" AND c.created_at <= @CreatedTo");
+                    parameters.Add("CreatedTo", query.CreatedTo.Value);
+                }
+
+                var sortColumn = ResolveContractSortColumn(query.SortBy);
+                var sortDirection = string.Equals(query.SortDirection, "asc", StringComparison.OrdinalIgnoreCase)
+                    ? "ASC"
+                    : "DESC";
+
+                var countSql = "SELECT COUNT(*) FROM contracts c" + where;
+                parameters.Add("Offset", (query.Page - 1) * query.PageSize);
+                parameters.Add("PageSize", query.PageSize);
+
+                var pageSql = $"""
+                    SELECT
+                        c.id,
+                        c.customer_id,
+                        c.name,
+                        c.enabled,
+                        c.ordering_enabled,
+                        c.ordering_key_selector,
+                        c.destination_type,
+                        c.destination_config,
+                        c.transformation_config::text AS transformation_config,
+                        c.rate_limit_per_second,
+                        c.rate_limit_per_minute,
+                        c.rate_limit_burst,
+                        c.created_at,
+                        c.updated_at
+                    FROM contracts c
+                    {where}
+                    ORDER BY {sortColumn} {sortDirection}, c.id {sortDirection}
+                    LIMIT @PageSize OFFSET @Offset;
+                    """;
+
+                const string eventTypesSql = """
+                    SELECT contract_id, event_type
+                    FROM contract_event_types
+                    WHERE contract_id = ANY(@Ids);
+                    """;
+
+                const string schemaTargetsSql = """
+                    SELECT contract_id, event_type, schema_version
+                    FROM contract_schema_targets
+                    WHERE contract_id = ANY(@Ids);
+                    """;
+
+                const string filterRulesSql = """
+                    SELECT contract_id, scope, rule_order, selector, operator, value, values_json::text AS values_json
+                    FROM contract_filter_rules
+                    WHERE contract_id = ANY(@Ids)
+                    ORDER BY scope ASC, rule_order ASC;
+                    """;
+
+                await using var connection = CreateConnection();
+                await connection.OpenAsync(cancellationToken);
+
+                var totalCount = await connection.ExecuteScalarAsync<long>(new CommandDefinition(
+                    countSql,
+                    parameters,
+                    cancellationToken: cancellationToken));
+
+                var rows = await connection.QueryAsync<ContractRow>(new CommandDefinition(
+                    pageSql,
+                    parameters,
+                    cancellationToken: cancellationToken));
+
+                var rowList = new List<ContractRow>(rows);
+                var ids = new List<Guid>(rowList.Count);
+                foreach (var r in rowList)
+                {
+                    ids.Add(r.id);
+                }
+
+                var eventTypesByContract = new Dictionary<Guid, List<string>>();
+                var schemaTargetsByContract = new Dictionary<Guid, List<ContractSchemaTarget>>();
+                var filtersByContract = new Dictionary<Guid, ContractFilter?>();
+                if (ids.Count > 0)
+                {
+                    var etRows = await connection.QueryAsync<EventTypeRow>(new CommandDefinition(
+                        eventTypesSql,
+                        new { Ids = ids.ToArray() },
+                        cancellationToken: cancellationToken));
+
+                    foreach (var et in etRows)
+                    {
+                        if (!eventTypesByContract.TryGetValue(et.contract_id, out var list))
+                        {
+                            list = new List<string>();
+                            eventTypesByContract[et.contract_id] = list;
+                        }
+                        list.Add(et.event_type);
+                    }
+
+                    var stRows = await connection.QueryAsync<SchemaTargetRow>(new CommandDefinition(
+                        schemaTargetsSql,
+                        new { Ids = ids.ToArray() },
+                        cancellationToken: cancellationToken));
+
+                    foreach (var st in stRows)
+                    {
+                        if (!schemaTargetsByContract.TryGetValue(st.contract_id, out var list))
+                        {
+                            list = new List<ContractSchemaTarget>();
+                            schemaTargetsByContract[st.contract_id] = list;
+                        }
+
+                        list.Add(st.ToDomain());
+                    }
+
+                    var filterRows = await connection.QueryAsync<FilterRuleRow>(new CommandDefinition(
+                        filterRulesSql,
+                        new { Ids = ids.ToArray() },
+                        cancellationToken: cancellationToken));
+
+                    foreach (var group in filterRows.GroupBy(r => r.contract_id))
+                    {
+                        filtersByContract[group.Key] = BuildFilter(group);
+                    }
+                }
+
+                var materialized = new List<Contract>(rowList.Count);
+                foreach (var r in rowList)
+                {
+                    eventTypesByContract.TryGetValue(r.id, out var etList);
+                    schemaTargetsByContract.TryGetValue(r.id, out var stList);
+                    filtersByContract.TryGetValue(r.id, out var filter);
+                    materialized.Add(r.ToDomain(
+                        etList ?? new List<string>(),
+                        stList ?? new List<ContractSchemaTarget>(),
+                        filter));
+                }
+
+                return Result.Success(
+                    PagedResult<Contract>.Create(materialized, query.Page, query.PageSize, totalCount));
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<PagedResult<Contract>>(ex);
+            }
+        }
+
         public async Task<Result> UpdateAsync(
             Contract contract,
             IUnitOfWork uow,
@@ -440,6 +640,15 @@ namespace KairoServer.Infastructure.Persistence.Postgres
         {
             if (string.IsNullOrWhiteSpace(sortBy))
                 return "c.created_at";
+
+            if (string.Equals(sortBy, "name", StringComparison.OrdinalIgnoreCase))
+                return "c.name";
+
+            if (string.Equals(sortBy, "customerId", StringComparison.OrdinalIgnoreCase))
+                return "c.customer_id";
+
+            if (string.Equals(sortBy, "destinationType", StringComparison.OrdinalIgnoreCase))
+                return "c.destination_type";
 
             if (string.Equals(sortBy, "updatedAt", StringComparison.OrdinalIgnoreCase))
                 return "c.updated_at";

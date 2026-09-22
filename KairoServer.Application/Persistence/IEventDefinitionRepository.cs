@@ -22,6 +22,12 @@ namespace KairoServer.Application.Persistence
             int pageSize,
             CancellationToken cancellationToken);
 
+        Task<Result<int>> UpdateDescriptionAsync(
+            string eventType,
+            string? description,
+            IUnitOfWork uow,
+            CancellationToken cancellationToken);
+
         Task<Result> InsertSchemaVersionAsync(
             EventSchemaVersion schemaVersion,
             IUnitOfWork uow,

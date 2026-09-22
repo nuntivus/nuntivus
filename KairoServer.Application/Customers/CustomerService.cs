@@ -111,6 +111,70 @@ namespace KairoServer.Application.Customers
             return Result.Success(customer.ToView());
         }
 
+        public async Task<Result<CustomerView>> UpdateAsync(
+            string id,
+            string name,
+            CancellationToken cancellationToken,
+            string? actorId = null)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+                return Result.Failure<CustomerView>(Error.Validation("Customer id is required."));
+
+            if (!CustomerValidation.IsValidName(name))
+                return Result.Failure<CustomerView>(Error.Validation(
+                    $"Customer name is required and must be at most {CustomerValidation.NameMaxLength} characters."));
+
+            try
+            {
+                var lookup = await _repository.GetByIdAsync(id, cancellationToken);
+                if (lookup.IsFailure)
+                    return Result<CustomerView>.Fail(lookup.Errors);
+
+                var customer = lookup.Value;
+                if (customer is null)
+                    return Result.Failure<CustomerView>(Error.NotFound($"Customer '{id}' was not found."));
+
+                var now = DateTimeOffset.UtcNow;
+                customer.Rename(name, now);
+
+                _unitOfWork.Begin(true);
+                var update = await _repository.UpdateAsync(customer, _unitOfWork, cancellationToken);
+                if (update.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<CustomerView>.Fail(update.Errors);
+                }
+
+                var audit = BuildAudit(
+                    action: "updated",
+                    actorId: actorId,
+                    customerId: customer.Id,
+                    details: JsonSerializer.Serialize(new
+                    {
+                        customer.Id,
+                        customer.Name,
+                    }),
+                    createdAt: now);
+
+                var auditInsert = await _auditLogs.AddAsync(audit, _unitOfWork, cancellationToken);
+                if (auditInsert.IsFailure)
+                {
+                    _unitOfWork.Rollback();
+                    return Result<CustomerView>.Fail(auditInsert.Errors);
+                }
+
+                _unitOfWork.Commit();
+                _logger.Information("Customer updated {CustomerId}.", customer.Id);
+                return Result.Success(customer.ToView());
+            }
+            catch (Exception ex)
+            {
+                _unitOfWork.Rollback();
+                _logger.Error(ex, "Failed to update customer {CustomerId}.", id);
+                return Result.Failure<CustomerView>(ex);
+            }
+        }
+
         public async Task<Result<PagedResult<CustomerView>>> ListAsync(
             CustomerListQuery query,
             CancellationToken cancellationToken)

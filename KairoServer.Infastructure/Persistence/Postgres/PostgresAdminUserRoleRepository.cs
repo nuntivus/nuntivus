@@ -20,6 +20,48 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             _connectionFactory = connectionFactory;
         }
 
+        public async Task<Result<IReadOnlyList<AdminUserRoleAssignment>>> ListAsync(
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                    SELECT
+                        u.subject,
+                        u.display_name,
+                        u.created_at,
+                        u.updated_at,
+                        COALESCE(array_agg(r.role ORDER BY r.role) FILTER (WHERE r.role IS NOT NULL), ARRAY[]::text[]) AS roles
+                    FROM admin_users u
+                    LEFT JOIN admin_user_roles r ON r.subject = u.subject
+                    GROUP BY u.subject, u.display_name, u.created_at, u.updated_at
+                    ORDER BY u.updated_at DESC, u.subject ASC;
+                    """;
+
+                await using var connection = (NpgsqlConnection)_connectionFactory.CreateConnection();
+                await connection.OpenAsync(cancellationToken);
+
+                var rows = await connection.QueryAsync<ListRow>(new CommandDefinition(
+                    sql,
+                    cancellationToken: cancellationToken));
+
+                var assignments = rows
+                    .Select(static row => new AdminUserRoleAssignment(
+                        row.Subject,
+                        row.DisplayName,
+                        row.Roles ?? Array.Empty<string>(),
+                        row.CreatedAt,
+                        row.UpdatedAt))
+                    .ToArray();
+
+                return Result.Success<IReadOnlyList<AdminUserRoleAssignment>>(assignments);
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<IReadOnlyList<AdminUserRoleAssignment>>(ex);
+            }
+        }
+
         public async Task<Result> ReplaceAsync(
             string subject,
             string? displayName,
@@ -191,5 +233,12 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             string? DisplayName,
             DateTimeOffset CreatedAt,
             DateTimeOffset UpdatedAt);
+
+        private sealed record ListRow(
+            string Subject,
+            string? DisplayName,
+            DateTimeOffset CreatedAt,
+            DateTimeOffset UpdatedAt,
+            string[] Roles);
     }
 }

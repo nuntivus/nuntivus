@@ -7,6 +7,8 @@ namespace KairoServer.Application.Deliveries.Queries
         Guid? EventId,
         string? CustomerId,
         Guid? ContractId,
+        string? DestinationType,
+        string? FailureCategory,
         DeliveryStatus? Status,
         DateTimeOffset? CreatedFrom,
         DateTimeOffset? CreatedTo,
