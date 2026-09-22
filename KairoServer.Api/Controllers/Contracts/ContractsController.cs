@@ -10,6 +10,7 @@ using KairoServer.Common.Logging;
 using KairoServer.Contracts.CustomerContracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace KairoServer.Api.Controllers.Contracts
 {
@@ -58,6 +59,9 @@ namespace KairoServer.Api.Controllers.Contracts
 
         [HttpPut("{id:guid}")]
         [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
+        [SwaggerOperation(
+            Summary = "Replace contract",
+            Description = "Replaces contract configuration with optimistic concurrency via If-Match ETag. Example header: If-Match: \"8e9f...\".")]
         public async Task<IActionResult> Replace(
             Guid id,
             [FromBody] UpdateContractRequest request,

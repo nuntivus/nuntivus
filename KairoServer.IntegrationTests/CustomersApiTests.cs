@@ -48,6 +48,22 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Create_propagates_correlation_id_header_on_success_response()
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/customers")
+            {
+                Content = JsonContent.Create(new CreateCustomerRequest("corr-customer", "Correlation Customer"))
+            };
+            request.Headers.Add(ApiErrorResponse.CorrelationIdHeader, "corr-success-123");
+
+            var response = await _client.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            Assert.True(response.Headers.TryGetValues(ApiErrorResponse.CorrelationIdHeader, out var values));
+            Assert.Equal("corr-success-123", values!.Single());
+        }
+
+        [Fact]
         public async Task Create_and_disable_write_audit_entries()
         {
             await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest("audit-cust", "Audit Customer"));

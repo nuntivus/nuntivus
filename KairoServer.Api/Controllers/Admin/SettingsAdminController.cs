@@ -7,6 +7,7 @@ using KairoServer.Application.Settings;
 using KairoServer.Contracts.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace KairoServer.Api.Controllers.Admin
 {
@@ -23,6 +24,9 @@ namespace KairoServer.Api.Controllers.Admin
         }
 
         [HttpGet("instance")]
+        [SwaggerOperation(
+            Summary = "Get instance settings",
+            Description = "Returns current instance-level defaults and limits for delivery, retry, retention, security, and payload constraints.")]
         public async Task<IActionResult> GetInstance(CancellationToken cancellationToken)
         {
             var result = await _instanceSettings.GetAsync(cancellationToken);
@@ -30,6 +34,9 @@ namespace KairoServer.Api.Controllers.Admin
         }
 
         [HttpPut("instance")]
+        [SwaggerOperation(
+            Summary = "Update instance settings",
+            Description = "Updates instance-level settings. Example request: { \"deliveryDefaults\": { \"requestTimeoutSeconds\": 30, \"maxAttempts\": 6, \"batchLimit\": 500 }, \"retryDefaults\": { \"initialDelaySeconds\": 30, \"maxDelaySeconds\": 3600, \"backoffMultiplier\": 2.0 }, \"security\": { \"requireHttpsDestinations\": true, \"allowPrivateNetworkDestinations\": false, \"requireDestinationCredentialEncryption\": true }, \"retention\": { \"eventRetentionDays\": 90, \"deliveryAuditRetentionDays\": 365, \"operationAuditRetentionDays\": 365 }, \"limits\": { \"maxEventPayloadBytes\": 262144, \"maxEventMetadataBytes\": 65536, \"maxContractsPerCustomer\": 500, \"maxConcurrentReplayJobs\": 5 } }.")]
         public async Task<IActionResult> UpdateInstance(
             [FromBody] UpdateInstanceSettingsRequest request,
             CancellationToken cancellationToken)

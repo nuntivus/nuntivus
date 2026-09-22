@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using System.Text.Json;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace KairoServer.Api.Controllers.Events
 {
@@ -69,6 +70,9 @@ namespace KairoServer.Api.Controllers.Events
 
         [HttpPost]
         [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
+        [SwaggerOperation(
+            Summary = "Publish event",
+            Description = "Publishes an event idempotently. Example request: { \"idempotencyKey\": \"evt-123\", \"type\": \"orders.created\", \"source\": \"checkout\", \"timestamp\": \"2026-01-01T00:00:00Z\", \"payload\": { \"orderId\": \"o-1\" }, \"metadata\": {} }.")]
         public async Task<IActionResult> Publish(
             PublishEventRequest request,
             CancellationToken cancellationToken)

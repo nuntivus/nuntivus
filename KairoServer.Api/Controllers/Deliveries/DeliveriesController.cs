@@ -12,6 +12,7 @@ using KairoServer.Common.Logging;
 using KairoServer.Domain.Deliveries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace KairoServer.Api.Controllers.Deliveries
 {
@@ -78,6 +79,9 @@ namespace KairoServer.Api.Controllers.Deliveries
 
         [HttpPost("{id:guid}/retry")]
         [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
+        [SwaggerOperation(
+            Summary = "Retry failed delivery",
+            Description = "Requests manual retry. Example request: { \"operationId\": \"8f3d6e6c-8dd6-4abc-9f48-8a9522537273\", \"reason\": \"Transient downstream outage recovered\" }.")]
         public async Task<IActionResult> Retry(
             Guid id,
             [FromBody] ManualDeliveryOperationApiRequest request,

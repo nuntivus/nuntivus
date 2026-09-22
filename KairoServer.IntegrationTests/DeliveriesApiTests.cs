@@ -53,6 +53,32 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Retry_audit_log_persists_request_and_response_snapshots()
+        {
+            var id = await SeedDeadDeliveryAsync();
+            var operationId = Guid.NewGuid();
+            var request = new ManualDeliveryOperationApiRequest(operationId, "retry with snapshots");
+
+            var response = await _client.PostAsJsonAsync($"/v1/deliveries/{id}/retry", request);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            await conn.OpenAsync();
+
+            var hasSnapshots = await conn.ExecuteScalarAsync<bool>(
+                """
+                SELECT (details::jsonb ? 'request') AND (details::jsonb ? 'response')
+                FROM audit_logs
+                WHERE category = 'delivery' AND action = 'retry' AND delivery_id = @id
+                ORDER BY created_at DESC
+                LIMIT 1;
+                """,
+                new { id });
+
+            Assert.True(hasSnapshots);
+        }
+
+        [Fact]
         public async Task Cancel_endpoint_transitions_failed_to_dead()
         {
             var id = await SeedFailedDeliveryAsync();

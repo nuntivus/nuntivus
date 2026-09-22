@@ -57,19 +57,7 @@ namespace KairoServer.Api.Controllers.Events
             CancellationToken cancellationToken)
         {
             var result = await _definitions.ListAsync(pagination.Page, pagination.PageSize, cancellationToken);
-
-            return result.ToActionResult(HttpContext, paged =>
-            {
-                var body = new PagedResponse<EventDefinitionView>(
-                    paged.Items,
-                    paged.Page,
-                    paged.PageSize,
-                    paged.TotalCount,
-                    paged.TotalPages,
-                    paged.HasPrevious,
-                    paged.HasNext);
-                return Ok(body);
-            });
+            return result.ToPagedOk(HttpContext);
         }
 
         [HttpPost("{eventType}/schemas")]
@@ -101,19 +89,7 @@ namespace KairoServer.Api.Controllers.Events
                 pagination.Page,
                 pagination.PageSize,
                 cancellationToken);
-
-            return result.ToActionResult(HttpContext, paged =>
-            {
-                var body = new PagedResponse<EventSchemaVersionView>(
-                    paged.Items,
-                    paged.Page,
-                    paged.PageSize,
-                    paged.TotalCount,
-                    paged.TotalPages,
-                    paged.HasPrevious,
-                    paged.HasNext);
-                return Ok(body);
-            });
+            return result.ToPagedOk(HttpContext);
         }
 
         [HttpGet("{eventType}/schemas/{version:int}")]

@@ -11,6 +11,7 @@ using KairoServer.Contracts.CustomerContracts;
 using KairoServer.Contracts.Customers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace KairoServer.Api.Controllers.Customers
 {
@@ -35,6 +36,9 @@ namespace KairoServer.Api.Controllers.Customers
 
         [HttpPost]
         [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
+        [SwaggerOperation(
+            Summary = "Create customer",
+            Description = "Creates a customer. Example request: { \"id\": \"acme\", \"name\": \"Acme Corp\" }. Example response: { \"id\": \"acme\", \"name\": \"Acme Corp\", \"enabled\": true }.")]
         public async Task<IActionResult> Create(
             [FromBody] CreateCustomerRequest request,
             CancellationToken cancellationToken)
@@ -55,6 +59,9 @@ namespace KairoServer.Api.Controllers.Customers
         }
 
         [HttpGet]
+        [SwaggerOperation(
+            Summary = "List customers",
+            Description = "Returns paged customers using page/pageSize. Example: /v1/customers?page=1&pageSize=20&search=acme")]
         public async Task<IActionResult> List(
             [FromQuery] CustomerListApiRequest request,
             CancellationToken cancellationToken)
@@ -70,19 +77,7 @@ namespace KairoServer.Api.Controllers.Customers
                 request.PageSize);
 
             var result = await _customers.ListAsync(query, cancellationToken);
-
-            return result.ToActionResult(HttpContext, paged =>
-            {
-                var body = new PagedResponse<CustomerView>(
-                    paged.Items,
-                    paged.Page,
-                    paged.PageSize,
-                    paged.TotalCount,
-                    paged.TotalPages,
-                    paged.HasPrevious,
-                    paged.HasNext);
-                return Ok(body);
-            });
+            return result.ToPagedOk(HttpContext);
         }
 
         [HttpPost("{id}/enable")]
@@ -129,19 +124,7 @@ namespace KairoServer.Api.Controllers.Customers
                 request.PageSize);
 
             var result = await _contracts.ListByCustomerAsync(query, cancellationToken);
-
-            return result.ToActionResult(HttpContext, paged =>
-            {
-                var body = new PagedResponse<ContractView>(
-                    paged.Items,
-                    paged.Page,
-                    paged.PageSize,
-                    paged.TotalCount,
-                    paged.TotalPages,
-                    paged.HasPrevious,
-                    paged.HasNext);
-                return Ok(body);
-            });
+            return result.ToPagedOk(HttpContext);
         }
     }
 }

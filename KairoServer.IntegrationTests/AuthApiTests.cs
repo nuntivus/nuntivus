@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Linq;
 using Dapper;
 using KairoServer.Api.Common;
 using KairoServer.Api.Controllers.Customers;
@@ -377,6 +378,40 @@ namespace KairoServer.IntegrationTests
             var response = await client.PutAsJsonAsync("/v1/settings/me/preferences", update);
 
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        [Fact]
+        public async Task Diagnostics_endpoint_returns_operational_payload_for_authorized_user()
+        {
+            using var client = _fixture.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Test-Auth", "on");
+            client.DefaultRequestHeaders.Add("X-Test-Role", "Viewer");
+            client.DefaultRequestHeaders.Add(ApiErrorResponse.CorrelationIdHeader, "diag-correlation");
+
+            var response = await client.GetAsync("/v1/ops/diagnostics");
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.True(response.Headers.TryGetValues(ApiErrorResponse.CorrelationIdHeader, out var correlation));
+            Assert.Equal("diag-correlation", correlation!.Single());
+
+            using var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.True(payload.RootElement.TryGetProperty("timestampUtc", out _));
+            Assert.True(payload.RootElement.TryGetProperty("environment", out _));
+            Assert.True(payload.RootElement.TryGetProperty("appVersion", out _));
+            Assert.True(payload.RootElement.TryGetProperty("requestId", out _));
+            Assert.True(payload.RootElement.TryGetProperty("correlationId", out var correlationId));
+            Assert.True(payload.RootElement.TryGetProperty("readinessStatus", out _));
+            Assert.Equal("diag-correlation", correlationId.GetString());
+        }
+
+        [Fact]
+        public async Task Diagnostics_endpoint_returns_unauthorized_without_authentication()
+        {
+            using var client = _fixture.CreateClient();
+
+            var response = await client.GetAsync("/v1/ops/diagnostics");
+
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         }
 
         [Theory]

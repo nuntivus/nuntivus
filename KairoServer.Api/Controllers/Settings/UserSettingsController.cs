@@ -7,6 +7,7 @@ using KairoServer.Application.Settings;
 using KairoServer.Contracts.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace KairoServer.Api.Controllers.Settings
 {
@@ -23,6 +24,9 @@ namespace KairoServer.Api.Controllers.Settings
         }
 
         [HttpGet("preferences")]
+        [SwaggerOperation(
+            Summary = "Get current user preferences",
+            Description = "Returns preferences for the authenticated subject only.")]
         public async Task<IActionResult> GetPreferences(CancellationToken cancellationToken)
         {
             var subject = GetSubject();
@@ -34,6 +38,9 @@ namespace KairoServer.Api.Controllers.Settings
         }
 
         [HttpPut("preferences")]
+        [SwaggerOperation(
+            Summary = "Update current user preferences",
+            Description = "Updates preferences for the authenticated subject only. Example request: { \"theme\": \"dark\", \"defaultPageSize\": 50, \"denseTables\": true }.")]
         public async Task<IActionResult> UpdatePreferences(
             [FromBody] UpdateUserPreferencesRequest request,
             CancellationToken cancellationToken)

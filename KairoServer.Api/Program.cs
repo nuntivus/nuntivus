@@ -13,6 +13,7 @@ using KairoServer.Application.Security;
 using KairoServer.Application.Settings;
 using KairoServer.Application.Sources;
 using KairoServer.Api.Common;
+using KairoServer.Api.Common.OpenApi;
 using KairoServer.Api.Security;
 using KairoServer.Api.Controllers.Events;
 using KairoServer.Api.Controllers.Sources;
@@ -203,7 +204,20 @@ builder.Services.AddHealthChecks()
     .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: new[] { "live" });
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.EnableAnnotations();
+    options.OperationFilter<AuthorizeOperationSecurityFilter>();
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "JWT Bearer token. Example: 'Bearer eyJ...'.",
+    });
+});
 
 builder.Services.AddSingleton<IDatabaseConnectionFactory>(
     sp => new PostgresDatabaseConnectionFactory(
@@ -297,6 +311,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseHttpsRedirection();

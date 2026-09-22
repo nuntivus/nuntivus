@@ -471,7 +471,11 @@ namespace KairoServer.Application.Deliveries.Recovery
                         deliveryId: deliveryId,
                         eventId: null,
                         operationId: request.OperationId,
-                        details: request.RequestSnapshot,
+                        details: JsonSerializer.Serialize(new
+                        {
+                            request = request.RequestSnapshot,
+                            response = responseSnapshot,
+                        }),
                         createdAt: now,
                         expiresAt: now.AddDays(90));
                     var operationAuditInsert = await _auditLogs.AddAsync(operationAudit, _unitOfWork, cancellationToken);
