@@ -2,12 +2,15 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Api.Common;
+using KairoServer.Api.Security;
 using KairoServer.Application.Deliveries.Health;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KairoServer.Api.Controllers.Deliveries
 {
     [ApiController]
+    [Authorize(Policy = AdminAuthorizationPolicies.Viewer)]
     [Route("v1/destination-health")]
     public sealed class DestinationHealthController : ControllerBase
     {

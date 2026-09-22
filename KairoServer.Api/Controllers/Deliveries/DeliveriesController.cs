@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace KairoServer.Api.Controllers.Deliveries
 {
     [ApiController]
+    [Authorize(Policy = AdminAuthorizationPolicies.Viewer)]
     [Route("v1/[controller]")]
     public sealed class DeliveriesController : Controller
     {

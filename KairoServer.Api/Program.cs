@@ -10,11 +10,13 @@ using KairoServer.Application.Events;
 using KairoServer.Application.Events.Queries;
 using KairoServer.Application.Persistence;
 using KairoServer.Application.Security;
+using KairoServer.Application.Settings;
 using KairoServer.Application.Sources;
 using KairoServer.Api.Common;
 using KairoServer.Api.Security;
 using KairoServer.Api.Controllers.Events;
 using KairoServer.Api.Controllers.Sources;
+using KairoServer.Common;
 using KairoServer.Infastructure.Configuration;
 using KairoServer.Infastructure.Caching;
 using KairoServer.Infastructure.Deliveries.Http;
@@ -137,6 +139,39 @@ builder.Services
         options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
         options.Authority = builder.Configuration["Authentication:Authority"];
         options.Audience = builder.Configuration["Authentication:Audience"];
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = async context =>
+            {
+                if (context.Response.HasStarted)
+                    return;
+
+                context.HandleResponse();
+
+                var payload = ApiErrorResponse.From(
+                    new[] { Error.Unauthorized("Authentication is required to access this resource.") },
+                    context.HttpContext,
+                    sanitizeUnexpected: false);
+
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/problem+json";
+                await context.Response.WriteAsJsonAsync(payload, cancellationToken: context.HttpContext.RequestAborted);
+            },
+            OnForbidden = async context =>
+            {
+                if (context.Response.HasStarted)
+                    return;
+
+                var payload = ApiErrorResponse.From(
+                    new[] { Error.Forbidden("You do not have permission to access this resource.") },
+                    context.HttpContext,
+                    sanitizeUnexpected: false);
+
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                context.Response.ContentType = "application/problem+json";
+                await context.Response.WriteAsJsonAsync(payload, cancellationToken: context.HttpContext.RequestAborted);
+            },
+        };
     });
 
 builder.Services.AddAuthorization(options =>
@@ -181,6 +216,8 @@ builder.Services.AddSingleton<ICacheStore, InMemoryCacheStore>();
 builder.Services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
 builder.Services.AddScoped<IOutboxRepository, PostgresOutboxRepository>();
 builder.Services.AddScoped<IAuditLogRepository, PostgresAuditLogRepository>();
+builder.Services.AddScoped<IAdminUserRoleRepository, PostgresAdminUserRoleRepository>();
+builder.Services.AddScoped<ISettingsRepository, PostgresSettingsRepository>();
 
 builder.Services.AddScoped<PostgresEventRepository>();
 builder.Services.AddScoped<IEventRepository>(sp => new CachedEventRepository(
@@ -225,10 +262,13 @@ builder.Services.AddScoped<IAdminFailedDeliveryQueryService, AdminFailedDelivery
 builder.Services.AddScoped<IDeliveryQueryService, DeliveryQueryService>();
 builder.Services.AddScoped<IDestinationHealthQueryService, DestinationHealthQueryService>();
 builder.Services.AddScoped<IDeliveryRecoveryService, DeliveryRecoveryService>();
+builder.Services.AddScoped<IInstanceSettingsService, InstanceSettingsService>();
+builder.Services.AddScoped<IUserSettingsService, UserSettingsService>();
 builder.Services.AddSingleton<IEventPublishRequestValidator, EventPublishRequestValidator>();
 builder.Services.AddSingleton<IWebhookIngestRequestValidator, WebhookIngestRequestValidator>();
 
 builder.Services.AddSingleton<IEndpointSecurityPolicy, EndpointSecurityPolicy>();
+builder.Services.AddScoped<IAdminUserRoleService, AdminUserRoleService>();
 
 builder.Services.AddSingleton<IDestinationCredentialProtector, AesGcmDestinationCredentialProtector>();
 

@@ -1,12 +1,15 @@
 using KairoServer.Api.Common;
+using KairoServer.Api.Security;
 using KairoServer.Application.Events;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.Events;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KairoServer.Api.Controllers.Events
 {
     [ApiController]
+    [Authorize(Policy = AdminAuthorizationPolicies.Viewer)]
     [Route("v1/event-definitions")]
     public sealed class EventDefinitionsController : Controller
     {
@@ -22,6 +25,7 @@ namespace KairoServer.Api.Controllers.Events
         }
 
         [HttpPost]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Create(
             [FromBody] CreateEventDefinitionRequest request,
             CancellationToken cancellationToken)
@@ -69,6 +73,7 @@ namespace KairoServer.Api.Controllers.Events
         }
 
         [HttpPost("{eventType}/schemas")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> CreateSchemaDraft(
             string eventType,
             [FromBody] CreateEventSchemaVersionRequest request,
@@ -122,6 +127,7 @@ namespace KairoServer.Api.Controllers.Events
         }
 
         [HttpPost("{eventType}/schemas/{version:int}/activate")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> ActivateSchemaVersion(
             string eventType,
             int version,
@@ -132,6 +138,7 @@ namespace KairoServer.Api.Controllers.Events
         }
 
         [HttpPost("{eventType}/schemas/{version:int}/deprecate")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> DeprecateSchemaVersion(
             string eventType,
             int version,

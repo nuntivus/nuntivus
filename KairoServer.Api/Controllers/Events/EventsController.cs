@@ -13,6 +13,7 @@ using System.Text.Json;
 namespace KairoServer.Api.Controllers.Events
 {
     [ApiController]
+    [Authorize(Policy = AdminAuthorizationPolicies.Viewer)]
     [Route("v1/events")]
     public class EventsController : Controller
     {

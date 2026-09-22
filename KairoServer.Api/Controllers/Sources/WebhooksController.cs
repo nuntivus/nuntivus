@@ -6,6 +6,7 @@ using KairoServer.Common;
 using KairoServer.Common.Extensions;
 using KairoServer.Common.Logging;
 using KairoServer.Domain.Sources;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace KairoServer.Api.Controllers.Sources
@@ -33,6 +34,7 @@ namespace KairoServer.Api.Controllers.Sources
         }
 
         [HttpPost("{source}")]
+        [AllowAnonymous]
         public async Task<IActionResult> Ingest(
             string source,
             [FromBody] WebhookIngestRequest request,

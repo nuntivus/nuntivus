@@ -56,7 +56,7 @@ namespace KairoServer.IntegrationTests
             Assert.Equal(1, replayRows);
 
             var outboxRows = await conn.ExecuteScalarAsync<long>(
-                "SELECT COUNT(*) FROM outbox_messages WHERE event_id = @eventId AND type = 'EventAccepted';",
+                "SELECT COUNT(*) FROM outbox_messages WHERE event_id = @eventId AND type = 'event.accepted';",
                 new { eventId = replayedEventId });
             Assert.Equal(1, outboxRows);
 

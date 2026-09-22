@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace KairoServer.Api.Controllers.Contracts
 {
     [ApiController]
+    [Authorize(Policy = AdminAuthorizationPolicies.Viewer)]
     [Route("v1/[controller]")]
     public class ContractsController : Controller
     {
