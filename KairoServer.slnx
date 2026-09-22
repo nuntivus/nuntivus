@@ -36,6 +36,10 @@
   <Project Path="KairoServer.Application/KairoServer.Application.csproj" />
   <Project Path="KairoServer.Common/KairoServer.Common.csproj" Id="cb9b9f49-5153-447f-a7b1-dd8c89f2f0de" />
   <Project Path="KairoServer.Contracts/KairoServer.Contracts.csproj" />
+  <Project Path="KairoServer.Dashboard/kairoserver.dashboard.esproj">
+    <Build />
+    <Deploy />
+  </Project>
   <Project Path="KairoServer.Domain/KairoServer.Domain.csproj" />
   <Project Path="KairoServer.Infastructure/KairoServer.Infastructure.csproj" />
   <Project Path="KairoServer.IntegrationTests/KairoServer.IntegrationTests.csproj" />
