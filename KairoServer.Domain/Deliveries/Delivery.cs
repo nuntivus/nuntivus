@@ -265,12 +265,12 @@ namespace KairoServer.Domain.Deliveries
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(reason);
 
-            if (Status == DeliveryStatus.Dead)
-                return false;
-
-            if (Status is not (DeliveryStatus.Pending or DeliveryStatus.Failed))
+            if (Status is not (DeliveryStatus.Pending or DeliveryStatus.Failed or DeliveryStatus.Dead))
                 throw new InvalidOperationException(
                     $"Cannot manually cancel delivery from {Status}.");
+
+            if (Status == DeliveryStatus.Dead)
+                return false;
 
             Status = DeliveryStatus.Dead;
             LastError = reason;

@@ -95,10 +95,26 @@ namespace KairoServer.Application.Deliveries.Recovery
             if (delivery is null)
                 return Result.Failure<DeliveryFailureView>(Error.NotFound($"Delivery '{deliveryId}' was not found."));
 
+            var attempts = await _deliveries.GetAttemptsByDeliveryIdAsync(deliveryId, cancellationToken);
+            if (attempts.IsFailure)
+                return Result<DeliveryFailureView>.Fail(attempts.Errors);
+
+            DeliveryAttempt? latestFailedAttempt = null;
+            foreach (var attempt in attempts.Value)
+            {
+                if (attempt.Succeeded)
+                    continue;
+
+                if (latestFailedAttempt is null || attempt.CompletedAt > latestFailedAttempt.CompletedAt)
+                    latestFailedAttempt = attempt;
+            }
+
             return Result.Success(new DeliveryFailureView(
                 delivery.Id,
                 delivery.Status,
                 delivery.LastError,
+                latestFailedAttempt?.FailureCategory,
+                latestFailedAttempt?.CompletedAt,
                 delivery.NextAttemptAt,
                 delivery.UpdatedAt));
         }
@@ -132,7 +148,8 @@ namespace KairoServer.Application.Deliveries.Recovery
                     attempt.Error,
                     attempt.Metadata,
                     attempt.StartedAt,
-                    attempt.CompletedAt));
+                    attempt.CompletedAt,
+                    DurationMs: Math.Max(0L, (long)(attempt.CompletedAt - attempt.StartedAt).TotalMilliseconds)));
             }
 
             return Result.Success<IReadOnlyList<DeliveryAttemptView>>(mapped);

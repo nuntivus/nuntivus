@@ -268,6 +268,54 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Disable_when_already_disabled_is_idempotent_and_does_not_duplicate_audit()
+        {
+            await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest("idem-disable", "Idem Disable"));
+
+            var first = await _client.PostAsync("/v1/customers/idem-disable/disable", null);
+            var second = await _client.PostAsync("/v1/customers/idem-disable/disable", null);
+
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+            var secondBody = await second.Content.ReadFromJsonAsync<CustomerView>();
+            Assert.NotNull(secondBody);
+            Assert.False(secondBody!.Enabled);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            await conn.OpenAsync();
+            var actions = (await conn.QueryAsync<string>(
+                "SELECT action FROM audit_logs WHERE category = 'customer' AND customer_id = @customerId ORDER BY created_at;",
+                new { customerId = "idem-disable" })).AsList();
+
+            Assert.Equal(2, actions.Count);
+            Assert.Equal("created", actions[0]);
+            Assert.Equal("disabled", actions[1]);
+        }
+
+        [Fact]
+        public async Task Enable_when_already_enabled_is_idempotent_and_does_not_duplicate_audit()
+        {
+            await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest("idem-enable", "Idem Enable"));
+
+            var response = await _client.PostAsync("/v1/customers/idem-enable/enable", null);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var body = await response.Content.ReadFromJsonAsync<CustomerView>();
+            Assert.NotNull(body);
+            Assert.True(body!.Enabled);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            await conn.OpenAsync();
+            var actions = (await conn.QueryAsync<string>(
+                "SELECT action FROM audit_logs WHERE category = 'customer' AND customer_id = @customerId ORDER BY created_at;",
+                new { customerId = "idem-enable" })).AsList();
+
+            Assert.Single(actions);
+            Assert.Equal("created", actions[0]);
+        }
+
+        [Fact]
         public async Task Enable_missing_returns_404()
         {
             var resp = await _client.PostAsync("/v1/customers/missing/enable", null);

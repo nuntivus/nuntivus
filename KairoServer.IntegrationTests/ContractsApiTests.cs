@@ -178,6 +178,27 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Create_with_invalid_rate_limit_returns_400()
+        {
+            await CreateCustomerAsync("acme");
+
+            var req = new CreateContractRequest(
+                "acme",
+                new[] { "orders.created" },
+                new HttpDestinationConfig(
+                    "https://ok.example.com",
+                    new HttpAuthentication("hmac", new HttpCredential("ref", "secret.acme.webhook"))),
+                RateLimit: new ContractRateLimitConfig(0, 60, 10));
+
+            var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
+
+            Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+            var err = await resp.Content.ReadFromJsonAsync<ApiErrorResponse>();
+            Assert.NotNull(err);
+            Assert.Equal("validation", err!.Code);
+        }
+
+        [Fact]
         public async Task Create_with_private_network_destination_returns_400()
         {
             await CreateCustomerAsync("acme");

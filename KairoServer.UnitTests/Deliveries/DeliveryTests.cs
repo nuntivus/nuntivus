@@ -216,6 +216,30 @@ namespace KairoServer.UnitTests.Deliveries
             Assert.Equal(DeliveryStatus.Pending, delivery.Status);
         }
 
+        [Fact]
+        public void ManualCancel_From_Dead_Is_Idempotent_NoOp()
+        {
+            var delivery = NewPending(out var now);
+            delivery.MarkInFlight(now);
+            delivery.MarkDead("fatal", now.AddSeconds(1));
+
+            var changed = delivery.ManualCancel("operator cancel", now.AddSeconds(2));
+
+            Assert.False(changed);
+            Assert.Equal(DeliveryStatus.Dead, delivery.Status);
+            Assert.Equal("fatal", delivery.LastError);
+        }
+
+        [Fact]
+        public void ManualCancel_From_Delivered_Throws()
+        {
+            var delivery = NewPending(out var now);
+            delivery.MarkInFlight(now);
+            delivery.MarkDelivered(now.AddSeconds(1));
+
+            Assert.Throws<InvalidOperationException>(() => delivery.ManualCancel("not allowed", now.AddSeconds(2)));
+        }
+
         private static Delivery NewPending(out DateTimeOffset now)
         {
             now = DateTimeOffset.UtcNow;

@@ -7,6 +7,8 @@ namespace KairoServer.Application.Deliveries.Recovery
         Guid DeliveryId,
         DeliveryStatus Status,
         string? LastError,
+        string? FailureCategory,
+        DateTimeOffset? FailedAt,
         DateTimeOffset? NextAttemptAt,
         DateTimeOffset UpdatedAt);
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -393,6 +394,58 @@ namespace KairoServer.IntegrationTests
             Assert.Equal("Failed", failedDelivery.Status);
             Assert.Equal(2, failedDelivery.AttemptSummary.TotalAttempts);
             Assert.Equal("Permanent", failedDelivery.LatestFailure!.FailureCategory);
+        }
+
+        [Fact]
+        public async Task Get_event_by_id_with_non_object_payload_and_metadata_returns_safe_defaults()
+        {
+            var now = DateTimeOffset.UtcNow;
+            var sourceId = Guid.NewGuid();
+            var eventId = await InsertEventAsync(
+                sourceId,
+                "orders.created",
+                occurredAt: now.AddMinutes(-5),
+                receivedAt: now.AddMinutes(-4),
+                payload: "[]",
+                metadata: "\"text\"");
+
+            var response = await _client.GetAsync($"/v1/events/{eventId:D}");
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var body = await response.Content.ReadFromJsonAsync<EventQueryDto>();
+            Assert.NotNull(body);
+            Assert.Equal(JsonValueKind.Object, body!.Payload.ValueKind);
+            Assert.False(body.Payload.EnumerateObject().Any());
+            Assert.Null(body.Metadata);
+        }
+
+        [Fact]
+        public async Task Get_event_by_id_supports_large_payload_object()
+        {
+            var now = DateTimeOffset.UtcNow;
+            var sourceId = Guid.NewGuid();
+            var largeValue = new string('x', 128_000);
+            var payload = JsonSerializer.Serialize(new Dictionary<string, string>
+            {
+                ["eventId"] = "large-1",
+                ["blob"] = largeValue,
+            });
+
+            var eventId = await InsertEventAsync(
+                sourceId,
+                "orders.created",
+                occurredAt: now.AddMinutes(-3),
+                receivedAt: now.AddMinutes(-2),
+                payload: payload,
+                metadata: "{}");
+
+            var response = await _client.GetAsync($"/v1/events/{eventId:D}");
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var body = await response.Content.ReadFromJsonAsync<EventQueryDto>();
+            Assert.NotNull(body);
+            Assert.Equal("large-1", body!.Payload.GetProperty("eventId").GetString());
+            Assert.Equal(largeValue.Length, body.Payload.GetProperty("blob").GetString()!.Length);
         }
 
         [Fact]

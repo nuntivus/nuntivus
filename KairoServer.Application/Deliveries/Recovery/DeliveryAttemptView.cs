@@ -11,5 +11,6 @@ namespace KairoServer.Application.Deliveries.Recovery
         string? Error,
         IReadOnlyDictionary<string, string> Metadata,
         DateTimeOffset StartedAt,
-        DateTimeOffset CompletedAt);
+        DateTimeOffset CompletedAt,
+        long DurationMs);
 }

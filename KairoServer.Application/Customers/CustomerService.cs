@@ -183,6 +183,11 @@ namespace KairoServer.Application.Customers
                 if (customer is null)
                     return Result.Failure<CustomerView>(Error.NotFound($"Customer '{id}' was not found."));
 
+                if (customer.Enabled == enable)
+                {
+                    return Result.Success(customer.ToView());
+                }
+
                 var now = DateTimeOffset.UtcNow;
                 if (enable) customer.Enable(now); else customer.Disable(now);
 

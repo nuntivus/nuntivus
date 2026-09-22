@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using Dapper;
 using KairoServer.Api.Controllers.Deliveries;
 using KairoServer.Api.Common;
+using KairoServer.Application.Deliveries.Recovery;
+using KairoServer.Domain.Deliveries;
 using Npgsql;
 
 namespace KairoServer.IntegrationTests
@@ -70,6 +72,43 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Cancel_endpoint_transitions_pending_to_dead_and_is_idempotent_for_dead()
+        {
+            var now = DateTimeOffset.UtcNow;
+            var (eventId, contractId, customerId) = await SeedGraphAsync(now.AddMinutes(-2));
+            var id = Guid.NewGuid();
+
+            await InsertDeliveryAsync(
+                id,
+                eventId,
+                contractId,
+                customerId,
+                status: "Pending",
+                attemptCount: 0,
+                createdAt: now.AddMinutes(-2),
+                updatedAt: now.AddMinutes(-2));
+
+            var operationId = Guid.NewGuid();
+            var first = await _client.PostAsJsonAsync(
+                $"/v1/deliveries/{id}/cancel",
+                new ManualDeliveryOperationApiRequest(operationId, "cancel pending"));
+            var second = await _client.PostAsJsonAsync(
+                $"/v1/deliveries/{id}/cancel",
+                new ManualDeliveryOperationApiRequest(operationId, "cancel pending"));
+
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            await conn.OpenAsync();
+            var status = await conn.ExecuteScalarAsync<string>("SELECT status FROM deliveries WHERE id = @id", new { id });
+            var audits = await conn.ExecuteScalarAsync<long>("SELECT COUNT(*) FROM delivery_operation_audits WHERE delivery_id = @id", new { id });
+
+            Assert.Equal("Dead", status);
+            Assert.Equal(1L, audits);
+        }
+
+        [Fact]
         public async Task Inspect_endpoints_return_failure_and_attempts()
         {
             var id = await SeedDeadDeliveryWithAttemptAsync();
@@ -88,6 +127,85 @@ namespace KairoServer.IntegrationTests
             Assert.NotNull(attemptsBody);
             Assert.Single(attemptsBody!);
             Assert.False(attemptsBody[0].Succeeded);
+            Assert.Equal("Permanent", attemptsBody[0].FailureCategory);
+            Assert.True(attemptsBody[0].DurationMs > 0);
+            Assert.NotEqual(default, attemptsBody[0].StartedAt);
+            Assert.NotEqual(default, attemptsBody[0].CompletedAt);
+
+            Assert.Equal("Permanent", failureBody.FailureCategory);
+            Assert.NotNull(failureBody.FailedAt);
+        }
+
+        [Fact]
+        public async Task Failure_endpoint_returns_structured_state_for_failed_pending_and_succeeded_deliveries()
+        {
+            var now = DateTimeOffset.UtcNow;
+            var (eventId, contractId, customerId) = await SeedGraphAsync(now.AddMinutes(-10));
+            var pendingEventId = await SeedEventAsync(now.AddMinutes(-4));
+            var deliveredEventId = await SeedEventAsync(now.AddMinutes(-3));
+
+            var failedId = Guid.NewGuid();
+            await InsertDeliveryAsync(
+                failedId,
+                eventId,
+                contractId,
+                customerId,
+                status: "Failed",
+                attemptCount: 2,
+                createdAt: now.AddMinutes(-9),
+                updatedAt: now.AddMinutes(-5),
+                lastError: "timeout",
+                nextAttemptAt: now.AddMinutes(2));
+            await InsertAttemptAsync(
+                failedId,
+                attemptNumber: 2,
+                succeeded: false,
+                failureCategory: "Transient",
+                error: "timeout",
+                startedAt: now.AddMinutes(-5),
+                completedAt: now.AddMinutes(-5).AddSeconds(4));
+
+            var pendingId = Guid.NewGuid();
+            await InsertDeliveryAsync(
+                pendingId,
+                pendingEventId,
+                contractId,
+                customerId,
+                status: "Pending",
+                attemptCount: 0,
+                createdAt: now.AddMinutes(-4),
+                updatedAt: now.AddMinutes(-4));
+
+            var deliveredId = Guid.NewGuid();
+            await InsertDeliveryAsync(
+                deliveredId,
+                deliveredEventId,
+                contractId,
+                customerId,
+                status: "Delivered",
+                attemptCount: 1,
+                createdAt: now.AddMinutes(-3),
+                updatedAt: now.AddMinutes(-2));
+
+            var failedResponse = await _client.GetFromJsonAsync<DeliveryFailureDto>($"/v1/deliveries/{failedId}/failure");
+            var pendingResponse = await _client.GetFromJsonAsync<DeliveryFailureDto>($"/v1/deliveries/{pendingId}/failure");
+            var deliveredResponse = await _client.GetFromJsonAsync<DeliveryFailureDto>($"/v1/deliveries/{deliveredId}/failure");
+
+            Assert.NotNull(failedResponse);
+            Assert.Equal(DeliveryStatus.Failed, failedResponse!.Status);
+            Assert.Equal("Transient", failedResponse.FailureCategory);
+            Assert.NotNull(failedResponse.FailedAt);
+            Assert.NotNull(failedResponse.NextAttemptAt);
+
+            Assert.NotNull(pendingResponse);
+            Assert.Equal(DeliveryStatus.Pending, pendingResponse!.Status);
+            Assert.Null(pendingResponse.FailureCategory);
+            Assert.Null(pendingResponse.FailedAt);
+
+            Assert.NotNull(deliveredResponse);
+            Assert.Equal(DeliveryStatus.Delivered, deliveredResponse!.Status);
+            Assert.Null(deliveredResponse.FailureCategory);
+            Assert.Null(deliveredResponse.FailedAt);
         }
 
         [Fact]
@@ -130,7 +248,7 @@ namespace KairoServer.IntegrationTests
             Assert.NotNull(firstBody);
             Assert.NotNull(secondBody);
             Assert.Equal(firstBody!.Id, secondBody!.Id);
-            Assert.Equal("Pending", firstBody.Status);
+            Assert.Equal(DeliveryReplayJobStatus.Pending, firstBody.Status);
 
             await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
             await conn.OpenAsync();
@@ -143,6 +261,47 @@ namespace KairoServer.IntegrationTests
 
             Assert.Equal(1L, count);
             Assert.Equal(1L, auditCount);
+        }
+
+        [Fact]
+        public async Task Replay_job_endpoint_rejects_invalid_batch_limit()
+        {
+            var request = new DeliveryReplayJobApiRequest(
+                Guid.NewGuid(),
+                EventType: "orders.created",
+                CustomerId: null,
+                ContractId: null,
+                CreatedFrom: DateTimeOffset.UtcNow.AddHours(-1),
+                CreatedTo: DateTimeOffset.UtcNow,
+                BatchLimit: 0,
+                Reason: "invalid");
+
+            var response = await _client.PostAsJsonAsync("/v1/deliveries/replay-jobs", request);
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+            Assert.NotNull(error);
+            Assert.Equal("validation", error!.Code);
+        }
+
+        [Fact]
+        public async Task Replay_job_endpoint_requires_authentication()
+        {
+            using var unauthClient = _fixture.CreateClient();
+
+            var request = new DeliveryReplayJobApiRequest(
+                Guid.NewGuid(),
+                EventType: "orders.created",
+                CustomerId: null,
+                ContractId: null,
+                CreatedFrom: DateTimeOffset.UtcNow.AddHours(-1),
+                CreatedTo: DateTimeOffset.UtcNow,
+                BatchLimit: 10,
+                Reason: "auth");
+
+            var response = await unauthClient.PostAsJsonAsync("/v1/deliveries/replay-jobs", request);
+
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         }
 
         [Fact]
@@ -191,7 +350,7 @@ namespace KairoServer.IntegrationTests
             Assert.Equal(eventId, body.EventId);
             Assert.Equal(contractId, body.ContractId);
             Assert.Equal(customerId, body.CustomerId);
-            Assert.Equal("Failed", body.Status);
+            Assert.Equal(DeliveryStatus.Failed, body.Status);
             Assert.Equal(2, body.AttemptSummary.TotalAttempts);
             Assert.Equal(0, body.AttemptSummary.SuccessfulAttempts);
             Assert.Equal(2, body.AttemptSummary.FailedAttempts);
@@ -524,16 +683,16 @@ namespace KairoServer.IntegrationTests
                 });
         }
 
-        private sealed record DeliveryFailureDto(Guid DeliveryId, string Status, string? LastError, DateTimeOffset? NextAttemptAt, DateTimeOffset UpdatedAt);
-        private sealed record DeliveryAttemptDto(Guid Id, int AttemptNumber, bool Succeeded, string? FailureCategory, string? Error, Dictionary<string, string> Metadata, DateTimeOffset StartedAt, DateTimeOffset CompletedAt);
-        private sealed record DeliveryReplayJobDto(Guid Id, string Status, int ReplayedCount);
+        private sealed record DeliveryFailureDto(Guid DeliveryId, DeliveryStatus Status, string? LastError, string? FailureCategory, DateTimeOffset? FailedAt, DateTimeOffset? NextAttemptAt, DateTimeOffset UpdatedAt);
+        private sealed record DeliveryAttemptDto(Guid Id, int AttemptNumber, bool Succeeded, string? FailureCategory, string? Error, Dictionary<string, string> Metadata, DateTimeOffset StartedAt, DateTimeOffset CompletedAt, long DurationMs);
+        private sealed record DeliveryReplayJobDto(Guid Id, DeliveryReplayJobStatus Status, int ReplayedCount);
         private sealed record DeliveryQueryDto(
             Guid Id,
             Guid EventId,
             string CustomerId,
             Guid ContractId,
             string EventType,
-            string Status,
+            DeliveryStatus Status,
             int AttemptCount,
             string? LastError,
             DateTimeOffset? NextAttemptAt,

@@ -138,8 +138,11 @@ namespace KairoServer.Api.Controllers.Events
 
         private static JsonElement ParseJson(string json)
         {
-            using var document = JsonDocument.Parse(json);
-            return document.RootElement.Clone();
+            if (TryParseJsonObject(json, out var element))
+                return element;
+
+            using var empty = JsonDocument.Parse("{}");
+            return empty.RootElement.Clone();
         }
 
         private static JsonElement? ParseOptionalJson(string? json)
@@ -147,8 +150,31 @@ namespace KairoServer.Api.Controllers.Events
             if (string.IsNullOrWhiteSpace(json))
                 return null;
 
-            using var document = JsonDocument.Parse(json);
-            return document.RootElement.Clone();
+            if (TryParseJsonObject(json, out var element))
+                return element;
+
+            return null;
+        }
+
+        private static bool TryParseJsonObject(string json, out JsonElement element)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    element = default;
+                    return false;
+                }
+
+                element = document.RootElement.Clone();
+                return true;
+            }
+            catch (JsonException)
+            {
+                element = default;
+                return false;
+            }
         }
 
         private string? GetActorId()

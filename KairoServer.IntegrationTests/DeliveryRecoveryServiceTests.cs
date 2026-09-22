@@ -178,6 +178,40 @@ namespace KairoServer.IntegrationTests
             Assert.Null(nonMatching.next_attempt_at);
         }
 
+        [Fact]
+        public async Task ReplayJob_Submit_Rejects_Request_Without_Filters()
+        {
+            var service = BuildService();
+
+            var result = await service.SubmitReplayJobAsync(
+                new DeliveryReplayRequest(
+                    Guid.NewGuid(),
+                    "operator-replay",
+                    "{\"source\":\"integration\"}",
+                    EventType: null,
+                    CustomerId: null,
+                    ContractId: null,
+                    CreatedFrom: null,
+                    CreatedTo: null,
+                    BatchLimit: 10),
+                CancellationToken.None);
+
+            Assert.True(result.IsFailure);
+            Assert.Equal("validation", result.Error?.Code);
+            Assert.Contains("At least one replay filter", result.Error?.Message);
+        }
+
+        [Fact]
+        public async Task ProcessReplayJobs_Rejects_NonPositive_MaxJobs()
+        {
+            var service = BuildService();
+
+            var result = await service.ProcessReplayJobsAsync(0, CancellationToken.None);
+
+            Assert.True(result.IsFailure);
+            Assert.Equal("validation", result.Error?.Code);
+        }
+
         private DeliveryRecoveryService BuildService()
         {
             var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
