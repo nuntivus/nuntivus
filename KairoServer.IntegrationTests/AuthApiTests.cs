@@ -123,6 +123,24 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Admin_user_delete_is_idempotent_for_admin()
+        {
+            using var client = _fixture.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Test-Auth", "on");
+            client.DefaultRequestHeaders.Add("X-Test-Role", "Admin");
+
+            var createRequest = new ReplaceAdminUserRolesRequest("Delete Twice User", new[] { "Viewer" });
+            var createResponse = await client.PutAsJsonAsync("/v1/admin/users/delete-twice-user/roles", createRequest);
+            Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
+
+            var firstDelete = await client.DeleteAsync("/v1/admin/users/delete-twice-user");
+            var secondDelete = await client.DeleteAsync("/v1/admin/users/delete-twice-user");
+
+            Assert.Equal(HttpStatusCode.NoContent, firstDelete.StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent, secondDelete.StatusCode);
+        }
+
+        [Fact]
         public async Task Instance_settings_update_and_get_require_admin_and_persist()
         {
             using var adminClient = _fixture.CreateClient();
@@ -160,6 +178,49 @@ namespace KairoServer.IntegrationTests
             var allKeysCount = await conn.ExecuteScalarAsync<long>(
                 "SELECT COUNT(*) FROM instance_settings WHERE key IN ('instance.delivery.defaults','instance.retry.defaults','instance.security.defaults','instance.retention.defaults','instance.limits.defaults');");
             Assert.Equal(5L, allKeysCount);
+        }
+
+        [Fact]
+        public async Task Instance_settings_contract_schema_is_stable()
+        {
+            using var client = _fixture.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Test-Auth", "on");
+            client.DefaultRequestHeaders.Add("X-Test-Role", "Admin");
+
+            var response = await client.GetAsync("/v1/admin/settings/instance");
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            await using var bodyStream = await response.Content.ReadAsStreamAsync();
+            using var body = await JsonDocument.ParseAsync(bodyStream);
+
+            Assert.True(body.RootElement.TryGetProperty("deliveryDefaults", out var deliveryDefaults));
+            Assert.True(deliveryDefaults.TryGetProperty("requestTimeoutSeconds", out _));
+            Assert.True(deliveryDefaults.TryGetProperty("maxAttempts", out _));
+            Assert.True(deliveryDefaults.TryGetProperty("batchLimit", out _));
+
+            Assert.True(body.RootElement.TryGetProperty("retryDefaults", out var retryDefaults));
+            Assert.True(retryDefaults.TryGetProperty("initialDelaySeconds", out _));
+            Assert.True(retryDefaults.TryGetProperty("maxDelaySeconds", out _));
+            Assert.True(retryDefaults.TryGetProperty("backoffMultiplier", out _));
+
+            Assert.True(body.RootElement.TryGetProperty("security", out var security));
+            Assert.True(security.TryGetProperty("requireHttpsDestinations", out _));
+            Assert.True(security.TryGetProperty("allowPrivateNetworkDestinations", out _));
+            Assert.True(security.TryGetProperty("requireDestinationCredentialEncryption", out _));
+
+            Assert.True(body.RootElement.TryGetProperty("retention", out var retention));
+            Assert.True(retention.TryGetProperty("eventRetentionDays", out _));
+            Assert.True(retention.TryGetProperty("deliveryAuditRetentionDays", out _));
+            Assert.True(retention.TryGetProperty("operationAuditRetentionDays", out _));
+
+            Assert.True(body.RootElement.TryGetProperty("limits", out var limits));
+            Assert.True(limits.TryGetProperty("maxEventPayloadBytes", out _));
+            Assert.True(limits.TryGetProperty("maxEventMetadataBytes", out _));
+            Assert.True(limits.TryGetProperty("maxContractsPerCustomer", out _));
+            Assert.True(limits.TryGetProperty("maxConcurrentReplayJobs", out _));
+
+            Assert.True(body.RootElement.TryGetProperty("updatedAt", out _));
+            Assert.True(body.RootElement.TryGetProperty("updatedBy", out _));
         }
 
         [Fact]
@@ -227,6 +288,72 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task User_preferences_are_isolated_per_user()
+        {
+            using var firstUserClient = _fixture.CreateClient();
+            firstUserClient.DefaultRequestHeaders.Add("X-Test-Auth", "on");
+            firstUserClient.DefaultRequestHeaders.Add("X-Test-Role", "Viewer");
+            firstUserClient.DefaultRequestHeaders.Add("X-Operator-Id", "prefs-user-a");
+
+            using var secondUserClient = _fixture.CreateClient();
+            secondUserClient.DefaultRequestHeaders.Add("X-Test-Auth", "on");
+            secondUserClient.DefaultRequestHeaders.Add("X-Test-Role", "Viewer");
+            secondUserClient.DefaultRequestHeaders.Add("X-Operator-Id", "prefs-user-b");
+
+            var firstUpdate = await firstUserClient.PutAsJsonAsync(
+                "/v1/settings/me/preferences",
+                new UpdateUserPreferencesRequest("dark", 60, true));
+            Assert.Equal(HttpStatusCode.OK, firstUpdate.StatusCode);
+
+            var secondGetBeforeUpdate = await secondUserClient.GetAsync("/v1/settings/me/preferences");
+            Assert.Equal(HttpStatusCode.OK, secondGetBeforeUpdate.StatusCode);
+            var secondBeforeBody = await secondGetBeforeUpdate.Content.ReadFromJsonAsync<UserPreferencesSettingsView>();
+            Assert.NotNull(secondBeforeBody);
+            Assert.Equal("system", secondBeforeBody!.Theme);
+            Assert.Equal(20, secondBeforeBody.DefaultPageSize);
+            Assert.False(secondBeforeBody.DenseTables);
+
+            var secondUpdate = await secondUserClient.PutAsJsonAsync(
+                "/v1/settings/me/preferences",
+                new UpdateUserPreferencesRequest("light", 25, false));
+            Assert.Equal(HttpStatusCode.OK, secondUpdate.StatusCode);
+
+            var firstGetAfterSecondUpdate = await firstUserClient.GetAsync("/v1/settings/me/preferences");
+            var secondGetAfterSecondUpdate = await secondUserClient.GetAsync("/v1/settings/me/preferences");
+
+            var firstBody = await firstGetAfterSecondUpdate.Content.ReadFromJsonAsync<UserPreferencesSettingsView>();
+            var secondBody = await secondGetAfterSecondUpdate.Content.ReadFromJsonAsync<UserPreferencesSettingsView>();
+
+            Assert.NotNull(firstBody);
+            Assert.NotNull(secondBody);
+            Assert.Equal("dark", firstBody!.Theme);
+            Assert.Equal(60, firstBody.DefaultPageSize);
+            Assert.True(firstBody.DenseTables);
+            Assert.Equal("light", secondBody!.Theme);
+            Assert.Equal(25, secondBody.DefaultPageSize);
+            Assert.False(secondBody.DenseTables);
+        }
+
+        [Fact]
+        public async Task User_preferences_contract_schema_is_stable()
+        {
+            using var client = _fixture.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Test-Auth", "on");
+            client.DefaultRequestHeaders.Add("X-Test-Role", "Viewer");
+
+            var response = await client.GetAsync("/v1/settings/me/preferences");
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            await using var bodyStream = await response.Content.ReadAsStreamAsync();
+            using var body = await JsonDocument.ParseAsync(bodyStream);
+
+            Assert.True(body.RootElement.TryGetProperty("theme", out _));
+            Assert.True(body.RootElement.TryGetProperty("defaultPageSize", out _));
+            Assert.True(body.RootElement.TryGetProperty("denseTables", out _));
+            Assert.True(body.RootElement.TryGetProperty("updatedAt", out _));
+        }
+
+        [Fact]
         public async Task User_preferences_update_validates_theme()
         {
             using var client = _fixture.CreateClient();
@@ -237,6 +364,34 @@ namespace KairoServer.IntegrationTests
             var response = await client.PutAsJsonAsync("/v1/settings/me/preferences", update);
 
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        [Fact]
+        public async Task User_preferences_update_validates_theme_size_limit()
+        {
+            using var client = _fixture.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Test-Auth", "on");
+            client.DefaultRequestHeaders.Add("X-Test-Role", "Viewer");
+
+            var update = new UpdateUserPreferencesRequest(new string('d', 21), 20, false);
+            var response = await client.PutAsJsonAsync("/v1/settings/me/preferences", update);
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        }
+
+        [Theory]
+        [InlineData("Viewer")]
+        [InlineData("Operator")]
+        public async Task Admin_user_role_assignment_prevents_privilege_escalation_for_non_admin(string role)
+        {
+            using var client = _fixture.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Test-Auth", "on");
+            client.DefaultRequestHeaders.Add("X-Test-Role", role);
+
+            var request = new ReplaceAdminUserRolesRequest("Escalation Target", new[] { "Admin" });
+            var response = await client.PutAsJsonAsync("/v1/admin/users/escalation-target/roles", request);
+
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         }
 
         [Fact]

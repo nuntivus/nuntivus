@@ -142,22 +142,20 @@ namespace KairoServer.Application.Security
                     return Result.Failure(removed.Errors);
                 }
 
-                if (!removed.Value)
-                {
-                    _unitOfWork.Rollback();
-                    return Result.Failure(Error.NotFound($"Admin user '{subject}' was not found."));
-                }
-
                 var audit = AuditLogEntry.Create(
                     category: "admin-user",
-                    action: "deleted",
+                    action: removed.Value ? "deleted" : "delete-noop",
                     actorId: actorId,
                     customerId: null,
                     contractId: null,
                     deliveryId: null,
                     eventId: null,
                     operationId: null,
-                    details: JsonSerializer.Serialize(new { subject = subject.Trim() }),
+                    details: JsonSerializer.Serialize(new
+                    {
+                        subject = subject.Trim(),
+                        removed = removed.Value,
+                    }),
                     createdAt: now,
                     expiresAt: now.Add(AuditRetention));
 

@@ -10,6 +10,8 @@ namespace KairoServer.Application.Settings
 {
     public sealed class UserSettingsService : IUserSettingsService
     {
+        private const int MaxThemeLength = 20;
+
         private readonly ISettingsRepository _repository;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IAppLogger<UserSettingsService> _logger;
@@ -51,8 +53,10 @@ namespace KairoServer.Application.Settings
             if (validation is not null)
                 return Result.Failure<UserPreferencesSettingsView>(validation);
 
+            var theme = request.Theme.Trim().ToLowerInvariant();
+
             var state = new UserPreferencesState(
-                request.Theme.Trim(),
+                theme,
                 request.DefaultPageSize,
                 request.DenseTables,
                 DateTimeOffset.UtcNow);
@@ -86,9 +90,14 @@ namespace KairoServer.Application.Settings
             if (string.IsNullOrWhiteSpace(request.Theme))
                 return Error.Validation("theme is required.");
 
-            if (!string.Equals(request.Theme, "light", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(request.Theme, "dark", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(request.Theme, "system", StringComparison.OrdinalIgnoreCase))
+            if (request.Theme.Length > MaxThemeLength)
+                return Error.Validation($"theme must be at most {MaxThemeLength} characters.");
+
+            var normalizedTheme = request.Theme.Trim();
+
+            if (!string.Equals(normalizedTheme, "light", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(normalizedTheme, "dark", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(normalizedTheme, "system", StringComparison.OrdinalIgnoreCase))
             {
                 return Error.Validation("theme must be one of: light, dark, system.");
             }

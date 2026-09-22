@@ -52,39 +52,54 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 var retention = rows.FirstOrDefault(static row => row.Key == RetentionDefaultsKey);
                 var limits = rows.FirstOrDefault(static row => row.Key == LimitsDefaultsKey);
 
-                if (delivery is null || retry is null || security is null || retention is null || limits is null)
+                if (delivery is null && retry is null && security is null && retention is null && limits is null)
                     return Result.Success<InstanceSettingsState?>(null);
 
-                var deliveryPayload = JsonSerializer.Deserialize<DeliveryDefaultsPayload>(delivery.Value);
-                var retryPayload = JsonSerializer.Deserialize<RetryDefaultsPayload>(retry.Value);
-                var securityPayload = JsonSerializer.Deserialize<SecurityDefaultsPayload>(security.Value);
-                var retentionPayload = JsonSerializer.Deserialize<RetentionDefaultsPayload>(retention.Value);
-                var limitsPayload = JsonSerializer.Deserialize<LimitsDefaultsPayload>(limits.Value);
+                var deliveryPayload = delivery is null ? null : TryDeserialize<DeliveryDefaultsPayload>(delivery.Value);
+                var retryPayload = retry is null ? null : TryDeserialize<RetryDefaultsPayload>(retry.Value);
+                var securityPayload = security is null ? null : TryDeserialize<SecurityDefaultsPayload>(security.Value);
+                var retentionPayload = retention is null ? null : TryDeserialize<RetentionDefaultsPayload>(retention.Value);
+                var limitsPayload = limits is null ? null : TryDeserialize<LimitsDefaultsPayload>(limits.Value);
 
-                if (deliveryPayload is null || retryPayload is null || securityPayload is null || retentionPayload is null || limitsPayload is null)
-                    return Result.Success<InstanceSettingsState?>(null);
+                var defaults = GetDefaultState();
+                var requestTimeoutSeconds = deliveryPayload?.RequestTimeoutSeconds ?? defaults.RequestTimeoutSeconds;
+                var maxAttempts = deliveryPayload?.MaxAttempts ?? defaults.MaxAttempts;
+                var batchLimit = deliveryPayload?.BatchLimit ?? defaults.BatchLimit;
+                var initialDelaySeconds = retryPayload?.InitialDelaySeconds ?? defaults.InitialDelaySeconds;
+                var maxDelaySeconds = retryPayload?.MaxDelaySeconds ?? defaults.MaxDelaySeconds;
+                var backoffMultiplier = retryPayload?.BackoffMultiplier ?? defaults.BackoffMultiplier;
+                var requireHttpsDestinations = securityPayload?.RequireHttpsDestinations ?? defaults.RequireHttpsDestinations;
+                var allowPrivateNetworkDestinations = securityPayload?.AllowPrivateNetworkDestinations ?? defaults.AllowPrivateNetworkDestinations;
+                var requireDestinationCredentialEncryption = securityPayload?.RequireDestinationCredentialEncryption ?? defaults.RequireDestinationCredentialEncryption;
+                var eventRetentionDays = retentionPayload?.EventRetentionDays ?? defaults.EventRetentionDays;
+                var deliveryAuditRetentionDays = retentionPayload?.DeliveryAuditRetentionDays ?? defaults.DeliveryAuditRetentionDays;
+                var operationAuditRetentionDays = retentionPayload?.OperationAuditRetentionDays ?? defaults.OperationAuditRetentionDays;
+                var maxEventPayloadBytes = limitsPayload?.MaxEventPayloadBytes ?? defaults.MaxEventPayloadBytes;
+                var maxEventMetadataBytes = limitsPayload?.MaxEventMetadataBytes ?? defaults.MaxEventMetadataBytes;
+                var maxContractsPerCustomer = limitsPayload?.MaxContractsPerCustomer ?? defaults.MaxContractsPerCustomer;
+                var maxConcurrentReplayJobs = limitsPayload?.MaxConcurrentReplayJobs ?? defaults.MaxConcurrentReplayJobs;
 
                 var newest = rows
                     .OrderByDescending(static row => row.UpdatedAt)
                     .First();
 
                 return Result.Success<InstanceSettingsState?>(new InstanceSettingsState(
-                    deliveryPayload.RequestTimeoutSeconds,
-                    deliveryPayload.MaxAttempts,
-                    deliveryPayload.BatchLimit,
-                    retryPayload.InitialDelaySeconds,
-                    retryPayload.MaxDelaySeconds,
-                    retryPayload.BackoffMultiplier,
-                    securityPayload.RequireHttpsDestinations,
-                    securityPayload.AllowPrivateNetworkDestinations,
-                    securityPayload.RequireDestinationCredentialEncryption,
-                    retentionPayload.EventRetentionDays,
-                    retentionPayload.DeliveryAuditRetentionDays,
-                    retentionPayload.OperationAuditRetentionDays,
-                    limitsPayload.MaxEventPayloadBytes,
-                    limitsPayload.MaxEventMetadataBytes,
-                    limitsPayload.MaxContractsPerCustomer,
-                    limitsPayload.MaxConcurrentReplayJobs,
+                    requestTimeoutSeconds,
+                    maxAttempts,
+                    batchLimit,
+                    initialDelaySeconds,
+                    maxDelaySeconds,
+                    backoffMultiplier,
+                    requireHttpsDestinations,
+                    allowPrivateNetworkDestinations,
+                    requireDestinationCredentialEncryption,
+                    eventRetentionDays,
+                    deliveryAuditRetentionDays,
+                    operationAuditRetentionDays,
+                    maxEventPayloadBytes,
+                    maxEventMetadataBytes,
+                    maxContractsPerCustomer,
+                    maxConcurrentReplayJobs,
                     newest.UpdatedAt,
                     newest.UpdatedBy));
             }
@@ -117,31 +132,41 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         updated_by = EXCLUDED.updated_by;
                     """;
 
-                var deliveryJson = JsonSerializer.Serialize(new DeliveryDefaultsPayload(
-                    state.RequestTimeoutSeconds,
-                    state.MaxAttempts,
-                    state.BatchLimit));
+                var deliveryJson = JsonSerializer.Serialize(new DeliveryDefaultsPayload
+                {
+                    RequestTimeoutSeconds = state.RequestTimeoutSeconds,
+                    MaxAttempts = state.MaxAttempts,
+                    BatchLimit = state.BatchLimit,
+                });
 
-                var retryJson = JsonSerializer.Serialize(new RetryDefaultsPayload(
-                    state.InitialDelaySeconds,
-                    state.MaxDelaySeconds,
-                    state.BackoffMultiplier));
+                var retryJson = JsonSerializer.Serialize(new RetryDefaultsPayload
+                {
+                    InitialDelaySeconds = state.InitialDelaySeconds,
+                    MaxDelaySeconds = state.MaxDelaySeconds,
+                    BackoffMultiplier = state.BackoffMultiplier,
+                });
 
-                var securityJson = JsonSerializer.Serialize(new SecurityDefaultsPayload(
-                    state.RequireHttpsDestinations,
-                    state.AllowPrivateNetworkDestinations,
-                    state.RequireDestinationCredentialEncryption));
+                var securityJson = JsonSerializer.Serialize(new SecurityDefaultsPayload
+                {
+                    RequireHttpsDestinations = state.RequireHttpsDestinations,
+                    AllowPrivateNetworkDestinations = state.AllowPrivateNetworkDestinations,
+                    RequireDestinationCredentialEncryption = state.RequireDestinationCredentialEncryption,
+                });
 
-                var retentionJson = JsonSerializer.Serialize(new RetentionDefaultsPayload(
-                    state.EventRetentionDays,
-                    state.DeliveryAuditRetentionDays,
-                    state.OperationAuditRetentionDays));
+                var retentionJson = JsonSerializer.Serialize(new RetentionDefaultsPayload
+                {
+                    EventRetentionDays = state.EventRetentionDays,
+                    DeliveryAuditRetentionDays = state.DeliveryAuditRetentionDays,
+                    OperationAuditRetentionDays = state.OperationAuditRetentionDays,
+                });
 
-                var limitsJson = JsonSerializer.Serialize(new LimitsDefaultsPayload(
-                    state.MaxEventPayloadBytes,
-                    state.MaxEventMetadataBytes,
-                    state.MaxContractsPerCustomer,
-                    state.MaxConcurrentReplayJobs));
+                var limitsJson = JsonSerializer.Serialize(new LimitsDefaultsPayload
+                {
+                    MaxEventPayloadBytes = state.MaxEventPayloadBytes,
+                    MaxEventMetadataBytes = state.MaxEventMetadataBytes,
+                    MaxContractsPerCustomer = state.MaxContractsPerCustomer,
+                    MaxConcurrentReplayJobs = state.MaxConcurrentReplayJobs,
+                });
 
                 await connection.ExecuteAsync(new CommandDefinition(
                     sql,
@@ -239,7 +264,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                 if (row is null)
                     return Result.Success<UserPreferencesState?>(null);
 
-                var payload = JsonSerializer.Deserialize<UserPreferencesPayload>(row.Value);
+                var payload = TryDeserialize<UserPreferencesPayload>(row.Value);
                 if (payload is null)
                     return Result.Success<UserPreferencesState?>(null);
 
@@ -277,10 +302,12 @@ namespace KairoServer.Infastructure.Persistence.Postgres
 
                 var connection = uow.GetConnection()!;
                 var transaction = uow.GetTransaction()!;
-                var payload = JsonSerializer.Serialize(new UserPreferencesPayload(
-                    state.Theme,
-                    state.DefaultPageSize,
-                    state.DenseTables));
+                var payload = JsonSerializer.Serialize(new UserPreferencesPayload
+                {
+                    Theme = state.Theme,
+                    DefaultPageSize = state.DefaultPageSize,
+                    DenseTables = state.DenseTables,
+                });
 
                 await connection.ExecuteAsync(new CommandDefinition(
                     sql,
@@ -302,13 +329,84 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
+        private static InstanceSettingsState GetDefaultState()
+        {
+            return new InstanceSettingsState(
+                RequestTimeoutSeconds: 30,
+                MaxAttempts: 6,
+                BatchLimit: 500,
+                InitialDelaySeconds: 30,
+                MaxDelaySeconds: 3600,
+                BackoffMultiplier: 2.0,
+                RequireHttpsDestinations: true,
+                AllowPrivateNetworkDestinations: false,
+                RequireDestinationCredentialEncryption: true,
+                EventRetentionDays: 90,
+                DeliveryAuditRetentionDays: 365,
+                OperationAuditRetentionDays: 365,
+                MaxEventPayloadBytes: 262144,
+                MaxEventMetadataBytes: 65536,
+                MaxContractsPerCustomer: 500,
+                MaxConcurrentReplayJobs: 5,
+                UpdatedAt: DateTimeOffset.UtcNow,
+                UpdatedBy: null);
+        }
+
+        private static T? TryDeserialize<T>(string json)
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<T>(json);
+            }
+            catch
+            {
+                return default;
+            }
+        }
+
         private sealed record InstanceSettingRow(string Key, string Value, DateTimeOffset UpdatedAt, string? UpdatedBy);
         private sealed record UserSettingRow(string Value, DateTimeOffset UpdatedAt);
-        private sealed record DeliveryDefaultsPayload(int RequestTimeoutSeconds, int MaxAttempts, int BatchLimit);
-        private sealed record RetryDefaultsPayload(int InitialDelaySeconds, int MaxDelaySeconds, double BackoffMultiplier);
-        private sealed record SecurityDefaultsPayload(bool RequireHttpsDestinations, bool AllowPrivateNetworkDestinations, bool RequireDestinationCredentialEncryption);
-        private sealed record RetentionDefaultsPayload(int EventRetentionDays, int DeliveryAuditRetentionDays, int OperationAuditRetentionDays);
-        private sealed record LimitsDefaultsPayload(int MaxEventPayloadBytes, int MaxEventMetadataBytes, int MaxContractsPerCustomer, int MaxConcurrentReplayJobs);
-        private sealed record UserPreferencesPayload(string Theme, int DefaultPageSize, bool DenseTables);
+        private sealed class DeliveryDefaultsPayload
+        {
+            public int? RequestTimeoutSeconds { get; init; }
+            public int? MaxAttempts { get; init; }
+            public int? BatchLimit { get; init; }
+        }
+
+        private sealed class RetryDefaultsPayload
+        {
+            public int? InitialDelaySeconds { get; init; }
+            public int? MaxDelaySeconds { get; init; }
+            public double? BackoffMultiplier { get; init; }
+        }
+
+        private sealed class SecurityDefaultsPayload
+        {
+            public bool? RequireHttpsDestinations { get; init; }
+            public bool? AllowPrivateNetworkDestinations { get; init; }
+            public bool? RequireDestinationCredentialEncryption { get; init; }
+        }
+
+        private sealed class RetentionDefaultsPayload
+        {
+            public int? EventRetentionDays { get; init; }
+            public int? DeliveryAuditRetentionDays { get; init; }
+            public int? OperationAuditRetentionDays { get; init; }
+        }
+
+        private sealed class LimitsDefaultsPayload
+        {
+            public int? MaxEventPayloadBytes { get; init; }
+            public int? MaxEventMetadataBytes { get; init; }
+            public int? MaxContractsPerCustomer { get; init; }
+            public int? MaxConcurrentReplayJobs { get; init; }
+        }
+
+        private sealed class UserPreferencesPayload
+        {
+            public string Theme { get; init; } = string.Empty;
+            public int DefaultPageSize { get; init; }
+            public bool DenseTables { get; init; }
+        }
     }
 }

@@ -50,24 +50,30 @@ namespace KairoServer.Application.Settings
             if (validation is not null)
                 return Result.Failure<InstanceSettingsView>(validation);
 
+            var deliveryDefaults = request.DeliveryDefaults!;
+            var retryDefaults = request.RetryDefaults!;
+            var security = request.Security!;
+            var retention = request.Retention!;
+            var limits = request.Limits!;
+
             var now = DateTimeOffset.UtcNow;
             var state = new InstanceSettingsState(
-                request.DeliveryDefaults.RequestTimeoutSeconds,
-                request.DeliveryDefaults.MaxAttempts,
-                request.DeliveryDefaults.BatchLimit,
-                request.RetryDefaults.InitialDelaySeconds,
-                request.RetryDefaults.MaxDelaySeconds,
-                request.RetryDefaults.BackoffMultiplier,
-                request.Security.RequireHttpsDestinations,
-                request.Security.AllowPrivateNetworkDestinations,
-                request.Security.RequireDestinationCredentialEncryption,
-                request.Retention.EventRetentionDays,
-                request.Retention.DeliveryAuditRetentionDays,
-                request.Retention.OperationAuditRetentionDays,
-                request.Limits.MaxEventPayloadBytes,
-                request.Limits.MaxEventMetadataBytes,
-                request.Limits.MaxContractsPerCustomer,
-                request.Limits.MaxConcurrentReplayJobs,
+                deliveryDefaults.RequestTimeoutSeconds,
+                deliveryDefaults.MaxAttempts,
+                deliveryDefaults.BatchLimit,
+                retryDefaults.InitialDelaySeconds,
+                retryDefaults.MaxDelaySeconds,
+                retryDefaults.BackoffMultiplier,
+                security.RequireHttpsDestinations,
+                security.AllowPrivateNetworkDestinations,
+                security.RequireDestinationCredentialEncryption,
+                retention.EventRetentionDays,
+                retention.DeliveryAuditRetentionDays,
+                retention.OperationAuditRetentionDays,
+                limits.MaxEventPayloadBytes,
+                limits.MaxEventMetadataBytes,
+                limits.MaxContractsPerCustomer,
+                limits.MaxConcurrentReplayJobs,
                 now,
                 actorId);
 
@@ -117,6 +123,21 @@ namespace KairoServer.Application.Settings
         {
             if (request is null)
                 return Error.Validation("request is required.");
+
+            if (request.DeliveryDefaults is null)
+                return Error.Validation("deliveryDefaults is required.");
+
+            if (request.RetryDefaults is null)
+                return Error.Validation("retryDefaults is required.");
+
+            if (request.Security is null)
+                return Error.Validation("security is required.");
+
+            if (request.Retention is null)
+                return Error.Validation("retention is required.");
+
+            if (request.Limits is null)
+                return Error.Validation("limits is required.");
 
             if (request.DeliveryDefaults.RequestTimeoutSeconds is < 1 or > 300)
                 return Error.Validation("deliveryDefaults.requestTimeoutSeconds must be between 1 and 300.");
