@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Application.Events;
 using KairoServer.Application.Events.Queries;
+using KairoServer.Application.Auditing;
 using KairoServer.Application.Persistence;
 using KairoServer.Common;
 using KairoServer.Common.Logging;
@@ -65,6 +66,11 @@ namespace KairoServer.UnitTests.Events
         {
             public Task<Result<int>> AddAsync(KairoServer.Domain.Auditing.AuditLogEntry entry, IUnitOfWork uow, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(1));
+
+            public Task<Result<PagedResult<AuditLogListItemView>>> ListAsync(
+                AuditLogListQuery query,
+                CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(PagedResult<AuditLogListItemView>.Empty(query.Page, query.PageSize)));
         }
 
         private sealed class FakeUnitOfWork : IUnitOfWork

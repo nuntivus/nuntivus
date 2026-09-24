@@ -1,13 +1,38 @@
 const AUTH_TOKEN_KEY = 'kairo.dashboard.auth.token'
 
+let inMemoryToken: string | null = null
+
+function readSessionToken() {
+  try {
+    return window.sessionStorage.getItem(AUTH_TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+function writeSessionToken(token: string | null) {
+  try {
+    if (token === null) {
+      window.sessionStorage.removeItem(AUTH_TOKEN_KEY)
+      return
+    }
+
+    window.sessionStorage.setItem(AUTH_TOKEN_KEY, token)
+  } catch {
+  }
+}
+
 export function getStoredToken(): string | null {
-  return localStorage.getItem(AUTH_TOKEN_KEY)
+  const persisted = readSessionToken()
+  return persisted ?? inMemoryToken
 }
 
 export function persistToken(token: string) {
-  localStorage.setItem(AUTH_TOKEN_KEY, token)
+  inMemoryToken = token
+  writeSessionToken(token)
 }
 
 export function clearStoredToken() {
-  localStorage.removeItem(AUTH_TOKEN_KEY)
+  inMemoryToken = null
+  writeSessionToken(null)
 }

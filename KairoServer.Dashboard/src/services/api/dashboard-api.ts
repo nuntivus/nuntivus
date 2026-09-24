@@ -1,4 +1,5 @@
-import { apiGet } from './api-client'
+import { apiGet, type ApiRequestOptions } from './api-client'
+import type { PagedResponse } from './paged-response'
 
 export interface DashboardOverview {
   asOf: string
@@ -6,16 +7,6 @@ export interface DashboardOverview {
   totalPendingDeliveries: number
   totalFailedDeliveries: number
   totalDeadDeliveries: number
-}
-
-export interface PagedResponse<TItem> {
-  items: TItem[]
-  page: number
-  pageSize: number
-  totalCount: number
-  totalPages: number
-  hasPrevious: boolean
-  hasNext: boolean
 }
 
 export interface EventListItem {
@@ -40,36 +31,37 @@ export interface FailedDeliveryItem {
   updatedAt: string
 }
 
-export async function getDashboardOverview() {
-  return apiGet<DashboardOverview>('/v1/admin/overview')
+export async function getDashboardOverview(options?: ApiRequestOptions) {
+  return apiGet<DashboardOverview>('/v1/admin/overview', undefined, options)
 }
 
-export async function getSuccessfulDeliveriesCount() {
+export async function getSuccessfulDeliveriesCount(options?: ApiRequestOptions) {
   const response = await apiGet<PagedResponse<unknown>>('/v1/deliveries', {
     status: 'Delivered',
     page: 1,
     pageSize: 1,
-  })
+  }, options)
 
   return response.totalCount
 }
 
-export async function getRecentEvents(pageSize = 5) {
+export async function getRecentEvents(pageSize = 5, options?: ApiRequestOptions) {
   const response = await apiGet<PagedResponse<EventListItem>>('/v1/events', {
     page: 1,
     pageSize,
-  })
+  }, options)
 
   return response.items
 }
 
-export async function getRecentFailures(pageSize = 5) {
+export async function getRecentFailures(pageSize = 5, options?: ApiRequestOptions) {
   const response = await apiGet<PagedResponse<FailedDeliveryItem>>(
     '/v1/admin/deliveries/failures',
     {
       page: 1,
       pageSize,
     },
+    options,
   )
 
   return response.items

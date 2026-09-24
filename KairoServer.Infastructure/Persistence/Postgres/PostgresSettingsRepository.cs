@@ -33,7 +33,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             try
             {
                 const string sql = """
-                    SELECT key, value::text AS value, updated_at, updated_by
+                    SELECT key, value::text AS value, updated_at AS UpdatedAt, updated_by AS UpdatedBy
                     FROM instance_settings
                     WHERE key = ANY(@Keys);
                     """;
@@ -100,7 +100,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     maxEventMetadataBytes,
                     maxContractsPerCustomer,
                     maxConcurrentReplayJobs,
-                    newest.UpdatedAt,
+                    ToUtcDateTimeOffset(newest.UpdatedAt),
                     newest.UpdatedBy));
             }
             catch (Exception ex)
@@ -243,7 +243,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             try
             {
                 const string sql = """
-                    SELECT value::text AS value, updated_at
+                    SELECT value::text AS value, updated_at AS UpdatedAt
                     FROM user_settings
                     WHERE subject = @Subject AND key = @Key
                     LIMIT 1;
@@ -272,7 +272,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                     payload.Theme,
                     payload.DefaultPageSize,
                     payload.DenseTables,
-                    row.UpdatedAt));
+                    ToUtcDateTimeOffset(row.UpdatedAt)));
             }
             catch (Exception ex)
             {
@@ -364,8 +364,11 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             }
         }
 
-        private sealed record InstanceSettingRow(string Key, string Value, DateTimeOffset UpdatedAt, string? UpdatedBy);
-        private sealed record UserSettingRow(string Value, DateTimeOffset UpdatedAt);
+        private static DateTimeOffset ToUtcDateTimeOffset(DateTime value)
+            => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+
+        private sealed record InstanceSettingRow(string Key, string Value, DateTime UpdatedAt, string? UpdatedBy);
+        private sealed record UserSettingRow(string Value, DateTime UpdatedAt);
         private sealed class DeliveryDefaultsPayload
         {
             public int? RequestTimeoutSeconds { get; init; }

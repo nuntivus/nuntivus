@@ -1,4 +1,5 @@
 using KairoServer.Application.Caching;
+using KairoServer.Application.Auditing;
 using KairoServer.Application.Contracts;
 using KairoServer.Application.Contracts.Destinations;
 using KairoServer.Application.Customers;
@@ -26,10 +27,13 @@ using KairoServer.Infastructure.Logging;
 using KairoServer.Infastructure.Persistence.Caching;
 using KairoServer.Infastructure.Persistence.Postgres;
 using KairoServer.Infastructure.Persistence.Postgres.Migrations;
+using KairoServer.Infastructure.Security;
 using KairoServer.Domain.Deliveries;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -89,6 +93,17 @@ builder.Services
 builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<ApiSecurityOption>>().Value);
 
 builder.Services
+    .AddOptions<LocalAuthOption>()
+    .Bind(builder.Configuration.GetSection(KairoConfigurationSections.LocalAuth))
+    .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.Issuer), "LocalAuth:Issuer is required when local auth is enabled.")
+    .Validate(options => !options.Enabled || !string.IsNullOrWhiteSpace(options.Audience), "LocalAuth:Audience is required when local auth is enabled.")
+    .Validate(options => !options.Enabled || options.AccessTokenLifetime > TimeSpan.Zero, "LocalAuth:AccessTokenLifetime must be greater than zero when local auth is enabled.")
+    .Validate(options => !options.Enabled || options.ClockSkew >= TimeSpan.Zero, "LocalAuth:ClockSkew must be greater than or equal to zero when local auth is enabled.")
+    .Validate(options => !options.Enabled || LocalAuthOption.HasValidSigningKey(options.SigningKey), "LocalAuth:SigningKey must be base64 and at least 32 bytes when local auth is enabled.")
+    .ValidateOnStart();
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<LocalAuthOption>>().Value);
+
+builder.Services
     .AddOptions<CacheOption>()
     .Bind(builder.Configuration.GetSection(KairoConfigurationSections.Cache))
     .Validate(KairoConfigurationValidation.IsCacheTtlValid, "Cache:Ttl must be greater than zero.")
@@ -133,13 +148,71 @@ builder.AddKairoLogging();
 
 builder.Services.AddControllers();
 
+const string LocalDashboardCorsPolicy = "LocalDashboard";
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(LocalDashboardCorsPolicy, policy =>
+    {
+        policy
+            .SetIsOriginAllowed(origin =>
+            {
+                if (!Uri.TryCreate(origin, UriKind.Absolute, out var parsedOrigin))
+                {
+                    return false;
+                }
+
+                return parsedOrigin.IsLoopback;
+            })
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
+var authenticationAuthority = builder.Configuration["Authentication:Authority"];
+var authenticationAudience = builder.Configuration["Authentication:Audience"];
+var localAuth = builder.Configuration.GetSection(KairoConfigurationSections.LocalAuth).Get<LocalAuthOption>() ?? new LocalAuthOption();
+
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
-        options.Authority = builder.Configuration["Authentication:Authority"];
-        options.Audience = builder.Configuration["Authentication:Audience"];
+
+        if (!string.IsNullOrWhiteSpace(authenticationAuthority))
+        {
+            options.Authority = authenticationAuthority;
+        }
+
+        if (!string.IsNullOrWhiteSpace(authenticationAudience))
+        {
+            options.Audience = authenticationAudience;
+        }
+
+        if (localAuth.Enabled)
+        {
+            var validIssuers = string.IsNullOrWhiteSpace(authenticationAuthority)
+                ? new[] { localAuth.Issuer }
+                : new[] { localAuth.Issuer, authenticationAuthority };
+
+            var validAudiences = string.IsNullOrWhiteSpace(authenticationAudience)
+                ? new[] { localAuth.Audience }
+                : new[] { localAuth.Audience, authenticationAudience };
+
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuers = validIssuers,
+                ValidateAudience = true,
+                ValidAudiences = validAudiences,
+                ValidateLifetime = true,
+                ClockSkew = localAuth.ClockSkew,
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKey = localAuth.CreateSigningKey(),
+                NameClaimType = ClaimTypes.Name,
+                RoleClaimType = ClaimTypes.Role,
+            };
+        }
+
         options.Events = new JwtBearerEvents
         {
             OnChallenge = async context =>
@@ -231,6 +304,7 @@ builder.Services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
 builder.Services.AddScoped<IOutboxRepository, PostgresOutboxRepository>();
 builder.Services.AddScoped<IAuditLogRepository, PostgresAuditLogRepository>();
 builder.Services.AddScoped<IAdminUserRoleRepository, PostgresAdminUserRoleRepository>();
+builder.Services.AddScoped<IAdminLocalCredentialRepository, PostgresAdminLocalCredentialRepository>();
 builder.Services.AddScoped<ISettingsRepository, PostgresSettingsRepository>();
 
 builder.Services.AddScoped<PostgresEventRepository>();
@@ -270,6 +344,7 @@ builder.Services.AddScoped<IEventDefinitionService, EventDefinitionService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IDashboardOverviewQueryService, DashboardOverviewQueryService>();
+builder.Services.AddScoped<IAuditLogQueryService, AuditLogQueryService>();
 builder.Services.AddScoped<ICustomerAdminSummaryQueryService, CustomerAdminSummaryQueryService>();
 builder.Services.AddScoped<IContractAdminSummaryQueryService, ContractAdminSummaryQueryService>();
 builder.Services.AddScoped<IAdminFailedDeliveryQueryService, AdminFailedDeliveryQueryService>();
@@ -283,6 +358,10 @@ builder.Services.AddSingleton<IWebhookIngestRequestValidator, WebhookIngestReque
 
 builder.Services.AddSingleton<IEndpointSecurityPolicy, EndpointSecurityPolicy>();
 builder.Services.AddScoped<IAdminUserRoleService, AdminUserRoleService>();
+builder.Services.AddScoped<IAdminLocalCredentialService, AdminLocalCredentialService>();
+builder.Services.AddScoped<IAdminAuthenticationProvider, PostgresAdminAuthenticationProvider>();
+builder.Services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
+builder.Services.AddSingleton<IAdminTokenIssuer, JwtAdminTokenIssuer>();
 
 builder.Services.AddSingleton<IDestinationCredentialProtector, AesGcmDestinationCredentialProtector>();
 
@@ -314,7 +393,15 @@ if (app.Environment.IsDevelopment())
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors(LocalDashboardCorsPolicy);
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

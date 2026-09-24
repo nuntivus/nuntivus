@@ -1,20 +1,19 @@
 import { getStoredToken } from '../auth/token-storage'
+import { frontendConfig } from '../../app/frontend-config'
 
-const defaultApiBaseUrl = 'https://localhost:5001'
-
-const apiBaseUrl =
-  import.meta.env.VITE_API_BASE_URL?.trim() || defaultApiBaseUrl
+const apiBaseUrl = frontendConfig.apiBaseUrl
 
 type Primitive = string | number | boolean | null
 
 type QueryValue = Primitive | Primitive[]
 
-interface ApiRequestOptions {
+export interface ApiRequestOptions {
   token?: string
   suppressUnauthorizedEvent?: boolean
+  signal?: AbortSignal
 }
 
-interface ApiMutationOptions extends ApiRequestOptions {
+export interface ApiMutationOptions extends ApiRequestOptions {
   body?: unknown
   headers?: Record<string, string>
 }
@@ -54,13 +53,25 @@ function createUrl(path: string, query?: Record<string, QueryValue>) {
 export class ApiError extends Error {
   status: number
   body?: unknown
+  headers?: Headers
 
-  constructor(message: string, status: number, body?: unknown) {
+  constructor(message: string, status: number, body?: unknown, headers?: Headers) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.body = body
+    this.headers = headers
   }
+}
+
+type ProblemDetailsBody = {
+  type?: string
+  title?: string
+  status?: number
+  detail?: string
+  instance?: string
+  errors?: Array<{ field?: string; message?: string }> | Record<string, string[] | string>
+  message?: string
 }
 
 function redactSensitiveText(input: string): string {
@@ -111,6 +122,10 @@ export function getApiErrorMessage(error: unknown, fallback = 'Request failed') 
     return fallback
   }
 
+  if (error.status === 0) {
+    return 'Network error. Check your connection and try again.'
+  }
+
   const safeBody = sanitizeApiErrorBody(error.body)
 
   if (typeof safeBody === 'string' && safeBody.trim()) {
@@ -118,22 +133,38 @@ export function getApiErrorMessage(error: unknown, fallback = 'Request failed') 
   }
 
   if (safeBody && typeof safeBody === 'object') {
-    const body = safeBody as {
-      message?: string
-      detail?: string
-      title?: string
-      errors?: Array<{ message?: string }>
-    }
-
-    if (typeof body.message === 'string' && body.message.trim()) {
-      return body.message
-    }
+    const body = safeBody as ProblemDetailsBody
 
     if (Array.isArray(body.errors) && body.errors.length > 0) {
       const first = body.errors.find((item) => item.message?.trim())
       if (first?.message) {
         return first.message
       }
+    }
+
+    if (body.errors && !Array.isArray(body.errors) && typeof body.errors === 'object') {
+      const firstFieldError = Object.values(body.errors).find((entry) => {
+        if (Array.isArray(entry)) {
+          return entry.some((value) => value?.trim())
+        }
+
+        return typeof entry === 'string' && entry.trim()
+      })
+
+      if (Array.isArray(firstFieldError)) {
+        const firstMessage = firstFieldError.find((value) => value?.trim())
+        if (firstMessage) {
+          return firstMessage
+        }
+      }
+
+      if (typeof firstFieldError === 'string' && firstFieldError.trim()) {
+        return firstFieldError
+      }
+    }
+
+    if (typeof body.message === 'string' && body.message.trim()) {
+      return body.message
     }
 
     if (typeof body.detail === 'string' && body.detail.trim()) {
@@ -145,7 +176,30 @@ export function getApiErrorMessage(error: unknown, fallback = 'Request failed') 
     }
   }
 
-  return fallback
+  switch (error.status) {
+    case 400:
+      return 'The request is invalid. Check your input and try again.'
+    case 401:
+      return 'Your session expired. Sign in again and retry.'
+    case 403:
+      return 'You do not have permission to perform this action.'
+    case 404:
+      return 'The requested resource was not found.'
+    case 409:
+      return 'The request could not be completed due to a conflict. Refresh and try again.'
+    case 429: {
+      const retryAfter = error.headers?.get('Retry-After')
+      return retryAfter
+        ? `Too many requests. Try again in about ${retryAfter} seconds.`
+        : 'Too many requests. Please wait and try again.'
+    }
+    case 500:
+      return 'The server encountered an error. Please try again shortly.'
+    default:
+      return error.status >= 500
+        ? 'Unexpected server error. Please try again shortly.'
+        : fallback
+  }
 }
 
 function publishApiError(message: string) {
@@ -158,6 +212,33 @@ function publishApiError(message: string) {
 
 function publishUnauthorized() {
   window.dispatchEvent(new CustomEvent('kairo:auth-unauthorized'))
+}
+
+async function readResponseBody(response: Response): Promise<unknown> {
+  if (response.status === 204 || response.status === 205) {
+    return null
+  }
+
+  const contentType = response.headers.get('content-type') ?? ''
+  const isJson =
+    contentType.includes('application/json') ||
+    contentType.includes('application/problem+json') ||
+    contentType.includes('+json')
+
+  if (!isJson) {
+    return await response.text()
+  }
+
+  const text = await response.text()
+  if (!text.trim()) {
+    return null
+  }
+
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
 }
 
 async function apiRequest<TResponse>(
@@ -173,6 +254,7 @@ async function apiRequest<TResponse>(
   try {
     response = await fetch(createUrl(path, query), {
       method,
+      signal: options?.signal,
       headers: {
         Accept: 'application/json, text/plain;q=0.9',
         ...(options?.body ? { 'Content-Type': 'application/json' } : {}),
@@ -181,25 +263,30 @@ async function apiRequest<TResponse>(
       },
       body: options?.body ? JSON.stringify(options.body) : undefined,
     })
-  } catch {
-    publishApiError('Network error while contacting API')
-    throw new ApiError('Network error while contacting API', 0)
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error
+    }
+
+    const apiError = new ApiError('Network error while contacting API', 0)
+    publishApiError(getApiErrorMessage(apiError, 'Network error while contacting API'))
+    throw apiError
   }
 
-  const contentType = response.headers.get('content-type') ?? ''
-  const isJson = contentType.includes('application/json')
-  const body = isJson ? await response.json() : await response.text()
+  const body = await readResponseBody(response)
 
   if (!response.ok) {
+    const apiError = new ApiError('Request failed', response.status, body, response.headers)
+
     if (response.status === 401 && !options?.suppressUnauthorizedEvent) {
       publishUnauthorized()
     }
 
-    if (response.status !== 403) {
-      publishApiError(`Request failed (${response.status})`)
+    if (response.status !== 401) {
+      publishApiError(getApiErrorMessage(apiError, `Request failed (${response.status})`))
     }
 
-    throw new ApiError('Request failed', response.status, body)
+    throw apiError
   }
 
   return {

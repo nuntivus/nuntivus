@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { clearSensitiveClientState } from './auth-security'
+import { queryClient } from './queryClient'
 import { markSessionExpired } from '../store/auth-slice'
 import { useAppDispatch } from '../store/hooks'
 
@@ -15,6 +17,7 @@ export function AuthSessionListener() {
       }
 
       dispatch(markSessionExpired())
+      clearSensitiveClientState(queryClient)
       navigate('/login', {
         replace: true,
         state: { from: location },

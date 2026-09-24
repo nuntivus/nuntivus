@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { invalidateQueryKeys } from '../shared/query-invalidation'
 import {
   createCustomer,
   disableCustomer,
@@ -17,14 +18,14 @@ import {
 export function useCustomersQuery(query: CustomerListQuery) {
   return useQuery({
     queryKey: ['customers', query],
-    queryFn: () => listCustomers(query),
+    queryFn: ({ signal }) => listCustomers(query, { signal }),
   })
 }
 
 export function useCustomerDetailQuery(id: string | undefined) {
   return useQuery({
     queryKey: ['customers', 'detail', id],
-    queryFn: () => getCustomerById(id ?? ''),
+    queryFn: ({ signal }) => getCustomerById(id ?? '', { signal }),
     enabled: !!id,
   })
 }
@@ -32,7 +33,7 @@ export function useCustomerDetailQuery(id: string | undefined) {
 export function useCustomerContractsQuery(id: string | undefined) {
   return useQuery({
     queryKey: ['customers', 'detail', id, 'contracts'],
-    queryFn: () => listCustomerContracts(id ?? ''),
+    queryFn: ({ signal }) => listCustomerContracts(id ?? '', 10, { signal }),
     enabled: !!id,
   })
 }
@@ -40,7 +41,7 @@ export function useCustomerContractsQuery(id: string | undefined) {
 export function useCustomerDeliveriesQuery(id: string | undefined) {
   return useQuery({
     queryKey: ['customers', 'detail', id, 'deliveries'],
-    queryFn: () => listCustomerDeliveries(id ?? ''),
+    queryFn: ({ signal }) => listCustomerDeliveries(id ?? '', 10, { signal }),
     enabled: !!id,
   })
 }
@@ -48,7 +49,7 @@ export function useCustomerDeliveriesQuery(id: string | undefined) {
 export function useCustomerRecentFailuresQuery(id: string | undefined) {
   return useQuery({
     queryKey: ['customers', 'detail', id, 'failures'],
-    queryFn: () => listCustomerRecentFailures(id ?? ''),
+    queryFn: ({ signal }) => listCustomerRecentFailures(id ?? '', 10, { signal }),
     enabled: !!id,
   })
 }
@@ -59,7 +60,7 @@ export function useCreateCustomerMutation() {
   return useMutation({
     mutationFn: (request: CreateCustomerRequest) => createCustomer(request),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['customers'] })
+      await invalidateQueryKeys(queryClient, [['customers']])
     },
   })
 }
@@ -70,9 +71,9 @@ export function useUpdateCustomerMutation(id: string) {
   return useMutation({
     mutationFn: (request: UpdateCustomerRequest) => updateCustomer(id, request),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['customers'] }),
-        queryClient.invalidateQueries({ queryKey: ['customers', 'detail', id] }),
+      await invalidateQueryKeys(queryClient, [
+        ['customers'],
+        ['customers', 'detail', id],
       ])
     },
   })
@@ -84,9 +85,9 @@ export function useEnableCustomerMutation() {
   return useMutation({
     mutationFn: (id: string) => enableCustomer(id),
     onSuccess: async (_, id) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['customers'] }),
-        queryClient.invalidateQueries({ queryKey: ['customers', 'detail', id] }),
+      await invalidateQueryKeys(queryClient, [
+        ['customers'],
+        ['customers', 'detail', id],
       ])
     },
   })
@@ -98,9 +99,9 @@ export function useDisableCustomerMutation() {
   return useMutation({
     mutationFn: (id: string) => disableCustomer(id),
     onSuccess: async (_, id) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['customers'] }),
-        queryClient.invalidateQueries({ queryKey: ['customers', 'detail', id] }),
+      await invalidateQueryKeys(queryClient, [
+        ['customers'],
+        ['customers', 'detail', id],
       ])
     },
   })

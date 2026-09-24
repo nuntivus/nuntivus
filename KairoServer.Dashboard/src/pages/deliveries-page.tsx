@@ -4,21 +4,25 @@ import {
   Card,
   Flex,
   Heading,
+  Link,
   Select,
   Table,
   Text,
   TextField,
 } from '@radix-ui/themes'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { NavLink, useSearchParams } from 'react-router-dom'
+import { useMemo, useState, type FormEvent } from 'react'
+import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { ListFeedback } from '../components/lists/list-feedback'
+import { ListPagination } from '../components/lists/list-pagination'
 import { useDeliveriesQuery } from '../features/deliveries/use-deliveries'
 import { useLocalUserPreferences } from '../features/settings/local-user-preferences'
+import { useConfirmDialog } from '../hooks/use-confirm-dialog'
+import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
 import {
   deleteSavedView,
   getSavedViews,
   upsertSavedView,
-  type SavedView,
 } from '../features/saved-views/saved-views-storage'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type {
@@ -34,19 +38,6 @@ type SortDirection = 'asc' | 'desc'
 
 const destinationValues: DestinationType[] = ['Http', 'Kafka', 'Nats', 'RabbitMq', 'Sqs']
 
-function parsePositiveInt(value: string | null, fallback: number) {
-  if (!value) {
-    return fallback
-  }
-
-  const parsed = Number.parseInt(value, 10)
-  if (Number.isNaN(parsed) || parsed < 1) {
-    return fallback
-  }
-
-  return parsed
-}
-
 function formatDeliveryStatus(status: DeliveryStatus) {
   return typeof status === 'string' ? status : String(status)
 }
@@ -57,10 +48,11 @@ function isFailedOrRetrying(item: DeliveryListItem) {
 }
 
 export function DeliveriesPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { searchParams, setSearchParams, updateParams } = useUrlQueryParams()
+  const confirm = useConfirmDialog()
   const { currentUser } = useAppSelector((state) => state.auth)
   const { preferences } = useLocalUserPreferences(currentUser?.subject)
-  const [savedViews, setSavedViews] = useState<SavedView[]>([])
+  const [savedViewsVersion, setSavedViewsVersion] = useState(0)
   const [selectedSavedViewId, setSelectedSavedViewId] = useState('')
   const [savedViewName, setSavedViewName] = useState('')
 
@@ -87,9 +79,10 @@ export function DeliveriesPage() {
   const [customerIdInput, setCustomerIdInput] = useState(customerIdParam)
   const [contractIdInput, setContractIdInput] = useState(contractIdParam)
 
-  useEffect(() => {
-    setSavedViews(getSavedViews(currentUser?.subject, 'deliveries'))
-  }, [currentUser?.subject])
+  const savedViews = useMemo(() => {
+    void savedViewsVersion
+    return getSavedViews(currentUser?.subject, 'deliveries')
+  }, [currentUser?.subject, savedViewsVersion])
 
   const query = useMemo<DeliveryListQuery>(
     () => ({
@@ -122,21 +115,6 @@ export function DeliveriesPage() {
 
   const deliveriesQuery = useDeliveriesQuery(query)
 
-  function updateParams(updates: Record<string, string | null>) {
-    const next = new URLSearchParams(searchParams)
-
-    Object.entries(updates).forEach(([key, value]) => {
-      if (!value) {
-        next.delete(key)
-        return
-      }
-
-      next.set(key, value)
-    })
-
-    setSearchParams(next)
-  }
-
   function handleSaveCurrentView() {
     if (!currentUser?.subject || !savedViewName.trim()) {
       return
@@ -147,7 +125,9 @@ export function DeliveriesPage() {
       query: searchParams.toString(),
     })
 
-    setSavedViews(next)
+    if (next) {
+      setSavedViewsVersion((value) => value + 1)
+    }
     setSavedViewName('')
   }
 
@@ -164,7 +144,7 @@ export function DeliveriesPage() {
     setSearchParams(new URLSearchParams(selected.query))
   }
 
-  function handleDeleteSavedView() {
+  async function handleDeleteSavedView() {
     if (!currentUser?.subject || !selectedSavedViewId) {
       return
     }
@@ -174,12 +154,22 @@ export function DeliveriesPage() {
       return
     }
 
-    if (!window.confirm(`Delete saved view "${selected.name}"?`)) {
+    const confirmed = await confirm({
+      title: 'Delete saved view',
+      description: `Delete saved view "${selected.name}"?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      confirmColor: 'red',
+    })
+
+    if (!confirmed) {
       return
     }
 
     const next = deleteSavedView(currentUser.subject, 'deliveries', selectedSavedViewId)
-    setSavedViews(next)
+    if (next) {
+      setSavedViewsVersion((value) => value + 1)
+    }
     setSelectedSavedViewId('')
   }
 
@@ -221,6 +211,14 @@ export function DeliveriesPage() {
   }
 
   const deliveries = deliveriesQuery.data?.items ?? []
+  const hasActiveFilters =
+    eventIdParam.trim().length > 0 ||
+    customerIdParam.trim().length > 0 ||
+    contractIdParam.trim().length > 0 ||
+    statusParam !== undefined ||
+    destinationTypeParam !== undefined ||
+    createdFromParam.trim().length > 0 ||
+    createdToParam.trim().length > 0
   const paging = deliveriesQuery.data
 
   return (
@@ -234,16 +232,19 @@ export function DeliveriesPage() {
 
             <Flex wrap="wrap" gap="2">
               <TextField.Root
+                aria-label="Event ID"
                 placeholder="Event ID"
                 value={eventIdInput}
                 onChange={(event) => setEventIdInput(event.target.value)}
               />
               <TextField.Root
+                aria-label="Customer ID"
                 placeholder="Customer ID"
                 value={customerIdInput}
                 onChange={(event) => setCustomerIdInput(event.target.value)}
               />
               <TextField.Root
+                aria-label="Contract ID"
                 placeholder="Contract ID"
                 value={contractIdInput}
                 onChange={(event) => setContractIdInput(event.target.value)}
@@ -257,7 +258,7 @@ export function DeliveriesPage() {
                   updateParams({ status: value === 'all' ? null : value, page: '1' })
                 }
               >
-                <Select.Trigger placeholder="Status" />
+                <Select.Trigger placeholder="Status" aria-label="Delivery status" />
                 <Select.Content>
                   <Select.Item value="all">All statuses</Select.Item>
                   <Select.Item value="Pending">Pending</Select.Item>
@@ -274,7 +275,7 @@ export function DeliveriesPage() {
                   updateParams({ destinationType: value === 'all' ? null : value, page: '1' })
                 }
               >
-                <Select.Trigger placeholder="Destination type" />
+                <Select.Trigger placeholder="Destination type" aria-label="Destination type" />
                 <Select.Content>
                   <Select.Item value="all">All destinations</Select.Item>
                   {destinationValues.map((value) => (
@@ -289,6 +290,7 @@ export function DeliveriesPage() {
             <Flex wrap="wrap" gap="2" align="center">
               <Text size="2" color="gray">Created from</Text>
               <input
+                aria-label="Created from"
                 type="datetime-local"
                 value={createdFromParam}
                 onChange={(event) =>
@@ -297,6 +299,7 @@ export function DeliveriesPage() {
               />
               <Text size="2" color="gray">Created to</Text>
               <input
+                aria-label="Created to"
                 type="datetime-local"
                 value={createdToParam}
                 onChange={(event) =>
@@ -311,7 +314,7 @@ export function DeliveriesPage() {
                 value={String(pageSizeParam)}
                 onValueChange={(value) => updateParams({ pageSize: value, page: '1' })}
               >
-                <Select.Trigger />
+                <Select.Trigger aria-label="Rows per page" />
                 <Select.Content>
                   <Select.Item value="10">10 rows</Select.Item>
                   <Select.Item value="20">20 rows</Select.Item>
@@ -342,7 +345,7 @@ export function DeliveriesPage() {
               <Text size="2" color="gray">Saved views</Text>
               <Flex wrap="wrap" gap="2" align="center">
                 <Select.Root value={selectedSavedViewId} onValueChange={setSelectedSavedViewId}>
-                  <Select.Trigger placeholder="Choose saved view" />
+                  <Select.Trigger placeholder="Choose saved view" aria-label="Saved views" />
                   <Select.Content>
                     {savedViews.map((view) => (
                       <Select.Item key={view.id} value={view.id}>
@@ -354,12 +357,20 @@ export function DeliveriesPage() {
                 <Button type="button" variant="soft" onClick={handleApplySavedView}>
                   Apply saved view
                 </Button>
-                <Button type="button" variant="outline" color="red" onClick={handleDeleteSavedView}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  color="red"
+                  onClick={() => {
+                    void handleDeleteSavedView()
+                  }}
+                >
                   Delete
                 </Button>
               </Flex>
               <Flex wrap="wrap" gap="2" align="center">
                 <TextField.Root
+                  aria-label="Saved view name"
                   placeholder="Save current filters as..."
                   value={savedViewName}
                   onChange={(event) => setSavedViewName(event.target.value)}
@@ -377,116 +388,126 @@ export function DeliveriesPage() {
         <Flex direction="column" gap="3">
           <Heading size="4">Delivery table</Heading>
 
-          {deliveriesQuery.isLoading ? (
-            <Text size="2" color="gray">Loading deliveries...</Text>
-          ) : deliveriesQuery.isError ? (
-            <Text size="2" color="red">
-              {deliveriesQuery.error instanceof ApiError && deliveriesQuery.error.status === 403
+          <ListFeedback
+            isLoading={deliveriesQuery.isLoading}
+            isError={deliveriesQuery.isError}
+            error={deliveriesQuery.error}
+            isEmpty={deliveries.length === 0}
+            loadingMessage="Loading deliveries..."
+            errorMessage={
+              deliveriesQuery.error instanceof ApiError && deliveriesQuery.error.status === 403
                 ? 'The backend denied access (403).'
-                : getApiErrorMessage(deliveriesQuery.error, 'Unable to load deliveries.')}
-            </Text>
-          ) : deliveries.length === 0 ? (
-            <Text size="2" color="gray">No deliveries found for current filters.</Text>
-          ) : (
+                : getApiErrorMessage(deliveriesQuery.error, 'Unable to load deliveries.')
+            }
+            emptyMessage="No deliveries found for current filters."
+            emptyTitle={hasActiveFilters ? 'No deliveries match current filters' : 'No deliveries yet'}
+            emptyDescription={
+              hasActiveFilters
+                ? 'Try broadening filters to find matching deliveries.'
+                : 'Deliveries will appear here after events are matched to active contracts.'
+            }
+            emptyAction={
+              hasActiveFilters
+                ? {
+                    label: 'Clear filters',
+                    onClick: () =>
+                      setSearchParams(
+                        new URLSearchParams({
+                          page: '1',
+                          pageSize: String(defaultPageSize),
+                        }),
+                      ),
+                  }
+                : {
+                    label: 'Refresh',
+                    onClick: () => {
+                      void deliveriesQuery.refetch()
+                    },
+                  }
+            }
+          >
             <>
-              <Table.Root size={preferences.denseTables ? '1' : '2'}>
-                <Table.Header>
-                  <Table.Row>
-                    <Table.ColumnHeaderCell>ID</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Customer</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Contract</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Event</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Destination</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>
-                      <Button variant="ghost" onClick={() => handleSort('createdAt')}>
-                        Created
-                      </Button>
-                    </Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>
-                      <Button variant="ghost" onClick={() => handleSort('updatedAt')}>
-                        Updated
-                      </Button>
-                    </Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Attempts</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {deliveries.map((delivery) => {
-                    const highlighted = isFailedOrRetrying(delivery)
-                    return (
-                      <Table.Row
-                        key={delivery.id}
-                        style={
-                          highlighted
-                            ? {
-                                backgroundColor: 'var(--amber-a3)',
+              <div className="responsive-table">
+                <Table.Root size={preferences.denseTables ? '1' : '2'} aria-label="Deliveries table">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeaderCell>ID</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Customer</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Contract</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Event</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Destination</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>
+                        <Button variant="ghost" onClick={() => handleSort('createdAt')}>
+                          Created
+                        </Button>
+                      </Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>
+                        <Button variant="ghost" onClick={() => handleSort('updatedAt')}>
+                          Updated
+                        </Button>
+                      </Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Attempts</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {deliveries.map((delivery) => {
+                      const highlighted = isFailedOrRetrying(delivery)
+                      return (
+                        <Table.Row
+                          key={delivery.id}
+                          style={
+                            highlighted
+                              ? {
+                                  backgroundColor: 'var(--amber-a3)',
+                                }
+                              : undefined
+                          }
+                        >
+                          <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
+                          <Table.Cell>
+                            <Badge
+                              color={
+                                delivery.status === 'Delivered'
+                                  ? 'green'
+                                  : delivery.status === 'Failed' || delivery.status === 'Dead'
+                                    ? 'red'
+                                    : 'amber'
                               }
-                            : undefined
-                        }
-                      >
-                        <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
-                        <Table.Cell>
-                          <Badge
-                            color={
-                              delivery.status === 'Delivered'
-                                ? 'green'
-                                : delivery.status === 'Failed' || delivery.status === 'Dead'
-                                  ? 'red'
-                                  : 'amber'
-                            }
-                            variant="soft"
-                          >
-                            {formatDeliveryStatus(delivery.status)}
-                          </Badge>
-                        </Table.Cell>
-                        <Table.Cell>{delivery.customerId}</Table.Cell>
-                        <Table.Cell>{delivery.contractId}</Table.Cell>
-                        <Table.Cell>{delivery.eventId}</Table.Cell>
-                        <Table.Cell>{delivery.destinationType}</Table.Cell>
-                        <Table.Cell>{new Date(delivery.createdAt).toLocaleString()}</Table.Cell>
-                        <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>
-                        <Table.Cell>{delivery.attemptCount}</Table.Cell>
-                        <Table.Cell>
-                          <Button asChild size="1" variant="ghost">
-                            <NavLink to={`/deliveries/${encodeURIComponent(delivery.id)}`}>
-                              Detail
-                            </NavLink>
-                          </Button>
-                        </Table.Cell>
-                      </Table.Row>
-                    )
-                  })}
-                </Table.Body>
-              </Table.Root>
+                              variant="soft"
+                            >
+                              {formatDeliveryStatus(delivery.status)}
+                            </Badge>
+                          </Table.Cell>
+                          <Table.Cell>{delivery.customerId}</Table.Cell>
+                          <Table.Cell>{delivery.contractId}</Table.Cell>
+                          <Table.Cell>{delivery.eventId}</Table.Cell>
+                          <Table.Cell>{delivery.destinationType}</Table.Cell>
+                          <Table.Cell>{new Date(delivery.createdAt).toLocaleString()}</Table.Cell>
+                          <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>
+                          <Table.Cell>{delivery.attemptCount}</Table.Cell>
+                          <Table.Cell>
+                            <Link asChild size="1">
+                              <NavLink to={`/deliveries/${encodeURIComponent(delivery.id)}`}>
+                                Detail
+                              </NavLink>
+                            </Link>
+                          </Table.Cell>
+                        </Table.Row>
+                      )
+                    })}
+                  </Table.Body>
+                </Table.Root>
+              </div>
 
-              <Flex align="center" justify="between" gap="3">
-                <Text size="2" color="gray">
-                  {paging
-                    ? `Page ${paging.page} of ${paging.totalPages} · ${paging.totalCount} total`
-                    : ''}
-                </Text>
-
-                <Flex gap="2">
-                  <Button
-                    variant="soft"
-                    disabled={!paging?.hasPrevious}
-                    onClick={() => updateParams({ page: String(Math.max(1, pageParam - 1)) })}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="soft"
-                    disabled={!paging?.hasNext}
-                    onClick={() => updateParams({ page: String(pageParam + 1) })}
-                  >
-                    Next
-                  </Button>
-                </Flex>
-              </Flex>
+              <ListPagination
+                paging={paging}
+                onPrevious={() => updateParams({ page: String(Math.max(1, pageParam - 1)) })}
+                onNext={() => updateParams({ page: String(pageParam + 1) })}
+              />
             </>
-          )}
+          </ListFeedback>
         </Flex>
       </Card>
     </Flex>

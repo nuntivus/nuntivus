@@ -32,7 +32,7 @@ State ownership:
 
 Optional `.env.local` values:
 
-- `VITE_API_BASE_URL` (default: `https://localhost:5001`)
+- `VITE_API_BASE_URL` (default: `https://localhost:7123`)
 
 ## Scripts
 

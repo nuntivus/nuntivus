@@ -6,6 +6,7 @@ namespace KairoServer.Infastructure.Configuration
         public const string DatabaseMigrations = "DatabaseMigrations";
         public const string HostOptions = "HostOptions";
         public const string ApiSecurity = "ApiSecurity";
+        public const string LocalAuth = "LocalAuth";
         public const string Cache = "Cache";
         public const string DestinationCredentials = "DestinationCredentials";
         public const string EndpointSecurity = "EndpointSecurity";

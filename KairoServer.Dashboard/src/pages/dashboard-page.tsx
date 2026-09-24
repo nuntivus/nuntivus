@@ -17,16 +17,36 @@ export function DashboardPage() {
   const recentEvents = recentEventsQuery.data ?? []
   const recentFailures = recentFailuresQuery.data ?? []
 
+  const successfulDeliveries = successfulQuery.data
+  const failedDeliveries = overview?.totalFailedDeliveries
+  const deadDeliveries = overview?.totalDeadDeliveries
+  const pendingDeliveries = overview?.totalPendingDeliveries
+
+  const trackedDeliveriesTotal =
+    successfulDeliveries !== undefined &&
+    failedDeliveries !== undefined &&
+    deadDeliveries !== undefined &&
+    pendingDeliveries !== undefined
+      ? successfulDeliveries + failedDeliveries + deadDeliveries + pendingDeliveries
+      : undefined
+
+  const failedOrDeadDeliveries =
+    failedDeliveries !== undefined && deadDeliveries !== undefined
+      ? failedDeliveries + deadDeliveries
+      : undefined
+
+  const ratesLoading = successfulQuery.isLoading || overviewQuery.isLoading
+  const ratesError = successfulQuery.isError
+    ? getApiErrorMessage(successfulQuery.error, 'Unable to load delivery rates.')
+    : overviewQuery.isError
+      ? getApiErrorMessage(overviewQuery.error, 'Unable to load delivery rates.')
+      : undefined
+
   return (
     <Flex direction="column" gap="4">
       <Heading size="6">Overview</Heading>
 
       <Flex gap="3" wrap="wrap">
-        <MetricCard
-          title="Event throughput summary"
-          unavailableMessage="Not available yet. Backend does not expose aggregate throughput in current APIs."
-        />
-
         <MetricCard
           title="Successful deliveries"
           value={successfulQuery.data?.toString()}
@@ -48,11 +68,6 @@ export function DashboardPage() {
         />
 
         <MetricCard
-          title="Retrying deliveries"
-          unavailableMessage="Not available yet. Backend does not expose a dedicated retrying-deliveries aggregate."
-        />
-
-        <MetricCard
           title="Dead deliveries"
           value={overview?.totalDeadDeliveries.toString()}
           loading={overviewQuery.isLoading}
@@ -61,9 +76,23 @@ export function DashboardPage() {
             'Unable to load dead deliveries.',
           )}
         />
+
+        <MetricCard
+          title="Delivery success rate"
+          value={formatRatePercentage(successfulDeliveries, trackedDeliveriesTotal)}
+          loading={ratesLoading}
+          error={ratesError}
+        />
+
+        <MetricCard
+          title="Delivery failure rate"
+          value={formatRatePercentage(failedOrDeadDeliveries, trackedDeliveriesTotal)}
+          loading={ratesLoading}
+          error={ratesError}
+        />
       </Flex>
 
-      <Flex gap="3" wrap="wrap">
+      <div className="responsive-panel-grid">
         <Card style={{ flex: '1 1 420px' }}>
           <Flex direction="column" gap="3">
             <Heading size="4">Recent events</Heading>
@@ -147,18 +176,17 @@ export function DashboardPage() {
             )}
           </Flex>
         </Card>
-      </Flex>
-
-      <Card>
-        <Flex direction="column" gap="3">
-          <Heading size="4">Destination health summary</Heading>
-          <Text size="2" color="gray">
-            Not available yet. A global destination-health summary endpoint is not exposed by the backend.
-          </Text>
-        </Flex>
-      </Card>
+      </div>
     </Flex>
   )
+}
+
+function formatRatePercentage(numerator?: number, denominator?: number) {
+  if (numerator === undefined || denominator === undefined || denominator <= 0) {
+    return '0.0%'
+  }
+
+  return `${((numerator / denominator) * 100).toFixed(1)}%`
 }
 
 interface MetricCardProps {

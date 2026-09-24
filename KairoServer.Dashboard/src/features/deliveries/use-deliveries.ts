@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { invalidateQueryKeys } from '../shared/query-invalidation'
 import {
   getDeliveryAttempts,
   getDeliveryById,
@@ -13,25 +14,25 @@ import {
 export function useDeliveriesQuery(query: DeliveryListQuery) {
   return useQuery({
     queryKey: ['deliveries', query],
-    queryFn: () => listDeliveries(query),
+    queryFn: ({ signal }) => listDeliveries(query, { signal }),
   })
 }
 
 export function useFailedDeliveriesQuery(query: DeliveryListQuery) {
   return useQuery({
     queryKey: ['deliveries', 'failed', query],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       listDeliveries({
         ...query,
         status: query.status ?? 'Failed',
-      }),
+      }, { signal }),
   })
 }
 
 export function useDeliveryDetailQuery(id: string | undefined) {
   return useQuery({
     queryKey: ['deliveries', 'detail', id],
-    queryFn: () => getDeliveryById(id ?? ''),
+    queryFn: ({ signal }) => getDeliveryById(id ?? '', { signal }),
     enabled: !!id,
   })
 }
@@ -39,7 +40,7 @@ export function useDeliveryDetailQuery(id: string | undefined) {
 export function useDeliveryFailureQuery(id: string | undefined) {
   return useQuery({
     queryKey: ['deliveries', 'detail', id, 'failure'],
-    queryFn: () => getDeliveryFailure(id ?? ''),
+    queryFn: ({ signal }) => getDeliveryFailure(id ?? '', { signal }),
     enabled: !!id,
   })
 }
@@ -47,7 +48,7 @@ export function useDeliveryFailureQuery(id: string | undefined) {
 export function useDeliveryAttemptsQuery(id: string | undefined) {
   return useQuery({
     queryKey: ['deliveries', 'detail', id, 'attempts'],
-    queryFn: () => getDeliveryAttempts(id ?? ''),
+    queryFn: ({ signal }) => getDeliveryAttempts(id ?? '', { signal }),
     enabled: !!id,
   })
 }
@@ -58,11 +59,11 @@ export function useRetryDeliveryMutation(id: string) {
   return useMutation({
     mutationFn: (request: ManualDeliveryOperationRequest) => retryDelivery(id, request),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['deliveries'] }),
-        queryClient.invalidateQueries({ queryKey: ['deliveries', 'detail', id] }),
-        queryClient.invalidateQueries({ queryKey: ['deliveries', 'detail', id, 'failure'] }),
-        queryClient.invalidateQueries({ queryKey: ['deliveries', 'detail', id, 'attempts'] }),
+      await invalidateQueryKeys(queryClient, [
+        ['deliveries'],
+        ['deliveries', 'detail', id],
+        ['deliveries', 'detail', id, 'failure'],
+        ['deliveries', 'detail', id, 'attempts'],
       ])
     },
   })
@@ -74,11 +75,11 @@ export function useRequeueDeliveryMutation(id: string) {
   return useMutation({
     mutationFn: (request: ManualDeliveryOperationRequest) => requeueDelivery(id, request),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['deliveries'] }),
-        queryClient.invalidateQueries({ queryKey: ['deliveries', 'detail', id] }),
-        queryClient.invalidateQueries({ queryKey: ['deliveries', 'detail', id, 'failure'] }),
-        queryClient.invalidateQueries({ queryKey: ['deliveries', 'detail', id, 'attempts'] }),
+      await invalidateQueryKeys(queryClient, [
+        ['deliveries'],
+        ['deliveries', 'detail', id],
+        ['deliveries', 'detail', id, 'failure'],
+        ['deliveries', 'detail', id, 'attempts'],
       ])
     },
   })

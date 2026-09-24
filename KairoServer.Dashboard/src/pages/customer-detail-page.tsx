@@ -5,7 +5,6 @@ import {
   Flex,
   Heading,
   Link,
-  Spinner,
   Table,
   Text,
   TextField,
@@ -13,6 +12,10 @@ import {
 import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { DestinationHealthSummary } from '../components/observability/destination-health-summary'
+import { DetailLoadingState } from '../components/states/detail-loading-state'
+import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { useCustomerDestinationHealthQuery } from '../features/destination-health/use-destination-health'
 import {
   useCustomerContractsQuery,
   useCustomerDeliveriesQuery,
@@ -22,6 +25,8 @@ import {
   useEnableCustomerMutation,
   useUpdateCustomerMutation,
 } from '../features/customers/use-customers'
+import { useConfirmDialog } from '../hooks/use-confirm-dialog'
+import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
 
@@ -44,6 +49,8 @@ function formatDeliveryStatus(status: number | string) {
 export function CustomerDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const confirm = useConfirmDialog()
+  const notifications = useNotifications()
   const { currentUser } = useAppSelector((state) => state.auth)
 
   const canReadCustomers = hasPermission(currentUser, 'customers.read')
@@ -53,6 +60,7 @@ export function CustomerDetailPage() {
   const canReadFailures = hasPermission(currentUser, 'delivery-failures.read')
 
   const detailQuery = useCustomerDetailQuery(id)
+  const destinationHealthQuery = useCustomerDestinationHealthQuery(id)
   const contractsQuery = useCustomerContractsQuery(canReadContracts ? id : undefined)
   const deliveriesQuery = useCustomerDeliveriesQuery(canReadDeliveries ? id : undefined)
   const failuresQuery = useCustomerRecentFailuresQuery(canReadFailures ? id : undefined)
@@ -91,12 +99,7 @@ export function CustomerDetailPage() {
   }
 
   if (detailQuery.isLoading) {
-    return (
-      <Flex align="center" gap="2">
-        <Spinner size="1" />
-        <Text>Loading customer detail...</Text>
-      </Flex>
-    )
+    return <DetailLoadingState message="Loading customer detail..." />
   }
 
   if (detailQuery.isError || !customer) {
@@ -155,9 +158,43 @@ export function CustomerDetailPage() {
           getApiErrorMessage(disableMutation.error, '')
         }
         pending={togglePending}
-        onSave={(name) => updateMutation.mutateAsync({ name })}
-        onEnable={() => enableMutation.mutateAsync(customer.id)}
-        onDisable={() => disableMutation.mutateAsync(customer.id)}
+        onSave={async (name) => {
+          try {
+            await updateMutation.mutateAsync({ name })
+            notifications.success('Customer saved.', 'Customer detail')
+          } catch (error) {
+            notifications.error(getApiErrorMessage(error, 'Unable to save customer.'), 'Customer detail')
+          }
+        }}
+        onEnable={async () => {
+          try {
+            await enableMutation.mutateAsync(customer.id)
+            notifications.success('Customer enabled.', 'Customer detail')
+          } catch (error) {
+            notifications.error(getApiErrorMessage(error, 'Unable to enable customer.'), 'Customer detail')
+          }
+        }}
+        onDisable={async () => {
+          const confirmed = await confirm({
+            title: 'Disable customer',
+            description:
+              'Disable this customer? New deliveries for this customer may be blocked until it is enabled again.',
+            confirmText: 'Disable customer',
+            cancelText: 'Cancel',
+            confirmColor: 'red',
+          })
+
+          if (!confirmed) {
+            return
+          }
+
+          try {
+            await disableMutation.mutateAsync(customer.id)
+            notifications.success('Customer disabled.', 'Customer detail')
+          } catch (error) {
+            notifications.error(getApiErrorMessage(error, 'Unable to disable customer.'), 'Customer detail')
+          }
+        }}
       />
 
       <Card>
@@ -218,6 +255,16 @@ export function CustomerDetailPage() {
           )}
         </Flex>
       </Card>
+
+      <DestinationHealthSummary
+        title="Destination health"
+        customerId={customer.id}
+        items={destinationHealthQuery.data ?? []}
+        isLoading={destinationHealthQuery.isLoading}
+        isError={destinationHealthQuery.isError}
+        error={destinationHealthQuery.error}
+        canReadFailures={canReadFailures}
+      />
 
       <Card>
         <Flex direction="column" gap="3">
@@ -343,11 +390,12 @@ function CustomerInfoEditor({
   onDisable,
 }: CustomerInfoEditorProps) {
   const [draftName, setDraftName] = useState(name)
+  const nameError = !draftName.trim() ? 'Name is required.' : null
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteCustomers || !draftName.trim()) {
+    if (!canWriteCustomers || !!nameError) {
       return
     }
 
@@ -372,7 +420,10 @@ function CustomerInfoEditor({
             value={draftName}
             onChange={(event) => setDraftName(event.target.value)}
             disabled={!canWriteCustomers || pending}
+            aria-invalid={nameError ? 'true' : 'false'}
+            aria-describedby={nameError ? 'customer-name-error' : undefined}
           />
+          <FieldErrorText id="customer-name-error" message={nameError} />
 
           <Text size="2" color="gray">
             Enabled status
@@ -381,16 +432,12 @@ function CustomerInfoEditor({
             {enabled ? 'Enabled' : 'Disabled'}
           </Badge>
 
-          {mutationError ? (
-            <Text size="2" color="red">
-              {mutationError}
-            </Text>
-          ) : null}
+          <FormErrorText message={mutationError} id="customer-submit-error" />
 
           <Flex gap="2" wrap="wrap">
             <Button
               type="submit"
-              disabled={!canWriteCustomers || pending || !draftName.trim()}
+              disabled={!canWriteCustomers || pending || !!nameError}
             >
               {pending ? 'Saving...' : 'Save customer'}
             </Button>

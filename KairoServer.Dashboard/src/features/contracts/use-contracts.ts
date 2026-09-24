@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { invalidateQueryKeys } from '../shared/query-invalidation'
 import {
   createContract,
   disableContract,
@@ -16,14 +17,14 @@ import {
 export function useContractsQuery(query: ContractListQuery) {
   return useQuery({
     queryKey: ['contracts', query],
-    queryFn: () => listContracts(query),
+    queryFn: ({ signal }) => listContracts(query, { signal }),
   })
 }
 
 export function useContractDetailQuery(id: string | undefined) {
   return useQuery({
     queryKey: ['contracts', 'detail', id],
-    queryFn: () => getContractById(id ?? ''),
+    queryFn: ({ signal }) => getContractById(id ?? '', { signal }),
     enabled: !!id,
   })
 }
@@ -31,7 +32,7 @@ export function useContractDetailQuery(id: string | undefined) {
 export function useContractDeliveriesQuery(id: string | undefined) {
   return useQuery({
     queryKey: ['contracts', 'detail', id, 'deliveries'],
-    queryFn: () => listContractDeliveries(id ?? ''),
+    queryFn: ({ signal }) => listContractDeliveries(id ?? '', 10, { signal }),
     enabled: !!id,
   })
 }
@@ -39,7 +40,7 @@ export function useContractDeliveriesQuery(id: string | undefined) {
 export function useContractRecentFailuresQuery(id: string | undefined) {
   return useQuery({
     queryKey: ['contracts', 'detail', id, 'failures'],
-    queryFn: () => listContractRecentFailures(id ?? ''),
+    queryFn: ({ signal }) => listContractRecentFailures(id ?? '', 10, { signal }),
     enabled: !!id,
   })
 }
@@ -50,9 +51,9 @@ export function useCreateContractMutation() {
   return useMutation({
     mutationFn: (request: CreateContractRequest) => createContract(request),
     onSuccess: async (_, id) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['contracts'] }),
-        queryClient.invalidateQueries({ queryKey: ['contracts', 'detail', id] }),
+      await invalidateQueryKeys(queryClient, [
+        ['contracts'],
+        ['contracts', 'detail', id],
       ])
     },
   })
@@ -64,9 +65,9 @@ export function useEnableContractMutation() {
   return useMutation({
     mutationFn: (id: string) => enableContract(id),
     onSuccess: async (_, id) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['contracts'] }),
-        queryClient.invalidateQueries({ queryKey: ['contracts', 'detail', id] }),
+      await invalidateQueryKeys(queryClient, [
+        ['contracts'],
+        ['contracts', 'detail', id],
       ])
     },
   })
@@ -81,9 +82,9 @@ export function useReplaceContractMutation(id: string) {
       payload: UpdateContractRequest
     }) => replaceContract(id, request.etag, request.payload),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['contracts'] }),
-        queryClient.invalidateQueries({ queryKey: ['contracts', 'detail', id] }),
+      await invalidateQueryKeys(queryClient, [
+        ['contracts'],
+        ['contracts', 'detail', id],
       ])
     },
   })
@@ -95,7 +96,7 @@ export function useDisableContractMutation() {
   return useMutation({
     mutationFn: (id: string) => disableContract(id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['contracts'] })
+      await invalidateQueryKeys(queryClient, [['contracts']])
     },
   })
 }

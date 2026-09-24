@@ -4,18 +4,24 @@ import {
   Card,
   Flex,
   Heading,
+  Link,
   Select,
   Table,
   Text,
   TextField,
 } from '@radix-ui/themes'
 import { useMemo, useState, type FormEvent } from 'react'
-import { NavLink, useSearchParams } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { ListFeedback } from '../components/lists/list-feedback'
+import { ListPagination } from '../components/lists/list-pagination'
 import {
   useFailedDeliveriesQuery,
   useRetryDeliveryMutation,
 } from '../features/deliveries/use-deliveries'
+import { useConfirmDialog } from '../hooks/use-confirm-dialog'
+import { useNotifications } from '../hooks/use-notifications'
+import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type {
   DeliveryListItem,
@@ -26,25 +32,14 @@ import { useAppSelector } from '../store/hooks'
 type SortBy = 'createdAt' | 'updatedAt'
 type SortDirection = 'asc' | 'desc'
 
-function parsePositiveInt(value: string | null, fallback: number) {
-  if (!value) {
-    return fallback
-  }
-
-  const parsed = Number.parseInt(value, 10)
-  if (Number.isNaN(parsed) || parsed < 1) {
-    return fallback
-  }
-
-  return parsed
-}
-
 function formatFailureCategory(item: DeliveryListItem) {
   return item.latestFailure?.failureCategory ?? 'unknown'
 }
 
 export function FailedDeliveriesPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { searchParams, setSearchParams, updateParams } = useUrlQueryParams()
+  const confirm = useConfirmDialog()
+  const notifications = useNotifications()
   const { currentUser } = useAppSelector((state) => state.auth)
 
   const canReadFailures = hasPermission(currentUser, 'delivery-failures.read')
@@ -94,21 +89,6 @@ export function FailedDeliveriesPage() {
 
   const activeRetryMutation = useRetryDeliveryMutation(confirmDeliveryId ?? '')
 
-  function updateParams(updates: Record<string, string | null>) {
-    const next = new URLSearchParams(searchParams)
-
-    Object.entries(updates).forEach(([key, value]) => {
-      if (!value) {
-        next.delete(key)
-        return
-      }
-
-      next.set(key, value)
-    })
-
-    setSearchParams(next)
-  }
-
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -137,7 +117,16 @@ export function FailedDeliveriesPage() {
       return
     }
 
-    if (!window.confirm('Retry this delivery now? This may trigger immediate redelivery attempts.')) {
+    const confirmed = await confirm({
+      title: 'Retry delivery',
+      description:
+        'Retry this delivery now? This may trigger immediate redelivery attempts and can duplicate downstream processing.',
+      confirmText: 'Retry now',
+      cancelText: 'Cancel',
+      confirmColor: 'amber',
+    })
+
+    if (!confirmed) {
       return
     }
 
@@ -148,6 +137,9 @@ export function FailedDeliveriesPage() {
         operationId: crypto.randomUUID(),
         reason: retryReason.trim() || null,
       })
+      notifications.success('Delivery retry requested.', 'Retry delivery')
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to retry delivery.'), 'Retry delivery')
     } finally {
       setConfirmDeliveryId(null)
       setRetryReason('')
@@ -182,16 +174,19 @@ export function FailedDeliveriesPage() {
 
             <Flex wrap="wrap" gap="2">
               <TextField.Root
+                aria-label="Customer ID"
                 placeholder="Customer ID"
                 value={customerIdInput}
                 onChange={(event) => setCustomerIdInput(event.target.value)}
               />
               <TextField.Root
+                aria-label="Contract ID"
                 placeholder="Contract ID"
                 value={contractIdInput}
                 onChange={(event) => setContractIdInput(event.target.value)}
               />
               <TextField.Root
+                aria-label="Failure type or category"
                 placeholder="Failure type/category"
                 value={failureCategoryInput}
                 onChange={(event) => setFailureCategoryInput(event.target.value)}
@@ -205,7 +200,7 @@ export function FailedDeliveriesPage() {
                   updateParams({ status: value, page: '1' })
                 }
               >
-                <Select.Trigger />
+                <Select.Trigger aria-label="Failure status" />
                 <Select.Content>
                   <Select.Item value="Failed">Failed only</Select.Item>
                   <Select.Item value="Dead">Dead only</Select.Item>
@@ -213,6 +208,7 @@ export function FailedDeliveriesPage() {
               </Select.Root>
 
               <TextField.Root
+                aria-label="Retry reason"
                 placeholder="Retry reason (optional)"
                 value={retryReason}
                 onChange={(event) => setRetryReason(event.target.value)}
@@ -252,101 +248,86 @@ export function FailedDeliveriesPage() {
             </Button>
           </Flex>
 
-          {failedQuery.isLoading ? (
-            <Text size="2" color="gray">Loading failed deliveries...</Text>
-          ) : failedQuery.isError ? (
-            <Text size="2" color="red">
-              {failedQuery.error instanceof ApiError && failedQuery.error.status === 403
+          <ListFeedback
+            isLoading={failedQuery.isLoading}
+            isError={failedQuery.isError}
+            error={failedQuery.error}
+            isEmpty={deliveries.length === 0}
+            loadingMessage="Loading failed deliveries..."
+            errorMessage={
+              failedQuery.error instanceof ApiError && failedQuery.error.status === 403
                 ? 'The backend denied access (403).'
-                : getApiErrorMessage(failedQuery.error, 'Unable to load failed deliveries.')}
-            </Text>
-          ) : deliveries.length === 0 ? (
-            <Text size="2" color="gray">No failed/dead deliveries found for current filters.</Text>
-          ) : (
+                : getApiErrorMessage(failedQuery.error, 'Unable to load failed deliveries.')
+            }
+            emptyMessage="No failed/dead deliveries found for current filters."
+          >
             <>
-              <Table.Root>
-                <Table.Header>
-                  <Table.Row>
-                    <Table.ColumnHeaderCell>ID</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Customer</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Contract</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Failure type</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Last failure</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>
-                      <Button variant="ghost" onClick={() => handleSort('updatedAt')}>
-                        Updated
-                      </Button>
-                    </Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {deliveries.map((delivery) => {
-                    const retrying = activeRetryMutation.isPending && confirmDeliveryId === delivery.id
-                    return (
-                      <Table.Row key={delivery.id}>
-                        <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
-                        <Table.Cell>
-                          <Badge color={delivery.status === 'Dead' ? 'red' : 'amber'} variant="soft">
-                            {delivery.status}
-                          </Badge>
-                        </Table.Cell>
-                        <Table.Cell>{delivery.customerId}</Table.Cell>
-                        <Table.Cell>{delivery.contractId}</Table.Cell>
-                        <Table.Cell>{formatFailureCategory(delivery)}</Table.Cell>
-                        <Table.Cell>{delivery.latestFailure?.error ?? delivery.lastError ?? '-'}</Table.Cell>
-                        <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>
-                        <Table.Cell>
-                          <Flex gap="2">
-                            <Button asChild size="1" variant="ghost">
-                              <NavLink to={`/deliveries/${encodeURIComponent(delivery.id)}`}>
-                                Detail
-                              </NavLink>
-                            </Button>
-                            <Button
-                              size="1"
-                              disabled={!canOperateDeliveries || retrying}
-                              onClick={() => {
-                                void handleRetry(delivery.id)
-                              }}
-                            >
-                              {retrying ? 'Retrying...' : 'Retry'}
-                            </Button>
-                          </Flex>
-                        </Table.Cell>
-                      </Table.Row>
-                    )
-                  })}
-                </Table.Body>
-              </Table.Root>
+              <div className="responsive-table">
+                <Table.Root aria-label="Failed deliveries table">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeaderCell>ID</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Customer</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Contract</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Failure type</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Last failure</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>
+                        <Button variant="ghost" onClick={() => handleSort('updatedAt')}>
+                          Updated
+                        </Button>
+                      </Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {deliveries.map((delivery) => {
+                      const retrying = activeRetryMutation.isPending && confirmDeliveryId === delivery.id
+                      return (
+                        <Table.Row key={delivery.id}>
+                          <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
+                          <Table.Cell>
+                            <Badge color={delivery.status === 'Dead' ? 'red' : 'amber'} variant="soft">
+                              {delivery.status}
+                            </Badge>
+                          </Table.Cell>
+                          <Table.Cell>{delivery.customerId}</Table.Cell>
+                          <Table.Cell>{delivery.contractId}</Table.Cell>
+                          <Table.Cell>{formatFailureCategory(delivery)}</Table.Cell>
+                          <Table.Cell>{delivery.latestFailure?.error ?? delivery.lastError ?? '-'}</Table.Cell>
+                          <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>
+                          <Table.Cell>
+                            <Flex gap="2">
+                              <Link asChild size="1">
+                                <NavLink to={`/deliveries/${encodeURIComponent(delivery.id)}`}>
+                                  Detail
+                                </NavLink>
+                              </Link>
+                              <Button
+                                size="1"
+                                disabled={!canOperateDeliveries || retrying}
+                                onClick={() => {
+                                  void handleRetry(delivery.id)
+                                }}
+                              >
+                                {retrying ? 'Retrying...' : 'Retry'}
+                              </Button>
+                            </Flex>
+                          </Table.Cell>
+                        </Table.Row>
+                      )
+                    })}
+                  </Table.Body>
+                </Table.Root>
+              </div>
 
-              <Flex align="center" justify="between" gap="3">
-                <Text size="2" color="gray">
-                  {paging
-                    ? `Page ${paging.page} of ${paging.totalPages} · ${paging.totalCount} total`
-                    : ''}
-                </Text>
-
-                <Flex gap="2">
-                  <Button
-                    variant="soft"
-                    disabled={!paging?.hasPrevious}
-                    onClick={() => updateParams({ page: String(Math.max(1, pageParam - 1)) })}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="soft"
-                    disabled={!paging?.hasNext}
-                    onClick={() => updateParams({ page: String(pageParam + 1) })}
-                  >
-                    Next
-                  </Button>
-                </Flex>
-              </Flex>
+              <ListPagination
+                paging={paging}
+                onPrevious={() => updateParams({ page: String(Math.max(1, pageParam - 1)) })}
+                onNext={() => updateParams({ page: String(pageParam + 1) })}
+              />
             </>
-          )}
+          </ListFeedback>
 
           {activeRetryMutation.isError ? (
             <Text size="2" color="red">

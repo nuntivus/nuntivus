@@ -5,12 +5,13 @@ import {
   Heading,
   Select,
   Text,
-  TextArea,
   TextField,
 } from '@radix-ui/themes'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { getServerValidation } from '../components/forms/form-validation'
 import { DestinationConfigurationForm } from '../features/contracts/destination-forms/destination-configuration-form'
 import {
   createDefaultDestinationFormState,
@@ -19,21 +20,20 @@ import {
 } from '../features/contracts/destination-forms/types'
 import { useCreateContractMutation } from '../features/contracts/use-contracts'
 import { useCustomersQuery } from '../features/customers/use-customers'
+import { useEventDefinitionsQuery } from '../features/event-definitions/use-event-definitions'
+import { useNotifications } from '../hooks/use-notifications'
 import { getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
 
-function parseEventTypes(value: string) {
-  return value
-    .split(/[\n,]+/)
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0)
-}
+const createNewEventTypeValue = '__create_new__'
 
 export function ContractCreatePage() {
   const navigate = useNavigate()
+  const notifications = useNotifications()
   const { currentUser } = useAppSelector((state) => state.auth)
 
   const canReadCustomers = hasPermission(currentUser, 'customers.read')
+  const canReadEventDefinitions = hasPermission(currentUser, 'event-definitions.read')
   const canWriteContracts = hasPermission(currentUser, 'contracts.write')
 
   const createMutation = useCreateContractMutation()
@@ -45,43 +45,85 @@ export function ContractCreatePage() {
     sortBy: 'name',
     sortDirection: 'asc',
   })
+  const eventDefinitionsQuery = useEventDefinitionsQuery({ page: 1, pageSize: 100 })
 
   const [customerId, setCustomerId] = useState('')
   const [name, setName] = useState('')
-  const [eventTypesInput, setEventTypesInput] = useState('')
+  const [selectedEventType, setSelectedEventType] = useState('')
+  const [newEventType, setNewEventType] = useState('')
   const [destination, setDestination] = useState(createDefaultDestinationFormState())
+  const [step, setStep] = useState<0 | 1 | 2>(0)
+  const [basicsAttempted, setBasicsAttempted] = useState(false)
+  const [destinationAttempted, setDestinationAttempted] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const eventTypes = useMemo(() => parseEventTypes(eventTypesInput), [eventTypesInput])
+  const eventType = selectedEventType === createNewEventTypeValue
+    ? newEventType.trim()
+    : selectedEventType.trim()
+  const customerError = !customerId ? 'Customer is required.' : null
+  const eventTypeError = !eventType ? 'Event type is required.' : null
+  const destinationError = validateDestinationFormState(destination)
 
-  const validationError = useMemo(() => {
-    if (!customerId.trim()) {
-      return 'Customer is required.'
+  const destinationSummary = (() => {
+    switch (destination.type) {
+      case 'Http':
+        return destination.http.url.trim() ? 'Endpoint configured' : ''
+      case 'Kafka':
+        return destination.kafka.topic.trim()
+      case 'Nats':
+        return destination.nats.subject.trim()
+      case 'RabbitMq':
+        return `${destination.rabbitMq.exchange.trim()} / ${destination.rabbitMq.routingKey.trim()}`
+      case 'Sqs':
+        return destination.sqs.region.trim()
     }
-
-    if (eventTypes.length === 0) {
-      return 'At least one event type is required.'
-    }
-
-    return validateDestinationFormState(destination)
-  }, [customerId, destination, eventTypes.length])
+  })()
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteContracts || createMutation.isPending || validationError) {
+    if (!canWriteContracts || createMutation.isPending) {
       return
     }
 
-    const result = await createMutation.mutateAsync({
-      customerId: customerId.trim(),
-      name: name.trim() || null,
-      eventTypes,
-      destination: mapDestinationFormToConfig(destination),
-      url: '',
-      authenticationType: 'none',
-    })
+    if (step === 0 || customerError || eventTypeError) {
+      setBasicsAttempted(true)
+      if (customerError || eventTypeError) {
+        setStep(0)
+        return
+      }
+      setStep(1)
+      return
+    }
 
-    navigate(`/contracts/${encodeURIComponent(result.id)}`)
+    if (step === 1 || destinationError) {
+      setDestinationAttempted(true)
+      if (destinationError) {
+        setStep(1)
+        return
+      }
+      setStep(2)
+      return
+    }
+
+    setSubmitError(null)
+
+    try {
+      const result = await createMutation.mutateAsync({
+        customerId: customerId.trim(),
+        name: name.trim() || null,
+        eventTypes: [eventType],
+        destination: mapDestinationFormToConfig(destination),
+        url: '',
+        authenticationType: 'none',
+      })
+
+      notifications.success('Contract created successfully.', 'Create contract')
+      navigate(`/contracts/${encodeURIComponent(result.id)}`)
+    } catch (error) {
+      setSubmitError(getServerValidation(error, 'Unable to create contract.').formError)
+      notifications.error(getApiErrorMessage(error, 'Unable to create contract.'), 'Create contract')
+    }
   }
 
   if (!canWriteContracts) {
@@ -102,68 +144,117 @@ export function ContractCreatePage() {
     <Flex direction="column" gap="4">
       <Heading size="6">Create contract</Heading>
 
-      <Card>
+      <Card style={{ width: '100%', maxWidth: 760 }}>
         <form onSubmit={handleSubmit}>
           <Flex direction="column" gap="3">
-            <Text size="2" color="gray">
-              Customer
+            <Text size="2" color="gray" role="status">
+              {['Basics', 'Destination', 'Review'][step]} · Step {step + 1} of 3
             </Text>
-            <Select.Root value={customerId} onValueChange={setCustomerId}>
-              <Select.Trigger placeholder="Select customer" />
-              <Select.Content>
-                {!canReadCustomers || customersQuery.isLoading ? null : (customersQuery.data?.items ?? []).map((customer) => (
-                  <Select.Item key={customer.id} value={customer.id}>
-                    {customer.name} ({customer.id})
-                  </Select.Item>
-                ))}
-              </Select.Content>
-            </Select.Root>
 
-            <Text size="2" color="gray">
-              Contract name
-            </Text>
-            <TextField.Root
-              placeholder="Optional friendly name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
+            {step === 0 ? (
+              <>
+                <Text size="2" color="gray">Customer</Text>
+                <Select.Root value={customerId} onValueChange={setCustomerId}>
+                  <Select.Trigger
+                    placeholder={customersQuery.isLoading ? 'Loading customers...' : 'Select customer'}
+                    aria-invalid={basicsAttempted && !!customerError}
+                    aria-describedby={basicsAttempted && customerError ? 'contract-create-customer-error' : undefined}
+                  />
+                  <Select.Content>
+                    {canReadCustomers ? (customersQuery.data?.items ?? []).map((customer) => (
+                      <Select.Item key={customer.id} value={customer.id}>
+                        {customer.name} ({customer.id})
+                      </Select.Item>
+                    )) : null}
+                  </Select.Content>
+                </Select.Root>
+                {basicsAttempted ? (
+                  <FieldErrorText id="contract-create-customer-error" message={customerError} />
+                ) : null}
 
-            <Text size="2" color="gray">
-              Event types
-            </Text>
-            <TextArea
-              value={eventTypesInput}
-              onChange={(event) => setEventTypesInput(event.target.value)}
-              placeholder="orders.created, orders.updated"
-              rows={4}
-            />
+                <Text size="2" color="gray">Contract name (optional)</Text>
+                <TextField.Root
+                  placeholder="Optional friendly name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
 
-            <DestinationConfigurationForm
-              value={destination}
-              onChange={setDestination}
-            />
-
-            {validationError ? (
-              <Text size="2" color="red">
-                {validationError}
-              </Text>
+                <Text size="2" color="gray">Event type</Text>
+                <Select.Root value={selectedEventType} onValueChange={setSelectedEventType}>
+                  <Select.Trigger
+                    placeholder={eventDefinitionsQuery.isLoading ? 'Loading event types...' : 'Select event type'}
+                    aria-invalid={basicsAttempted && !!eventTypeError}
+                    aria-describedby={basicsAttempted && eventTypeError ? 'contract-create-event-type-error' : undefined}
+                  />
+                  <Select.Content>
+                    {canReadEventDefinitions ? (eventDefinitionsQuery.data?.items ?? []).map((definition) => (
+                      <Select.Item key={definition.eventType} value={definition.eventType}>
+                        {definition.eventType}
+                      </Select.Item>
+                    )) : null}
+                    <Select.Item value={createNewEventTypeValue}>Create new event type</Select.Item>
+                  </Select.Content>
+                </Select.Root>
+                {selectedEventType === createNewEventTypeValue ? (
+                  <TextField.Root
+                    placeholder="orders.created"
+                    aria-label="New event type"
+                    value={newEventType}
+                    onChange={(event) => setNewEventType(event.target.value)}
+                    aria-invalid={basicsAttempted && !!eventTypeError}
+                  />
+                ) : null}
+                {basicsAttempted ? (
+                  <FieldErrorText id="contract-create-event-type-error" message={eventTypeError} />
+                ) : null}
+              </>
             ) : null}
 
-            {createMutation.isError ? (
-              <Text size="2" color="red">
-                {getApiErrorMessage(createMutation.error, 'Unable to create contract.')}
-              </Text>
+            {step === 1 ? (
+              <>
+                <DestinationConfigurationForm value={destination} onChange={setDestination} />
+                {destinationAttempted ? (
+                  <FieldErrorText id="contract-create-destination-error" message={destinationError} />
+                ) : null}
+              </>
             ) : null}
 
-            <Flex gap="2">
-              <Button
-                type="submit"
-                disabled={createMutation.isPending || !!validationError}
-              >
-                {createMutation.isPending ? 'Submitting...' : 'Create contract'}
-              </Button>
-              <Button asChild variant="soft" type="button">
+            {step === 2 ? (
+              <>
+                <Heading size="4">Review contract</Heading>
+                <Text size="2" color="gray">Confirm the details before creating the contract. Credentials are not shown.</Text>
+                <Card>
+                  <Flex direction="column" gap="2">
+                    <Text size="2"><strong>Customer:</strong> {customersQuery.data?.items.find((item) => item.id === customerId)?.name ?? customerId}</Text>
+                    <Text size="2"><strong>Name:</strong> {name.trim() || '—'}</Text>
+                    <Text size="2"><strong>Event type:</strong> {eventType}</Text>
+                    <Text size="2"><strong>Destination:</strong> {destination.type}</Text>
+                    <Text size="2"><strong>Route:</strong> {destinationSummary}</Text>
+                  </Flex>
+                </Card>
+                <FormErrorText
+                  id="contract-create-submit-error"
+                  message={submitError ?? (createMutation.isError
+                    ? getApiErrorMessage(createMutation.error, 'Unable to create contract.')
+                    : null)}
+                />
+              </>
+            ) : null}
+
+            <Flex gap="2" justify="end" mt="3">
+              <Button asChild variant="soft" color="gray" type="button">
                 <NavLink to="/contracts">Cancel</NavLink>
+              </Button>
+              {step > 0 ? (
+                <Button type="button" variant="soft" color="gray" onClick={() => {
+                  setSubmitError(null)
+                  setStep(step === 2 ? 1 : 0)
+                }}>
+                  Back
+                </Button>
+              ) : null}
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending ? 'Creating…' : step === 2 ? 'Create contract' : 'Next'}
               </Button>
             </Flex>
           </Flex>

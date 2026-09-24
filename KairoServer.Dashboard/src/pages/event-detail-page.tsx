@@ -4,20 +4,24 @@ import {
   Card,
   Flex,
   Heading,
-  ScrollArea,
   Table,
   Text,
   TextArea,
   TextField,
 } from '@radix-ui/themes'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { JsonViewer } from '../components/json/json-viewer'
+import { DetailLoadingState } from '../components/states/detail-loading-state'
+import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
 import {
   useEventDetailQuery,
   useReplayEventMutation,
   useReplayedEventDeliveriesQuery,
 } from '../features/events/use-events'
+import { useConfirmDialog } from '../hooks/use-confirm-dialog'
+import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { DeliveryListItem } from '../services/api/events-api'
 import { useAppSelector } from '../store/hooks'
@@ -68,16 +72,10 @@ function summarizeDeliveries(deliveries: DeliveryListItem[]) {
   }
 }
 
-function safeStringify(value: unknown) {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return '{"error":"Unable to format JSON"}'
-  }
-}
-
 export function EventDetailPage() {
   const { id } = useParams()
+  const confirm = useConfirmDialog()
+  const notifications = useNotifications()
   const { currentUser } = useAppSelector((state) => state.auth)
 
   const canReadEvents = hasPermission(currentUser, 'events.read')
@@ -98,46 +96,55 @@ export function EventDetailPage() {
   const detail = detailQuery.data
   const replayedDeliveriesQuery = useReplayedEventDeliveriesQuery(lastReplay?.replayedEventId)
 
-  const payloadJson = useMemo(() => safeStringify(detail?.payload ?? {}), [detail?.payload])
-  const metadataJson = useMemo(() => safeStringify(detail?.metadata ?? {}), [detail?.metadata])
+  const replayKeyError = !replayKey.trim() ? 'Replay key is required.' : null
 
-  async function handleCopy(field: 'id' | 'payload') {
-    const value = field === 'id' ? detail?.id ?? '' : payloadJson
+  async function handleCopy() {
+    const value = detail?.id ?? ''
 
     if (!value) {
       return
     }
 
     await navigator.clipboard.writeText(value)
-    setCopiedField(field)
+    setCopiedField('id')
 
     window.setTimeout(() => {
-      setCopiedField((current) => (current === field ? null : current))
+      setCopiedField((current) => (current === 'id' ? null : current))
     }, 1500)
   }
 
   async function handleReplay() {
-    if (!id || !canReplayEvents || !replayKey.trim() || replayMutation.isPending) {
+    if (!id || !canReplayEvents || !!replayKeyError || replayMutation.isPending) {
       return
     }
 
-    const confirmed = window.confirm(
-      'Replay will create a new event and trigger new deliveries for matching contracts. Continue?',
-    )
+    const confirmed = await confirm({
+      title: 'Replay event',
+      description:
+        'Replay will create a new event and can trigger new deliveries for matching contracts. This can duplicate downstream effects. Continue?',
+      confirmText: 'Replay',
+      cancelText: 'Cancel',
+      confirmColor: 'amber',
+    })
 
     if (!confirmed) {
       return
     }
 
-    const replay = await replayMutation.mutateAsync({
-      replayKey: replayKey.trim(),
-      reason: replayReason.trim() || null,
-    })
+    try {
+      const replay = await replayMutation.mutateAsync({
+        replayKey: replayKey.trim(),
+        reason: replayReason.trim() || null,
+      })
 
-    setLastReplay(replay)
+      setLastReplay(replay)
 
-    setReplayKey('')
-    setReplayReason('')
+      setReplayKey('')
+      setReplayReason('')
+      notifications.success('Event replay started successfully.', 'Replay event')
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to replay event.'), 'Replay event')
+    }
   }
 
   if (!canReadEvents) {
@@ -163,11 +170,7 @@ export function EventDetailPage() {
   }
 
   if (detailQuery.isLoading) {
-    return (
-      <Card>
-        <Text size="2" color="gray">Loading event detail...</Text>
-      </Card>
-    )
+    return <DetailLoadingState message="Loading event detail..." />
   }
 
   if (detailQuery.isError || !detail) {
@@ -211,7 +214,7 @@ export function EventDetailPage() {
           <Text size="2" color="gray">Event ID</Text>
           <Flex align="center" gap="2" wrap="wrap">
             <Text>{detail.id}</Text>
-            <Button variant="soft" size="1" onClick={() => void handleCopy('id')}>
+            <Button variant="soft" size="1" onClick={() => void handleCopy()}>
               {copiedField === 'id' ? 'Copied' : 'Copy ID'}
             </Button>
           </Flex>
@@ -241,27 +244,25 @@ export function EventDetailPage() {
       <Card>
         <Flex direction="column" gap="3">
           <Heading size="4">Metadata</Heading>
-          <ScrollArea type="auto" scrollbars="both" style={{ maxHeight: 280 }}>
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-              {metadataJson}
-            </pre>
-          </ScrollArea>
+          <JsonViewer
+            value={detail.metadata ?? {}}
+            maxHeight={280}
+            defaultCollapsed
+            searchPlaceholder="Search metadata"
+            copyLabel="Copy metadata"
+          />
         </Flex>
       </Card>
 
       <Card>
         <Flex direction="column" gap="3">
           <Heading size="4">Payload</Heading>
-          <Flex>
-            <Button variant="soft" size="1" onClick={() => void handleCopy('payload')}>
-              {copiedField === 'payload' ? 'Copied' : 'Copy payload'}
-            </Button>
-          </Flex>
-          <ScrollArea type="auto" scrollbars="both" style={{ maxHeight: 380 }}>
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-              {payloadJson}
-            </pre>
-          </ScrollArea>
+          <JsonViewer
+            value={detail.payload ?? {}}
+            maxHeight={380}
+            searchPlaceholder="Search payload"
+            copyLabel="Copy payload"
+          />
         </Flex>
       </Card>
 
@@ -315,7 +316,10 @@ export function EventDetailPage() {
                 value={replayKey}
                 onChange={(event) => setReplayKey(event.target.value)}
                 disabled={replayMutation.isPending}
+                aria-invalid={replayKeyError ? 'true' : 'false'}
+                aria-describedby={replayKeyError ? 'event-replay-key-error' : undefined}
               />
+              <FieldErrorText id="event-replay-key-error" message={replayKeyError} />
               <TextArea
                 placeholder="Reason (optional)"
                 value={replayReason}
@@ -324,11 +328,14 @@ export function EventDetailPage() {
                 disabled={replayMutation.isPending}
               />
 
-              {replayMutation.isError ? (
-                <Text size="2" color="red">
-                  {getApiErrorMessage(replayMutation.error, 'Unable to replay event.')}
-                </Text>
-              ) : null}
+              <FormErrorText
+                id="event-replay-submit-error"
+                message={
+                  replayMutation.isError
+                    ? getApiErrorMessage(replayMutation.error, 'Unable to replay event.')
+                    : null
+                }
+              />
 
               {replayMutation.isSuccess ? (
                 <Text size="2" color="green">
@@ -393,7 +400,7 @@ export function EventDetailPage() {
               <Button
                 type="button"
                 onClick={() => void handleReplay()}
-                disabled={replayMutation.isPending || !replayKey.trim()}
+                disabled={replayMutation.isPending || !!replayKeyError}
               >
                 {replayMutation.isPending ? 'Submitting...' : 'Replay event'}
               </Button>

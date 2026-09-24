@@ -7,9 +7,14 @@ import {
   TextArea,
   TextField,
 } from '@radix-ui/themes'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { getServerValidation } from '../components/forms/form-validation'
+import { useConfirmDialog } from '../hooks/use-confirm-dialog'
+import { useNotifications } from '../hooks/use-notifications'
+import { useUnsavedChangesGuard } from '../hooks/use-unsaved-changes-guard'
 import { DestinationConfigurationForm } from '../features/contracts/destination-forms/destination-configuration-form'
 import {
   createDefaultSecretFieldState,
@@ -37,6 +42,42 @@ function parseEventTypes(value: string) {
     .split(/[\n,]+/)
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0)
+}
+
+function hasSecretMutation(secret: {
+  mode: 'replace' | 'keep' | 'remove'
+  hasStoredValue: boolean
+  value: string
+}) {
+  if (secret.mode === 'remove') {
+    return true
+  }
+
+  if (secret.mode === 'replace') {
+    return secret.hasStoredValue || secret.value.trim().length > 0
+  }
+
+  return false
+}
+
+function hasCredentialRotationChange(state: DestinationFormState) {
+  switch (state.type) {
+    case 'Http':
+      return state.http.authenticationType !== 'none' && hasSecretMutation(state.http.credential)
+    case 'Kafka':
+      return hasSecretMutation(state.kafka.password)
+    case 'Nats':
+      return hasSecretMutation(state.nats.token) || hasSecretMutation(state.nats.password)
+    case 'RabbitMq':
+      return hasSecretMutation(state.rabbitMq.password)
+    case 'Sqs':
+      return (
+        hasSecretMutation(state.sqs.secretAccessKey) ||
+        hasSecretMutation(state.sqs.sessionToken)
+      )
+    default:
+      return false
+  }
 }
 
 function parseDestinationConfiguration(
@@ -291,21 +332,33 @@ function ContractEditorForm({
   canWriteContracts,
 }: ContractEditorFormProps) {
   const navigate = useNavigate()
+  const confirm = useConfirmDialog()
+  const notifications = useNotifications()
   const replaceMutation = useReplaceContractMutation(id)
 
   const [name, setName] = useState(initial.name)
   const [eventTypesInput, setEventTypesInput] = useState(initial.eventTypesInput)
   const [destination, setDestination] = useState(initial.destination)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const eventTypes = useMemo(() => parseEventTypes(eventTypesInput), [eventTypesInput])
 
-  const validationError = useMemo(() => {
+  const fieldErrors = useMemo(() => {
+    const errors: Record<string, string> = {}
+
     if (eventTypes.length === 0) {
-      return 'At least one event type is required.'
+      errors.eventTypes = 'At least one event type is required.'
     }
 
-    return validateDestinationFormState(destination)
+    const destinationError = validateDestinationFormState(destination)
+    if (destinationError) {
+      errors.destination = destinationError
+    }
+
+    return errors
   }, [destination, eventTypes.length])
+
+  const hasValidationError = Object.keys(fieldErrors).length > 0
 
   const dirty = useMemo(() => {
     const currentSnapshot = JSON.stringify({
@@ -330,47 +383,66 @@ function ContractEditorForm({
     name,
   ])
 
-  useEffect(() => {
-    function handleBeforeUnload(event: BeforeUnloadEvent) {
-      if (!dirty) {
-        return
-      }
-
-      event.preventDefault()
-      event.returnValue = ''
-    }
-
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-    }
-  }, [dirty])
+  useUnsavedChangesGuard({ when: dirty })
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteContracts || replaceMutation.isPending || validationError) {
+    if (!canWriteContracts || replaceMutation.isPending || hasValidationError) {
       return
     }
 
-    const result = await replaceMutation.mutateAsync({
-      etag,
-      payload: {
-        customerId,
-        name: name.trim() || null,
-        eventTypes,
-        destination: mapDestinationFormToConfig(destination),
-        url: '',
-        authenticationType: 'none',
-      },
-    })
+    if (hasCredentialRotationChange(destination)) {
+      const confirmed = await confirm({
+        title: 'Confirm credential rotation',
+        description:
+          'You are changing or removing destination credentials. This can interrupt delivery authentication until the destination is updated with matching credentials.',
+        confirmText: 'Save credential changes',
+        cancelText: 'Cancel',
+        confirmColor: 'amber',
+      })
 
-    navigate(`/contracts/${encodeURIComponent(result.contract.id)}`)
+      if (!confirmed) {
+        return
+      }
+    }
+
+    setSubmitError(null)
+
+    try {
+      const result = await replaceMutation.mutateAsync({
+        etag,
+        payload: {
+          customerId,
+          name: name.trim() || null,
+          eventTypes,
+          destination: mapDestinationFormToConfig(destination),
+          url: '',
+          authenticationType: 'none',
+        },
+      })
+
+      notifications.success('Contract changes saved.', 'Save contract')
+      navigate(`/contracts/${encodeURIComponent(result.contract.id)}`)
+    } catch (error) {
+      setSubmitError(getServerValidation(error, 'Unable to update contract.').formError)
+      notifications.error(getApiErrorMessage(error, 'Unable to update contract.'), 'Save contract')
+    }
   }
 
-  function handleCancelNavigation() {
-    if (dirty && !window.confirm('You have unsaved changes. Leave this page?')) {
-      return
+  async function handleCancelNavigation() {
+    if (dirty) {
+      const confirmed = await confirm({
+        title: 'Unsaved changes',
+        description: 'You have unsaved changes. Leave this page?',
+        confirmText: 'Leave page',
+        cancelText: 'Stay',
+        confirmColor: 'amber',
+      })
+
+      if (!confirmed) {
+        return
+      }
     }
 
     navigate(`/contracts/${encodeURIComponent(id)}`)
@@ -397,38 +469,46 @@ function ContractEditorForm({
             onChange={(event) => setEventTypesInput(event.target.value)}
             rows={4}
             disabled={!canWriteContracts || replaceMutation.isPending}
+            aria-invalid={fieldErrors.eventTypes ? 'true' : 'false'}
+            aria-describedby={fieldErrors.eventTypes ? 'contract-edit-event-types-error' : undefined}
           />
+          <FieldErrorText id="contract-edit-event-types-error" message={fieldErrors.eventTypes} />
 
           <DestinationConfigurationForm
             value={destination}
             onChange={setDestination}
           />
+          <FieldErrorText id="contract-edit-destination-error" message={fieldErrors.destination} />
 
           <Text size="2" color="gray">
             Filters and transformations editing will be added in a later iteration.
           </Text>
 
-          {validationError ? (
-            <Text size="2" color="red">
-              {validationError}
-            </Text>
-          ) : null}
-
-          {replaceMutation.isError ? (
-            <Text size="2" color="red">
-              {getApiErrorMessage(replaceMutation.error, 'Unable to update contract.')}
-            </Text>
-          ) : null}
+          <FormErrorText
+            id="contract-edit-submit-error"
+            message={
+              submitError ??
+              (replaceMutation.isError
+                ? getApiErrorMessage(replaceMutation.error, 'Unable to update contract.')
+                : null)
+            }
+          />
 
           <Flex gap="2">
             <Button
               type="submit"
-              disabled={!canWriteContracts || replaceMutation.isPending || !!validationError || !dirty}
+              disabled={!canWriteContracts || replaceMutation.isPending || hasValidationError || !dirty}
             >
               {replaceMutation.isPending ? 'Saving...' : 'Save changes'}
             </Button>
 
-            <Button type="button" variant="soft" onClick={handleCancelNavigation}>
+            <Button
+              type="button"
+              variant="soft"
+              onClick={() => {
+                void handleCancelNavigation()
+              }}
+            >
               Cancel
             </Button>
           </Flex>

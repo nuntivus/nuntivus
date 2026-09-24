@@ -5,12 +5,13 @@ import {
   Flex,
   Heading,
   Link,
-  Spinner,
   Table,
   Text,
 } from '@radix-ui/themes'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { DestinationHealthSummary } from '../components/observability/destination-health-summary'
+import { DetailLoadingState } from '../components/states/detail-loading-state'
 import {
   useContractDeliveriesQuery,
   useContractDetailQuery,
@@ -18,6 +19,9 @@ import {
   useDisableContractMutation,
   useEnableContractMutation,
 } from '../features/contracts/use-contracts'
+import { useContractDestinationHealthQuery } from '../features/destination-health/use-destination-health'
+import { useConfirmDialog } from '../hooks/use-confirm-dialog'
+import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
 
@@ -69,6 +73,8 @@ function summarizeAuthentication(configurationText: string) {
 export function ContractDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const confirm = useConfirmDialog()
+  const notifications = useNotifications()
   const { currentUser } = useAppSelector((state) => state.auth)
 
   const canReadContracts = hasPermission(currentUser, 'contracts.read')
@@ -77,6 +83,7 @@ export function ContractDetailPage() {
   const canReadFailures = hasPermission(currentUser, 'delivery-failures.read')
 
   const detailQuery = useContractDetailQuery(id)
+  const destinationHealthQuery = useContractDestinationHealthQuery(id)
   const deliveriesQuery = useContractDeliveriesQuery(canReadDeliveries ? id : undefined)
   const failuresQuery = useContractRecentFailuresQuery(canReadFailures ? id : undefined)
 
@@ -106,12 +113,7 @@ export function ContractDetailPage() {
   }
 
   if (detailQuery.isLoading) {
-    return (
-      <Flex align="center" gap="2">
-        <Spinner size="1" />
-        <Text>Loading contract detail...</Text>
-      </Flex>
-    )
+    return <DetailLoadingState message="Loading contract detail..." />
   }
 
   if (detailQuery.isError || !detailQuery.data) {
@@ -205,8 +207,13 @@ export function ContractDetailPage() {
               type="button"
               variant="soft"
               disabled={!canWriteContracts || pending || contract.enabled}
-              onClick={() => {
-                void enableMutation.mutateAsync(contract.id)
+              onClick={async () => {
+                try {
+                  await enableMutation.mutateAsync(contract.id)
+                  notifications.success('Contract enabled.', 'Contract detail')
+                } catch (error) {
+                  notifications.error(getApiErrorMessage(error, 'Unable to enable contract.'), 'Contract detail')
+                }
               }}
             >
               Enable
@@ -216,8 +223,26 @@ export function ContractDetailPage() {
               color="red"
               variant="soft"
               disabled={!canWriteContracts || pending || !contract.enabled}
-              onClick={() => {
-                void disableMutation.mutateAsync(contract.id)
+              onClick={async () => {
+                const confirmed = await confirm({
+                  title: 'Disable contract',
+                  description:
+                    'Disable this contract? Event matching can stop for this contract until it is enabled again.',
+                  confirmText: 'Disable contract',
+                  cancelText: 'Cancel',
+                  confirmColor: 'red',
+                })
+
+                if (!confirmed) {
+                  return
+                }
+
+                try {
+                  await disableMutation.mutateAsync(contract.id)
+                  notifications.success('Contract disabled.', 'Contract detail')
+                } catch (error) {
+                  notifications.error(getApiErrorMessage(error, 'Unable to disable contract.'), 'Contract detail')
+                }
               }}
             >
               Disable
@@ -225,6 +250,16 @@ export function ContractDetailPage() {
           </Flex>
         </Flex>
       </Card>
+
+      <DestinationHealthSummary
+        title="Destination health"
+        contractId={contract.id}
+        items={destinationHealthQuery.data ? [destinationHealthQuery.data] : []}
+        isLoading={destinationHealthQuery.isLoading}
+        isError={destinationHealthQuery.isError}
+        error={destinationHealthQuery.error}
+        canReadFailures={canReadFailures}
+      />
 
       <Card>
         <Flex direction="column" gap="3">

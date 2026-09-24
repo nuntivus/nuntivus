@@ -5,5 +5,6 @@ namespace KairoServer.Contracts.Admin
     public sealed record CreateAdminUserRequest(
         string Subject,
         string? DisplayName,
-        IReadOnlyList<string> Roles);
+    IReadOnlyList<string> Roles,
+    string? Password = null);
 }

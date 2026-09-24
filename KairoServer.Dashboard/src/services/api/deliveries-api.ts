@@ -1,4 +1,5 @@
-import { apiGet, apiPost } from './api-client'
+import { apiGet, apiPost, type ApiRequestOptions } from './api-client'
+import type { PagedResponse } from './paged-response'
 
 export type DeliveryStatus =
   | 'Pending'
@@ -9,16 +10,6 @@ export type DeliveryStatus =
   | (string & {})
 
 export type DestinationType = 'Http' | 'Kafka' | 'Nats' | 'RabbitMq' | 'Sqs'
-
-export interface PagedResponse<TItem> {
-  items: TItem[]
-  page: number
-  pageSize: number
-  totalCount: number
-  totalPages: number
-  hasPrevious: boolean
-  hasNext: boolean
-}
 
 export interface DeliveryAttemptSummary {
   totalAttempts: number
@@ -101,7 +92,7 @@ export interface DeliveryOperationResponse {
   updatedAt: string
 }
 
-export async function listDeliveries(query: DeliveryListQuery) {
+export async function listDeliveries(query: DeliveryListQuery, options?: ApiRequestOptions) {
   return apiGet<PagedResponse<DeliveryListItem>>('/v1/deliveries', {
     eventId: query.eventId?.trim() ? query.eventId.trim() : null,
     customerId: query.customerId?.trim() ? query.customerId.trim() : null,
@@ -115,19 +106,19 @@ export async function listDeliveries(query: DeliveryListQuery) {
     sortDirection: query.sortDirection ?? null,
     page: query.page,
     pageSize: query.pageSize,
-  })
+  }, options)
 }
 
-export async function getDeliveryById(id: string) {
-  return apiGet<DeliveryListItem>(`/v1/deliveries/${encodeURIComponent(id)}`)
+export async function getDeliveryById(id: string, options?: ApiRequestOptions) {
+  return apiGet<DeliveryListItem>(`/v1/deliveries/${encodeURIComponent(id)}`, undefined, options)
 }
 
-export async function getDeliveryFailure(id: string) {
-  return apiGet<DeliveryFailure>(`/v1/deliveries/${encodeURIComponent(id)}/failure`)
+export async function getDeliveryFailure(id: string, options?: ApiRequestOptions) {
+  return apiGet<DeliveryFailure>(`/v1/deliveries/${encodeURIComponent(id)}/failure`, undefined, options)
 }
 
-export async function getDeliveryAttempts(id: string) {
-  return apiGet<DeliveryAttempt[]>(`/v1/deliveries/${encodeURIComponent(id)}/attempts`)
+export async function getDeliveryAttempts(id: string, options?: ApiRequestOptions) {
+  return apiGet<DeliveryAttempt[]>(`/v1/deliveries/${encodeURIComponent(id)}/attempts`, undefined, options)
 }
 
 export async function retryDelivery(id: string, request: ManualDeliveryOperationRequest) {

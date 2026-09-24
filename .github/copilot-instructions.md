@@ -10,3 +10,8 @@
 - Duplicate operations should return 200 with the current state.
 - Audit should capture the full request/response snapshot.
 - Operator identity should come from the authenticated user principal.
+
+## Frontend Forms
+- User wants reusable shared infrastructure across all existing forms.
+- Implement route-change-only unsaved-change prompts.
+- Use a shared modal dialog system consistently instead of ad-hoc confirms.

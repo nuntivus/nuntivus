@@ -4,6 +4,6 @@ import { getReadinessStatus } from '../../services/api/system-api'
 export function useReadinessStatusQuery() {
   return useQuery({
     queryKey: ['system', 'health', 'ready'],
-    queryFn: getReadinessStatus,
+    queryFn: ({ signal }) => getReadinessStatus({ signal }),
   })
 }

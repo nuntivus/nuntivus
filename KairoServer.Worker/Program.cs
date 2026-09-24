@@ -1,4 +1,5 @@
 using KairoServer.Application.Caching;
+using KairoServer.Application.Auditing;
 using KairoServer.Application.Contracts.Destinations;
 using KairoServer.Application.Deliveries.Execution;
 using KairoServer.Application.Deliveries.Recovery;
@@ -230,8 +231,10 @@ builder.Services.AddSingleton<IDatabaseConnectionFactory>(
 builder.Services.AddSingleton<IPostgresSchemaMigrationRunner, PostgresSchemaMigrationRunner>();
 
 builder.Services.AddSingleton<IOutboxReader, PostgresOutboxReader>();
+builder.Services.AddScoped<IOutboxRepository, PostgresOutboxRepository>();
 builder.Services.AddSingleton<IRetentionCleanupRepository, PostgresRetentionCleanupRepository>();
 builder.Services.AddScoped<IAuditLogRepository, PostgresAuditLogRepository>();
+builder.Services.AddScoped<IAuditLogQueryService, AuditLogQueryService>();
 
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ICacheStore, InMemoryCacheStore>();
@@ -260,6 +263,7 @@ builder.Services.AddScoped<ICustomerRepository>(sp => new CachedCustomerReposito
 builder.Services.AddScoped<IDeliveryRepository, PostgresDeliveryRepository>();
 builder.Services.AddSingleton<IDeliveryFactory, DeliveryFactory>();
 builder.Services.AddScoped<IContractDeliveryRateLimiter, PostgresContractDeliveryRateLimiter>();
+builder.Services.AddScoped<IDeliveryOrderingCoordinator, PostgresDeliveryOrderingCoordinator>();
 builder.Services.AddSingleton<IDeliveryDispatcherMetrics, MeterDeliveryDispatcherMetrics>();
 
 builder.Services.AddSingleton<IContractFilterEvaluator, ContractFilterEvaluator>();

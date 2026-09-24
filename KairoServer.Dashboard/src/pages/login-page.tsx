@@ -1,11 +1,13 @@
-import { AlertDialog, Button, Card, Flex, Heading, Spinner, Text, TextArea } from '@radix-ui/themes'
+import { AlertDialog, Button, Card, Flex, Heading, Spinner, Text, TextField } from '@radix-ui/themes'
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { FieldErrorText } from '../components/forms/form-feedback'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
-import { clearAuthError, loginWithToken } from '../store/auth-slice'
+import { clearAuthError, loginWithCredentials } from '../store/auth-slice'
 
 export function LoginPage() {
-  const [tokenInput, setTokenInput] = useState('')
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const location = useLocation()
@@ -13,6 +15,8 @@ export function LoginPage() {
 
   const redirectTo = (location.state as { from?: { pathname?: string } } | null)
     ?.from?.pathname
+  const usernameError = !username.trim() ? 'Username is required.' : null
+  const passwordError = !password.trim() ? 'Password is required.' : null
 
   if (status === 'authenticated' && token) {
     return <Navigate to={redirectTo || '/'} replace />
@@ -23,13 +27,13 @@ export function LoginPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!tokenInput.trim()) {
+    if (usernameError || passwordError) {
       return
     }
 
-    const result = await dispatch(loginWithToken(tokenInput))
+    const result = await dispatch(loginWithCredentials({ username, password }))
 
-    if (loginWithToken.fulfilled.match(result)) {
+    if (loginWithCredentials.fulfilled.match(result)) {
       navigate(redirectTo || '/', { replace: true })
     }
   }
@@ -41,7 +45,7 @@ export function LoginPage() {
           <Flex direction="column" gap="4">
             <Heading size="6">Admin login</Heading>
             <Text size="2" color="gray">
-              Paste a JWT bearer token to start an authenticated admin session.
+              Sign in with your admin username and password.
             </Text>
 
             {restoringSession ? (
@@ -69,16 +73,30 @@ export function LoginPage() {
               </AlertDialog.Root>
             ) : null}
 
-            <TextArea
-              value={tokenInput}
-              onChange={(event) => setTokenInput(event.target.value)}
-              placeholder="eyJhbGciOi..."
-              rows={6}
+            <TextField.Root
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="Username"
               disabled={restoringSession}
+              aria-invalid={usernameError ? 'true' : 'false'}
+              aria-describedby={usernameError ? 'login-username-error' : undefined}
             />
+            <FieldErrorText id="login-username-error" message={usernameError} />
+
+            <TextField.Root
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Password"
+              disabled={restoringSession}
+              aria-invalid={passwordError ? 'true' : 'false'}
+              aria-describedby={passwordError ? 'login-password-error' : undefined}
+            />
+            <FieldErrorText id="login-password-error" message={passwordError} />
+
             <Button
               type="submit"
-              disabled={!tokenInput.trim() || status === 'loading' || restoringSession}
+              disabled={!!usernameError || !!passwordError || status === 'loading' || restoringSession}
             >
               {status === 'loading' ? 'Signing in...' : 'Sign in'}
             </Button>

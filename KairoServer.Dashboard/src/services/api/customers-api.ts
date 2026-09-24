@@ -1,4 +1,5 @@
-import { apiGet, apiPost, apiPut } from './api-client'
+import { apiGet, apiPost, apiPut, type ApiRequestOptions } from './api-client'
+import type { PagedResponse } from './paged-response'
 
 export interface Customer {
   id: string
@@ -6,16 +7,6 @@ export interface Customer {
   enabled: boolean
   createdAt: string
   updatedAt: string
-}
-
-export interface PagedResponse<TItem> {
-  items: TItem[]
-  page: number
-  pageSize: number
-  totalCount: number
-  totalPages: number
-  hasPrevious: boolean
-  hasNext: boolean
 }
 
 export interface CustomerListQuery {
@@ -73,7 +64,7 @@ export interface FailedDeliveryItem {
   updatedAt: string
 }
 
-export async function listCustomers(query: CustomerListQuery) {
+export async function listCustomers(query: CustomerListQuery, options?: ApiRequestOptions) {
   return apiGet<PagedResponse<Customer>>('/v1/customers', {
     enabled: typeof query.enabled === 'boolean' ? query.enabled : null,
     search: query.search?.trim() ? query.search.trim() : null,
@@ -81,15 +72,15 @@ export async function listCustomers(query: CustomerListQuery) {
     sortDirection: query.sortDirection ?? null,
     page: query.page,
     pageSize: query.pageSize,
-  })
+  }, options)
 }
 
 export async function createCustomer(request: CreateCustomerRequest) {
   return apiPost<Customer>('/v1/customers', request)
 }
 
-export async function getCustomerById(id: string) {
-  return apiGet<Customer>(`/v1/customers/${encodeURIComponent(id)}`)
+export async function getCustomerById(id: string, options?: ApiRequestOptions) {
+  return apiGet<Customer>(`/v1/customers/${encodeURIComponent(id)}`, undefined, options)
 }
 
 export async function updateCustomer(id: string, request: UpdateCustomerRequest) {
@@ -104,7 +95,7 @@ export async function disableCustomer(id: string) {
   return apiPost<Customer>(`/v1/customers/${encodeURIComponent(id)}/disable`)
 }
 
-export async function listCustomerContracts(id: string, pageSize = 10) {
+export async function listCustomerContracts(id: string, pageSize = 10, options?: ApiRequestOptions) {
   return apiGet<PagedResponse<ContractListItem>>(
     `/v1/customers/${encodeURIComponent(id)}/contracts`,
     {
@@ -113,25 +104,26 @@ export async function listCustomerContracts(id: string, pageSize = 10) {
       sortBy: 'updatedAt',
       sortDirection: 'desc',
     },
+    options,
   )
 }
 
-export async function listCustomerDeliveries(id: string, pageSize = 10) {
+export async function listCustomerDeliveries(id: string, pageSize = 10, options?: ApiRequestOptions) {
   return apiGet<PagedResponse<DeliveryListItem>>('/v1/deliveries', {
     customerId: id,
     page: 1,
     pageSize,
     sortBy: 'updatedAt',
     sortDirection: 'desc',
-  })
+  }, options)
 }
 
-export async function listCustomerRecentFailures(id: string, pageSize = 10) {
+export async function listCustomerRecentFailures(id: string, pageSize = 10, options?: ApiRequestOptions) {
   return apiGet<PagedResponse<FailedDeliveryItem>>('/v1/admin/deliveries/failures', {
     customerId: id,
     page: 1,
     pageSize,
     sortBy: 'updatedAt',
     sortDirection: 'desc',
-  })
+  }, options)
 }

@@ -1,4 +1,4 @@
-import { apiGet, apiPut } from './api-client'
+import { apiGet, apiPut, type ApiRequestOptions } from './api-client'
 
 export interface InstanceDeliveryDefaultsSettings {
   requestTimeoutSeconds: number
@@ -49,8 +49,8 @@ export interface UpdateInstanceSettingsRequest {
   limits: InstanceLimitsSettings
 }
 
-export async function getInstanceSettings() {
-  return apiGet<InstanceSettings>('/v1/admin/settings/instance')
+export async function getInstanceSettings(options?: ApiRequestOptions) {
+  return apiGet<InstanceSettings>('/v1/admin/settings/instance', undefined, options)
 }
 
 export async function updateInstanceSettings(request: UpdateInstanceSettingsRequest) {

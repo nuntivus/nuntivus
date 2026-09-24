@@ -1,39 +1,35 @@
 import {
   Button,
   Card,
+  Dialog,
   Flex,
   Heading,
+  Link,
   Table,
   Text,
   TextArea,
   TextField,
 } from '@radix-ui/themes'
-import { useMemo, useState, type FormEvent } from 'react'
-import { NavLink, useNavigate, useSearchParams } from 'react-router-dom'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { FormDialog } from '../components/dialogs/form-dialog'
+import { ListFeedback } from '../components/lists/list-feedback'
+import { ListPagination } from '../components/lists/list-pagination'
 import {
   useCreateEventDefinitionMutation,
   useEventDefinitionsQuery,
 } from '../features/event-definitions/use-event-definitions'
+import { useNotifications } from '../hooks/use-notifications'
+import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
 
-function parsePositiveInt(value: string | null, fallback: number) {
-  if (!value) {
-    return fallback
-  }
-
-  const parsed = Number.parseInt(value, 10)
-  if (Number.isNaN(parsed) || parsed < 1) {
-    return fallback
-  }
-
-  return parsed
-}
-
 export function EventDefinitionsPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { searchParams, updateParams } = useUrlQueryParams()
   const navigate = useNavigate()
+  const notifications = useNotifications()
   const { currentUser } = useAppSelector((state) => state.auth)
 
   const canReadDefinitions = hasPermission(currentUser, 'event-definitions.read')
@@ -56,40 +52,43 @@ export function EventDefinitionsPage() {
   const [eventType, setEventType] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [description, setDescription] = useState('')
-
-  function updateParams(updates: Record<string, string | null>) {
-    const next = new URLSearchParams(searchParams)
-
-    Object.entries(updates).forEach(([key, value]) => {
-      if (!value) {
-        next.delete(key)
-        return
-      }
-
-      next.set(key, value)
-    })
-
-    setSearchParams(next)
-  }
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const createButtonRef = useRef<HTMLButtonElement>(null)
+  const eventTypeError = !eventType.trim() ? 'Event type is required.' : null
+  const displayNameError = !displayName.trim() ? 'Display name is required.' : null
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteDefinitions || !eventType.trim() || !displayName.trim()) {
+    if (!canWriteDefinitions || !!eventTypeError || !!displayNameError) {
       return
     }
 
-    const created = await createMutation.mutateAsync({
-      eventType: eventType.trim(),
-      displayName: displayName.trim(),
-      description: description.trim() || null,
-    })
+    try {
+      const created = await createMutation.mutateAsync({
+        eventType: eventType.trim(),
+        displayName: displayName.trim(),
+        description: description.trim() || null,
+      })
 
-    setEventType('')
-    setDisplayName('')
-    setDescription('')
+      setEventType('')
+      setDisplayName('')
+      setDescription('')
+      setIsCreateOpen(false)
+      notifications.success('Event definition created.', 'Create definition')
 
-    navigate(`/event-definitions/${encodeURIComponent(created.eventType)}`)
+      navigate(`/event-definitions/${encodeURIComponent(created.eventType)}`)
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to create event definition.'), 'Create definition')
+    }
+  }
+
+  function handleCreateOpenChange(open: boolean) {
+    setIsCreateOpen(open)
+
+    if (!open) {
+      window.setTimeout(() => createButtonRef.current?.focus(), 0)
+    }
   }
 
   if (!canReadDefinitions) {
@@ -110,66 +109,124 @@ export function EventDefinitionsPage() {
   const paging = definitionsQuery.data
 
   return (
-    <Flex direction="column" gap="4">
-      <Heading size="6">Event Definitions</Heading>
+    <Flex direction="column" gap="5">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Event Definitions</h1>
+          <p className="page-subtitle">
+            Catalog the event types your producers can emit.
+          </p>
+        </div>
+        {canWriteDefinitions ? (
+          <Button
+            ref={createButtonRef}
+            size="2"
+            onClick={() => setIsCreateOpen(true)}
+          >
+            New definition
+          </Button>
+        ) : null}
+      </div>
 
       {canWriteDefinitions ? (
-        <Card>
-          <form onSubmit={handleCreate}>
-            <Flex direction="column" gap="3">
-              <Heading size="4">Create definition</Heading>
-
+        <FormDialog
+          open={isCreateOpen}
+          onOpenChange={handleCreateOpenChange}
+          title="Create definition"
+          description="Register an event type with a friendly display name."
+          descriptionId="event-definitions-create-dialog-description"
+          footer={
+            <>
+              <Dialog.Close>
+                <Button type="button" variant="soft" color="gray">
+                  Cancel
+                </Button>
+              </Dialog.Close>
+              <Button
+                type="submit"
+                form="event-definitions-create-form"
+                disabled={createMutation.isPending || !!eventTypeError || !!displayNameError}
+              >
+                {createMutation.isPending ? 'Creating…' : 'Create definition'}
+              </Button>
+            </>
+          }
+        >
+          <form id="event-definitions-create-form" onSubmit={handleCreate}>
+            <div className="field">
+              <label className="field-label" htmlFor="event-definitions-event-type">
+                Event type
+              </label>
               <TextField.Root
-                placeholder="Event type (orders.created)"
+                id="event-definitions-event-type"
+                size="2"
+                placeholder="orders.created"
                 value={eventType}
                 onChange={(entry) => setEventType(entry.target.value)}
+                aria-invalid={eventTypeError ? 'true' : 'false'}
+                aria-describedby={eventTypeError ? 'event-definitions-event-type-error' : undefined}
               />
+              <FieldErrorText id="event-definitions-event-type-error" message={eventTypeError} />
+            </div>
 
+            <div className="field">
+              <label className="field-label" htmlFor="event-definitions-display-name">
+                Display name
+              </label>
               <TextField.Root
-                placeholder="Display name"
+                id="event-definitions-display-name"
+                size="2"
+                placeholder="Order created"
                 value={displayName}
                 onChange={(entry) => setDisplayName(entry.target.value)}
+                aria-invalid={displayNameError ? 'true' : 'false'}
+                aria-describedby={displayNameError ? 'event-definitions-display-name-error' : undefined}
               />
+              <FieldErrorText id="event-definitions-display-name-error" message={displayNameError} />
+            </div>
 
+            <div className="field">
+              <label className="field-label" htmlFor="event-definitions-description">
+                Description <span className="field-optional">(optional)</span>
+              </label>
               <TextArea
-                placeholder="Description (optional)"
+                id="event-definitions-description"
+                placeholder="Describe when this event is emitted."
                 value={description}
                 onChange={(entry) => setDescription(entry.target.value)}
                 rows={3}
               />
+            </div>
 
-              {createMutation.isError ? (
-                <Text size="2" color="red">
-                  {getApiErrorMessage(createMutation.error, 'Unable to create event definition.')}
-                </Text>
-              ) : null}
-
-              <Button
-                type="submit"
-                disabled={createMutation.isPending || !eventType.trim() || !displayName.trim()}
-              >
-                {createMutation.isPending ? 'Creating...' : 'Create definition'}
-              </Button>
-            </Flex>
+            <FormErrorText
+              id="event-definitions-create-error"
+              message={
+                createMutation.isError
+                  ? getApiErrorMessage(createMutation.error, 'Unable to create event definition.')
+                  : null
+              }
+            />
           </form>
-        </Card>
+        </FormDialog>
       ) : null}
 
       <Card>
         <Flex direction="column" gap="3">
           <Heading size="4">Definition list</Heading>
 
-          {definitionsQuery.isLoading ? (
-            <Text size="2" color="gray">Loading definitions...</Text>
-          ) : definitionsQuery.isError ? (
-            <Text size="2" color="red">
-              {definitionsQuery.error instanceof ApiError && definitionsQuery.error.status === 403
+          <ListFeedback
+            isLoading={definitionsQuery.isLoading}
+            isError={definitionsQuery.isError}
+            error={definitionsQuery.error}
+            isEmpty={definitions.length === 0}
+            loadingMessage="Loading definitions..."
+            errorMessage={
+              definitionsQuery.error instanceof ApiError && definitionsQuery.error.status === 403
                 ? 'The backend denied access (403).'
-                : getApiErrorMessage(definitionsQuery.error, 'Unable to load definitions.')}
-            </Text>
-          ) : definitions.length === 0 ? (
-            <Text size="2" color="gray">No event definitions found.</Text>
-          ) : (
+                : getApiErrorMessage(definitionsQuery.error, 'Unable to load definitions.')
+            }
+            emptyMessage="No event definitions found."
+          >
             <>
               <Table.Root>
                 <Table.Header>
@@ -189,43 +246,24 @@ export function EventDefinitionsPage() {
                       <Table.Cell>{definition.description ?? '-'}</Table.Cell>
                       <Table.Cell>{new Date(definition.createdAt).toLocaleString()}</Table.Cell>
                       <Table.Cell>
-                        <Button asChild size="1" variant="ghost">
+                        <Link asChild size="1">
                           <NavLink to={`/event-definitions/${encodeURIComponent(definition.eventType)}`}>
                             Detail
                           </NavLink>
-                        </Button>
+                        </Link>
                       </Table.Cell>
                     </Table.Row>
                   ))}
                 </Table.Body>
               </Table.Root>
 
-              <Flex align="center" justify="between" gap="3">
-                <Text size="2" color="gray">
-                  {paging
-                    ? `Page ${paging.page} of ${paging.totalPages} Â· ${paging.totalCount} total`
-                    : ''}
-                </Text>
-
-                <Flex gap="2">
-                  <Button
-                    variant="soft"
-                    disabled={!paging?.hasPrevious}
-                    onClick={() => updateParams({ page: String(Math.max(1, pageParam - 1)) })}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="soft"
-                    disabled={!paging?.hasNext}
-                    onClick={() => updateParams({ page: String(pageParam + 1) })}
-                  >
-                    Next
-                  </Button>
-                </Flex>
-              </Flex>
+              <ListPagination
+                paging={paging}
+                onPrevious={() => updateParams({ page: String(Math.max(1, pageParam - 1)) })}
+                onNext={() => updateParams({ page: String(pageParam + 1) })}
+              />
             </>
-          )}
+          </ListFeedback>
         </Flex>
       </Card>
     </Flex>

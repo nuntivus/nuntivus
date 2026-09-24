@@ -11,18 +11,23 @@ import {
 import { useState } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
 import {
   useAdminRolesQuery,
   useAdminUserQuery,
   useDeleteAdminUserMutation,
   useReplaceAdminUserRolesMutation,
 } from '../features/admin-users/use-admin-users'
+import { useConfirmDialog } from '../hooks/use-confirm-dialog'
+import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
 
 export function UserDetailPage() {
   const { subject } = useParams()
   const navigate = useNavigate()
+  const confirm = useConfirmDialog()
+  const notifications = useNotifications()
   const { currentUser } = useAppSelector((state) => state.auth)
   const canReadUsers = hasPermission(currentUser, 'users.read')
   const canManageRoles = hasPermission(currentUser, 'roles.manage')
@@ -114,10 +119,34 @@ export function UserDetailPage() {
         savePending={replaceRolesMutation.isPending}
         deletePending={deleteMutation.isPending}
         mutationError={mutationError}
-        onSave={(payload) => replaceRolesMutation.mutateAsync(payload)}
+        onSave={async (payload) => {
+          try {
+            await replaceRolesMutation.mutateAsync(payload)
+            notifications.success('User roles saved.', 'User detail')
+          } catch (error) {
+            notifications.error(getApiErrorMessage(error, 'Unable to save user roles.'), 'User detail')
+          }
+        }}
         onDelete={async () => {
-          await deleteMutation.mutateAsync(subject)
-          navigate('/users')
+          const confirmed = await confirm({
+            title: 'Delete user',
+            description: `Delete user "${subject}"? This permanently removes assigned roles and access until re-created.`,
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            confirmColor: 'red',
+          })
+
+          if (!confirmed) {
+            return
+          }
+
+          try {
+            await deleteMutation.mutateAsync(subject)
+            notifications.success('User deleted.', 'User detail')
+            navigate('/users')
+          } catch (error) {
+            notifications.error(getApiErrorMessage(error, 'Unable to delete user.'), 'User detail')
+          }
         }}
       />
     </Flex>
@@ -153,6 +182,7 @@ function UserDetailEditor({
 }: UserDetailEditorProps) {
   const [editorDisplayName, setEditorDisplayName] = useState(displayName ?? '')
   const [selectedRoles, setSelectedRoles] = useState<string[]>(roles)
+  const rolesError = selectedRoles.length === 0 ? 'At least one role is required.' : null
 
   function toggleRole(roleName: string) {
     setSelectedRoles((current) => {
@@ -204,6 +234,7 @@ function UserDetailEditor({
             ))}
           </Flex>
         )}
+        <FieldErrorText id="user-detail-roles-error" message={rolesError} />
 
         <Flex gap="2" wrap="wrap">
           {selectedRoles.map((role) => (
@@ -213,11 +244,7 @@ function UserDetailEditor({
           ))}
         </Flex>
 
-        {mutationError ? (
-          <Text color="red" size="2">
-            {mutationError}
-          </Text>
-        ) : null}
+        <FormErrorText id="user-detail-submit-error" message={mutationError} />
 
         <Flex gap="3">
           <Button
@@ -228,7 +255,7 @@ function UserDetailEditor({
                 roles: selectedRoles,
               })
             }
-            disabled={!canManageRoles || savePending || selectedRoles.length === 0}
+            disabled={!canManageRoles || savePending || !!rolesError}
           >
             {savePending ? 'Saving...' : 'Save roles'}
           </Button>

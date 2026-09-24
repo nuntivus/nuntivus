@@ -1,19 +1,49 @@
 :root {
-  --text: #5a6272;
+  /* Light theme palette */
+  --text: #5b6472;
   --text-h: #0f172a;
-  --bg: #f8fafc;
-  --app-bg: #f8fafc;
+  --text-muted: #7b8494;
+  --bg: #f6f7f9;
+  --app-bg: #f6f7f9;
+  --sidebar-bg: #ffffff;
   --panel-bg: #ffffff;
-  --border: #e5e4e7;
+  --surface-2: #f2f4f7;
+  --border: #e6e8ec;
+  --border-strong: #d6d9e0;
   --accent: #4f46e5;
-  --accent-bg: rgba(79, 70, 229, 0.12);
-  --hover-bg: rgba(15, 23, 42, 0.05);
+  --accent-solid: #4f46e5;
+  --accent-fg: #ffffff;
+  --accent-bg: rgba(79, 70, 229, 0.1);
+  --accent-border: rgba(79, 70, 229, 0.28);
+  --hover-bg: rgba(15, 23, 42, 0.045);
+  --success: #1a7f37;
+  --warning: #9a6700;
+  --error: #cf222e;
   --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+    rgba(15, 23, 42, 0.08) 0 8px 24px -6px, rgba(15, 23, 42, 0.04) 0 2px 6px -2px;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  /* Spacing scale (4 / 8 / 12 / 16 / 24 / 32) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
 
-  font: 15px/145% var(--sans);
+  /* Radius scale */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+
+  /* Content width */
+  --content-max: 1180px;
+  --form-max: 560px;
+
+  --sans:
+    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+
+  font: 14px/1.5 var(--sans);
   letter-spacing: 0;
   color-scheme: light dark;
   color: var(--text);
@@ -24,24 +54,87 @@
   -moz-osx-font-smoothing: grayscale;
 
   @media (max-width: 1024px) {
-    font-size: 16px;
+    font-size: 15px;
   }
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #0f172a;
-    --app-bg: #0f172a;
-    --panel-bg: #111827;
-    --border: #2e303a;
-    --accent: #818cf8;
-    --accent-bg: rgba(129, 140, 248, 0.2);
-    --hover-bg: rgba(255, 255, 255, 0.06);
+    /* Dark theme palette — deep navy / charcoal */
+    --text: #97a1b6;
+    --text-h: #f4f6fb;
+    --text-muted: #6c7689;
+    --bg: #0b0f17;
+    --app-bg: #0b0f17;
+    --sidebar-bg: #090c12;
+    --panel-bg: #111725;
+    --surface-2: #161d2c;
+    --border: #232b3a;
+    --border-strong: #2c3547;
+    --accent: #a5b4fc;
+    --accent-solid: #6366f1;
+    --accent-fg: #ffffff;
+    --accent-bg: rgba(99, 102, 241, 0.16);
+    --accent-border: rgba(129, 140, 248, 0.32);
+    --hover-bg: rgba(255, 255, 255, 0.045);
+    --success: #3fb950;
+    --warning: #d29922;
+    --error: #f0616d;
     --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+      rgba(0, 0, 0, 0.5) 0 12px 28px -8px, rgba(0, 0, 0, 0.35) 0 2px 8px -2px;
   }
+}
+
+/* Explicit theme selection (Radix Themes applies .light / .dark) takes
+   priority over the OS-level prefers-color-scheme defaults above. */
+:root:has(.light),
+.light {
+  --text: #5b6472;
+  --text-h: #0f172a;
+  --text-muted: #7b8494;
+  --bg: #f6f7f9;
+  --app-bg: #f6f7f9;
+  --sidebar-bg: #ffffff;
+  --panel-bg: #ffffff;
+  --surface-2: #f2f4f7;
+  --border: #e6e8ec;
+  --border-strong: #d6d9e0;
+  --accent: #4f46e5;
+  --accent-solid: #4f46e5;
+  --accent-fg: #ffffff;
+  --accent-bg: rgba(79, 70, 229, 0.1);
+  --accent-border: rgba(79, 70, 229, 0.28);
+  --hover-bg: rgba(15, 23, 42, 0.045);
+  --success: #1a7f37;
+  --warning: #9a6700;
+  --error: #cf222e;
+  --shadow:
+    rgba(15, 23, 42, 0.08) 0 8px 24px -6px, rgba(15, 23, 42, 0.04) 0 2px 6px -2px;
+}
+
+:root:has(.dark),
+.dark {
+  --text: #97a1b6;
+  --text-h: #f4f6fb;
+  --text-muted: #6c7689;
+  --bg: #0b0f17;
+  --app-bg: #0b0f17;
+  --sidebar-bg: #090c12;
+  --panel-bg: #111725;
+  --surface-2: #161d2c;
+  --border: #232b3a;
+  --border-strong: #2c3547;
+  --accent: #a5b4fc;
+  --accent-solid: #6366f1;
+  --accent-fg: #ffffff;
+  --accent-bg: rgba(99, 102, 241, 0.16);
+  --accent-border: rgba(129, 140, 248, 0.32);
+  --hover-bg: rgba(255, 255, 255, 0.045);
+  --success: #3fb950;
+  --warning: #d29922;
+  --error: #f0616d;
+  --shadow:
+    rgba(0, 0, 0, 0.5) 0 12px 28px -8px, rgba(0, 0, 0, 0.35) 0 2px 8px -2px;
 }
 
 #root {

@@ -1,4 +1,11 @@
-import { apiGet, apiGetWithResponse, apiPost, apiPutWithResponse } from './api-client'
+import {
+  apiGet,
+  apiGetWithResponse,
+  apiPost,
+  apiPutWithResponse,
+  type ApiRequestOptions,
+} from './api-client'
+import type { PagedResponse } from './paged-response'
 
 export type DestinationType = 'Http' | 'Kafka' | 'Nats' | 'RabbitMq' | 'Sqs'
 
@@ -24,16 +31,6 @@ export interface ContractDetail {
   createdAt: string
   updatedAt: string
   name?: string | null
-}
-
-export interface PagedResponse<TItem> {
-  items: TItem[]
-  page: number
-  pageSize: number
-  totalCount: number
-  totalPages: number
-  hasPrevious: boolean
-  hasNext: boolean
 }
 
 export interface ContractListQuery {
@@ -299,7 +296,7 @@ export interface FailedDeliveryItem {
   updatedAt: string
 }
 
-export async function listContracts(query: ContractListQuery) {
+export async function listContracts(query: ContractListQuery, options?: ApiRequestOptions) {
   return apiGet<PagedResponse<Contract>>('/v1/admin/contracts', {
     customerId: query.customerId?.trim() ? query.customerId.trim() : null,
     enabled: typeof query.enabled === 'boolean' ? query.enabled : null,
@@ -309,7 +306,7 @@ export async function listContracts(query: ContractListQuery) {
     sortDirection: query.sortDirection ?? null,
     page: query.page,
     pageSize: query.pageSize,
-  })
+  }, options)
 }
 
 export async function createContract(request: CreateContractRequest) {
@@ -323,9 +320,14 @@ export async function createContract(request: CreateContractRequest) {
   })
 }
 
-export async function getContractById(id: string): Promise<ContractDetailResponse> {
+export async function getContractById(
+  id: string,
+  options?: ApiRequestOptions,
+): Promise<ContractDetailResponse> {
   const response = await apiGetWithResponse<ContractDetail>(
     `/v1/contracts/${encodeURIComponent(id)}`,
+    undefined,
+    options,
   )
 
   return {
@@ -369,22 +371,30 @@ export async function disableContract(id: string) {
   return apiPost<Contract>(`/v1/contracts/${encodeURIComponent(id)}/disable`)
 }
 
-export async function listContractDeliveries(id: string, pageSize = 10) {
+export async function listContractDeliveries(
+  id: string,
+  pageSize = 10,
+  options?: ApiRequestOptions,
+) {
   return apiGet<PagedResponse<DeliveryListItem>>('/v1/deliveries', {
     contractId: id,
     page: 1,
     pageSize,
     sortBy: 'updatedAt',
     sortDirection: 'desc',
-  })
+  }, options)
 }
 
-export async function listContractRecentFailures(id: string, pageSize = 10) {
+export async function listContractRecentFailures(
+  id: string,
+  pageSize = 10,
+  options?: ApiRequestOptions,
+) {
   return apiGet<PagedResponse<FailedDeliveryItem>>('/v1/admin/deliveries/failures', {
     contractId: id,
     page: 1,
     pageSize,
     sortBy: 'updatedAt',
     sortDirection: 'desc',
-  })
+  }, options)
 }

@@ -1,17 +1,8 @@
-import { apiGet, apiPost, apiPut } from './api-client'
+import { apiGet, apiPost, apiPut, type ApiRequestOptions } from './api-client'
+import type { PagedResponse } from './paged-response'
 
 export type EventSchemaState = 'Draft' | 'Active' | 'Deprecated'
 export type SchemaCompatibilityMode = 'Backward' | 'Forward'
-
-export interface PagedResponse<TItem> {
-  items: TItem[]
-  page: number
-  pageSize: number
-  totalCount: number
-  totalPages: number
-  hasPrevious: boolean
-  hasNext: boolean
-}
 
 export interface EventDefinition {
   eventType: string
@@ -63,15 +54,18 @@ export interface RelatedContractListItem {
   name?: string | null
 }
 
-export async function listEventDefinitions(query: EventDefinitionListQuery) {
+export async function listEventDefinitions(
+  query: EventDefinitionListQuery,
+  options?: ApiRequestOptions,
+) {
   return apiGet<PagedResponse<EventDefinition>>('/v1/event-definitions', {
     page: query.page,
     pageSize: query.pageSize,
-  })
+  }, options)
 }
 
-export async function getEventDefinition(eventType: string) {
-  return apiGet<EventDefinition>(`/v1/event-definitions/${encodeURIComponent(eventType)}`)
+export async function getEventDefinition(eventType: string, options?: ApiRequestOptions) {
+  return apiGet<EventDefinition>(`/v1/event-definitions/${encodeURIComponent(eventType)}`, undefined, options)
 }
 
 export async function createEventDefinition(request: CreateEventDefinitionRequest) {
@@ -91,19 +85,31 @@ export async function updateEventDefinitionDescription(
   })
 }
 
-export async function listSchemaVersions(eventType: string, page = 1, pageSize = 20) {
+export async function listSchemaVersions(
+  eventType: string,
+  page = 1,
+  pageSize = 20,
+  options?: ApiRequestOptions,
+) {
   return apiGet<PagedResponse<EventSchemaVersion>>(
     `/v1/event-definitions/${encodeURIComponent(eventType)}/schemas`,
     {
       page,
       pageSize,
     },
+    options,
   )
 }
 
-export async function getSchemaVersion(eventType: string, version: number) {
+export async function getSchemaVersion(
+  eventType: string,
+  version: number,
+  options?: ApiRequestOptions,
+) {
   return apiGet<EventSchemaVersion>(
     `/v1/event-definitions/${encodeURIComponent(eventType)}/schemas/${version}`,
+    undefined,
+    options,
   )
 }
 
@@ -130,12 +136,15 @@ export async function deprecateSchemaVersion(eventType: string, version: number)
   )
 }
 
-export async function listContractsRelatedToEventType(eventType: string) {
+export async function listContractsRelatedToEventType(
+  eventType: string,
+  options?: ApiRequestOptions,
+) {
   return apiGet<PagedResponse<RelatedContractListItem>>('/v1/admin/contracts', {
     eventType,
     page: 1,
     pageSize: 20,
     sortBy: 'updatedAt',
     sortDirection: 'desc',
-  })
+  }, options)
 }

@@ -112,6 +112,9 @@ namespace KairoServer.UnitTests.Matching
             public Task<Result<PagedResult<Contract>>> ListByCustomerAsync(ContractListQuery query, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(PagedResult<Contract>.Create(Array.Empty<Contract>(), query.Page, query.PageSize, 0)));
 
+            public Task<Result<PagedResult<Contract>>> ListAsync(AdminContractListQuery query, CancellationToken cancellationToken) =>
+                Task.FromResult(Result.Success(PagedResult<Contract>.Create(Array.Empty<Contract>(), query.Page, query.PageSize, 0)));
+
             public Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(string eventType, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(_matches));
         }

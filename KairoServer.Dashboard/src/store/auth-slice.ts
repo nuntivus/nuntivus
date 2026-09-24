@@ -4,7 +4,7 @@ import {
   getStoredToken,
   persistToken,
 } from '../services/auth/token-storage'
-import { getCurrentUser, type CurrentUser } from '../services/api/auth-api'
+import { getCurrentUser, loginWithPassword, type CurrentUser } from '../services/api/auth-api'
 
 interface AuthState {
   token: string | null
@@ -31,19 +31,24 @@ export const loadCurrentUser = createAsyncThunk<CurrentUser, string>(
   },
 )
 
-export const loginWithToken = createAsyncThunk<CurrentUser, string>(
-  'auth/loginWithToken',
-  async (token, thunkApi) => {
-    const normalizedToken = token.trim()
+export const loginWithCredentials = createAsyncThunk<CurrentUser, { username: string; password: string }>(
+  'auth/loginWithCredentials',
+  async ({ username, password }, thunkApi) => {
+    const normalizedUsername = username.trim()
+    const normalizedPassword = password.trim()
 
-    if (!normalizedToken) {
-      return thunkApi.rejectWithValue('Token is required') as never
+    if (!normalizedUsername || !normalizedPassword) {
+      return thunkApi.rejectWithValue('Username and password are required') as never
     }
 
-    persistToken(normalizedToken)
-
     try {
-      return await getCurrentUser(normalizedToken)
+      const login = await loginWithPassword({
+        username: normalizedUsername,
+        password: normalizedPassword,
+      })
+
+      persistToken(login.accessToken)
+      return await getCurrentUser(login.accessToken)
     } catch {
       clearStoredToken()
       return thunkApi.rejectWithValue('Authentication failed') as never
@@ -98,17 +103,17 @@ const authSlice = createSlice({
         state.error = 'Your session is invalid. Please sign in again.'
         clearStoredToken()
       })
-      .addCase(loginWithToken.pending, (state) => {
+      .addCase(loginWithCredentials.pending, (state) => {
         state.status = 'loading'
         state.error = null
       })
-      .addCase(loginWithToken.fulfilled, (state, action) => {
+      .addCase(loginWithCredentials.fulfilled, (state, action) => {
         state.currentUser = action.payload
-        state.token = action.meta.arg.trim()
+        state.token = getStoredToken()
         state.status = 'authenticated'
         state.error = null
       })
-      .addCase(loginWithToken.rejected, (state, action) => {
+      .addCase(loginWithCredentials.rejected, (state, action) => {
         state.token = null
         state.currentUser = null
         state.status = 'unauthenticated'

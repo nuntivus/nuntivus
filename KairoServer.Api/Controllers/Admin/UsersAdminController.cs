@@ -20,10 +20,14 @@ namespace KairoServer.Api.Controllers.Admin
     public sealed class UsersAdminController : ControllerBase
     {
         private readonly IAdminUserRoleService _adminUsers;
+        private readonly IAdminLocalCredentialService _credentials;
 
-        public UsersAdminController(IAdminUserRoleService adminUsers)
+        public UsersAdminController(
+            IAdminUserRoleService adminUsers,
+            IAdminLocalCredentialService credentials)
         {
             _adminUsers = adminUsers;
+            _credentials = credentials;
         }
 
         [HttpGet]
@@ -87,6 +91,27 @@ namespace KairoServer.Api.Controllers.Admin
                 GetActorId(),
                 cancellationToken);
 
+            if (result.IsFailure)
+                return result.ToOk(HttpContext);
+
+            if (!string.IsNullOrWhiteSpace(request.Password))
+            {
+                var passwordResult = await _credentials.SetPasswordAsync(
+                    subject,
+                    request.Password,
+                    GetActorId(),
+                    cancellationToken);
+
+                if (passwordResult.IsFailure)
+                {
+                    var payload = ApiErrorResponse.From(passwordResult.Errors, HttpContext);
+                    return new ObjectResult(payload)
+                    {
+                        StatusCode = payload.Status
+                    };
+                }
+            }
+
             return result.ToOk(HttpContext);
         }
 
@@ -117,6 +142,27 @@ namespace KairoServer.Api.Controllers.Admin
                 roleValidation.Roles,
                 GetActorId(),
                 cancellationToken);
+
+            if (result.IsFailure)
+                return result.ToOk(HttpContext);
+
+            if (!string.IsNullOrWhiteSpace(request.Password))
+            {
+                var passwordResult = await _credentials.SetPasswordAsync(
+                    request.Subject,
+                    request.Password,
+                    GetActorId(),
+                    cancellationToken);
+
+                if (passwordResult.IsFailure)
+                {
+                    var payload = ApiErrorResponse.From(passwordResult.Errors, HttpContext);
+                    return new ObjectResult(payload)
+                    {
+                        StatusCode = payload.Status
+                    };
+                }
+            }
 
             return result.ToOk(HttpContext);
         }

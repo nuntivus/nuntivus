@@ -7,8 +7,10 @@ import type { PropsWithChildren } from 'react'
 import { AuthBootstrap } from './auth-bootstrap'
 import { AuthSessionListener } from './auth-session-listener'
 import { GlobalStatus } from './global-status'
+import { NotificationsProvider } from './notifications-provider'
 import { AppContextProvider } from '../context/app-context'
 import { useLocalUserPreferences } from '../features/settings/local-user-preferences'
+import { ConfirmDialogProvider } from '../hooks/confirm-dialog-provider'
 import { queryClient } from './queryClient'
 import { useAppSelector } from '../store/hooks'
 import { store } from '../store/store'
@@ -23,7 +25,14 @@ function ThemeHost({ children }: PropsWithChildren) {
   )
 
   return (
-    <Theme appearance={appearance} accentColor="indigo" grayColor="slate" radius="medium">
+    <Theme
+      appearance={appearance}
+      accentColor="indigo"
+      grayColor="slate"
+      panelBackground="solid"
+      radius="medium"
+      scaling="95%"
+    >
       {children}
     </Theme>
   )
@@ -36,10 +45,14 @@ export function AppProviders({ children }: PropsWithChildren) {
         <ThemeHost>
           <AppContextProvider>
             <BrowserRouter>
-              <AuthBootstrap />
-              <AuthSessionListener />
-              <GlobalStatus />
-              {children}
+              <NotificationsProvider>
+                <ConfirmDialogProvider>
+                  <AuthBootstrap />
+                  <AuthSessionListener />
+                  <GlobalStatus />
+                  {children}
+                </ConfirmDialogProvider>
+              </NotificationsProvider>
             </BrowserRouter>
           </AppContextProvider>
         </ThemeHost>

@@ -27,10 +27,10 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             {
                 const string sql = """
                     SELECT
-                        u.subject,
-                        u.display_name,
-                        u.created_at,
-                        u.updated_at,
+                        u.subject AS Subject,
+                        u.display_name AS DisplayName,
+                        u.created_at AS CreatedAt,
+                        u.updated_at AS UpdatedAt,
                         COALESCE(array_agg(r.role ORDER BY r.role) FILTER (WHERE r.role IS NOT NULL), ARRAY[]::text[]) AS roles
                     FROM admin_users u
                     LEFT JOIN admin_user_roles r ON r.subject = u.subject
@@ -50,8 +50,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         row.Subject,
                         row.DisplayName,
                         row.Roles ?? Array.Empty<string>(),
-                        row.CreatedAt,
-                        row.UpdatedAt))
+                        ToUtcDateTimeOffset(row.CreatedAt),
+                        ToUtcDateTimeOffset(row.UpdatedAt)))
                     .ToArray();
 
                 return Result.Success<IReadOnlyList<AdminUserRoleAssignment>>(assignments);
@@ -185,7 +185,7 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             try
             {
                 const string userSql = """
-                    SELECT subject, display_name, created_at, updated_at
+                    SELECT subject as Subject, display_name as DisplayName, created_at as CreatedAt, updated_at as UpdatedAt
                     FROM admin_users
                     WHERE subject = @Subject
                     LIMIT 1;
@@ -219,8 +219,8 @@ namespace KairoServer.Infastructure.Persistence.Postgres
                         user.Subject,
                         user.DisplayName,
                         roles,
-                        user.CreatedAt,
-                        user.UpdatedAt));
+                        ToUtcDateTimeOffset(user.CreatedAt),
+                        ToUtcDateTimeOffset(user.UpdatedAt)));
             }
             catch (Exception ex)
             {
@@ -231,14 +231,17 @@ namespace KairoServer.Infastructure.Persistence.Postgres
         private sealed record UserRow(
             string Subject,
             string? DisplayName,
-            DateTimeOffset CreatedAt,
-            DateTimeOffset UpdatedAt);
+            DateTime CreatedAt,
+            DateTime UpdatedAt);
 
         private sealed record ListRow(
             string Subject,
             string? DisplayName,
-            DateTimeOffset CreatedAt,
-            DateTimeOffset UpdatedAt,
+            DateTime CreatedAt,
+            DateTime UpdatedAt,
             string[] Roles);
+
+        private static DateTimeOffset ToUtcDateTimeOffset(DateTime value)
+            => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc));
     }
 }

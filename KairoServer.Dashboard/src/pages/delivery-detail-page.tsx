@@ -13,6 +13,8 @@ import {
 import { useMemo, useState } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { JsonViewer } from '../components/json/json-viewer'
+import { DetailLoadingState } from '../components/states/detail-loading-state'
 import {
   useDeliveryAttemptsQuery,
   useDeliveryDetailQuery,
@@ -20,6 +22,8 @@ import {
   useRequeueDeliveryMutation,
   useRetryDeliveryMutation,
 } from '../features/deliveries/use-deliveries'
+import { useConfirmDialog } from '../hooks/use-confirm-dialog'
+import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { DeliveryStatus } from '../services/api/deliveries-api'
 import { useAppSelector } from '../store/hooks'
@@ -57,6 +61,8 @@ function httpStatusFromMetadata(metadata: Record<string, string>) {
 
 export function DeliveryDetailPage() {
   const { id } = useParams()
+  const confirm = useConfirmDialog()
+  const notifications = useNotifications()
   const { currentUser } = useAppSelector((state) => state.auth)
 
   const canReadDeliveries = hasPermission(currentUser, 'deliveries.read')
@@ -85,12 +91,30 @@ export function DeliveryDetailPage() {
       return
     }
 
-    await retryMutation.mutateAsync({
-      operationId: operationKey.trim(),
-      reason: retryReason.trim() || null,
+    const confirmed = await confirm({
+      title: 'Retry delivery',
+      description:
+        'Retry this delivery now? This may trigger immediate redelivery attempts to the destination.',
+      confirmText: 'Retry now',
+      cancelText: 'Cancel',
+      confirmColor: 'amber',
     })
 
-    setRetryReason('')
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await retryMutation.mutateAsync({
+        operationId: operationKey.trim(),
+        reason: retryReason.trim() || null,
+      })
+
+      setRetryReason('')
+      notifications.success('Delivery retry requested.', 'Delivery operation')
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to retry delivery.'), 'Delivery operation')
+    }
   }
 
   async function handleRequeue() {
@@ -98,12 +122,30 @@ export function DeliveryDetailPage() {
       return
     }
 
-    await requeueMutation.mutateAsync({
-      operationId: operationKey.trim(),
-      reason: requeueReason.trim() || null,
+    const confirmed = await confirm({
+      title: 'Requeue delivery',
+      description:
+        'Requeue this delivery? A new delivery attempt may be created and processed shortly.',
+      confirmText: 'Requeue',
+      cancelText: 'Cancel',
+      confirmColor: 'amber',
     })
 
-    setRequeueReason('')
+    if (!confirmed) {
+      return
+    }
+
+    try {
+      await requeueMutation.mutateAsync({
+        operationId: operationKey.trim(),
+        reason: requeueReason.trim() || null,
+      })
+
+      setRequeueReason('')
+      notifications.success('Delivery requeue requested.', 'Delivery operation')
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to requeue delivery.'), 'Delivery operation')
+    }
   }
 
   if (!canReadDeliveries) {
@@ -129,11 +171,7 @@ export function DeliveryDetailPage() {
   }
 
   if (detailQuery.isLoading) {
-    return (
-      <Card>
-        <Text size="2" color="gray">Loading delivery detail...</Text>
-      </Card>
-    )
+    return <DetailLoadingState message="Loading delivery detail..." />
   }
 
   if (detailQuery.isError || !detailQuery.data) {
@@ -236,8 +274,30 @@ export function DeliveryDetailPage() {
               <Text>{failure.failureCategory ?? '-'}</Text>
               <Text size="2" color="gray">Failed at</Text>
               <Text>{failure.failedAt ? new Date(failure.failedAt).toLocaleString() : '-'}</Text>
+
+              <Heading size="3">Failure JSON</Heading>
+              <JsonViewer
+                value={failure}
+                maxHeight={260}
+                defaultCollapsed
+                searchPlaceholder="Search failure JSON"
+                copyLabel="Copy failure JSON"
+              />
             </>
           )}
+        </Flex>
+      </Card>
+
+      <Card>
+        <Flex direction="column" gap="3">
+          <Heading size="4">Delivery JSON</Heading>
+          <JsonViewer
+            value={delivery}
+            maxHeight={300}
+            defaultCollapsed
+            searchPlaceholder="Search delivery JSON"
+            copyLabel="Copy delivery JSON"
+          />
         </Flex>
       </Card>
 
@@ -296,6 +356,19 @@ export function DeliveryDetailPage() {
               </Table.Body>
             </Table.Root>
           )}
+
+          {attempts.length > 0 ? (
+            <>
+              <Heading size="3">Attempts JSON</Heading>
+              <JsonViewer
+                value={attempts}
+                maxHeight={260}
+                defaultCollapsed
+                searchPlaceholder="Search attempts JSON"
+                copyLabel="Copy attempts JSON"
+              />
+            </>
+          ) : null}
         </Flex>
       </Card>
 

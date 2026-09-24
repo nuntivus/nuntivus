@@ -1,14 +1,5 @@
-import { apiGet, apiPost } from './api-client'
-
-export interface PagedResponse<TItem> {
-  items: TItem[]
-  page: number
-  pageSize: number
-  totalCount: number
-  totalPages: number
-  hasPrevious: boolean
-  hasNext: boolean
-}
+import { apiGet, apiPost, type ApiRequestOptions } from './api-client'
+import type { PagedResponse } from './paged-response'
 
 export interface DeliveryListItem {
   id: string
@@ -66,7 +57,7 @@ export interface ReplayHistoryItem {
   status: string
 }
 
-export async function listEvents(query: EventListQuery) {
+export async function listEvents(query: EventListQuery, options?: ApiRequestOptions) {
   return apiGet<PagedResponse<EventListItem>>('/v1/events', {
     type: query.type?.trim() ? query.type.trim() : null,
     source: query.source?.trim() ? query.source.trim() : null,
@@ -78,11 +69,11 @@ export async function listEvents(query: EventListQuery) {
     sortDirection: query.sortDirection ?? null,
     page: query.page,
     pageSize: query.pageSize,
-  })
+  }, options)
 }
 
-export async function getEventById(id: string) {
-  return apiGet<EventListItem>(`/v1/events/${encodeURIComponent(id)}`)
+export async function getEventById(id: string, options?: ApiRequestOptions) {
+  return apiGet<EventListItem>(`/v1/events/${encodeURIComponent(id)}`, undefined, options)
 }
 
 export async function replayEvent(id: string, request: ReplayEventRequest) {

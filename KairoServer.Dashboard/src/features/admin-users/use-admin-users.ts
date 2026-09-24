@@ -3,6 +3,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
+import { invalidateQueryKeys } from '../shared/query-invalidation'
 import {
   createAdminUser,
   deleteAdminUser,
@@ -17,14 +18,14 @@ import { listAdminRoles } from '../../services/api/admin-roles-api'
 export function useAdminUsersQuery() {
   return useQuery({
     queryKey: ['admin', 'users'],
-    queryFn: listAdminUsers,
+    queryFn: ({ signal }) => listAdminUsers({ signal }),
   })
 }
 
 export function useAdminUserQuery(subject: string | undefined) {
   return useQuery({
     queryKey: ['admin', 'users', subject],
-    queryFn: () => getAdminUser(subject ?? ''),
+    queryFn: ({ signal }) => getAdminUser(subject ?? '', { signal }),
     enabled: !!subject,
   })
 }
@@ -32,7 +33,7 @@ export function useAdminUserQuery(subject: string | undefined) {
 export function useAdminRolesQuery() {
   return useQuery({
     queryKey: ['admin', 'roles'],
-    queryFn: listAdminRoles,
+    queryFn: ({ signal }) => listAdminRoles({ signal }),
   })
 }
 
@@ -42,7 +43,7 @@ export function useCreateAdminUserMutation() {
   return useMutation({
     mutationFn: (request: CreateAdminUserRequest) => createAdminUser(request),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+      await invalidateQueryKeys(queryClient, [['admin', 'users']])
     },
   })
 }
@@ -54,9 +55,9 @@ export function useReplaceAdminUserRolesMutation(subject: string) {
     mutationFn: (request: ReplaceAdminUserRolesRequest) =>
       replaceAdminUserRoles(subject, request),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'users', subject] }),
+      await invalidateQueryKeys(queryClient, [
+        ['admin', 'users'],
+        ['admin', 'users', subject],
       ])
     },
   })
@@ -68,9 +69,9 @@ export function useDeleteAdminUserMutation() {
   return useMutation({
     mutationFn: (subject: string) => deleteAdminUser(subject),
     onSuccess: async (_, subject) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['admin', 'users'] }),
-        queryClient.invalidateQueries({ queryKey: ['admin', 'users', subject] }),
+      await invalidateQueryKeys(queryClient, [
+        ['admin', 'users'],
+        ['admin', 'users', subject],
       ])
     },
   })

@@ -14,7 +14,9 @@ import {
   useInstanceSettingsQuery,
   useUpdateInstanceSettingsMutation,
 } from '../features/settings/use-settings'
+import { useNotifications } from '../hooks/use-notifications'
 import { useAppSelector } from '../store/hooks'
+import { frontendConfig } from '../app/frontend-config'
 
 function toRequest(settings: InstanceSettings): UpdateInstanceSettingsRequest {
   return {
@@ -37,6 +39,7 @@ function parseNumberInput(value: string, fallback: number) {
 
 export function SettingsPage() {
   const { currentUser } = useAppSelector((state) => state.auth)
+  const notifications = useNotifications()
   const canWriteSettings = hasPermission(currentUser, 'settings.write')
 
   const instanceQuery = useInstanceSettingsQuery(canWriteSettings)
@@ -78,17 +81,32 @@ export function SettingsPage() {
       return
     }
 
-    const updated = await updateInstanceMutation.mutateAsync(toRequest(instanceDraft))
-    setInstanceDraft(updated)
+    try {
+      const updated = await updateInstanceMutation.mutateAsync(toRequest(instanceDraft))
+      setInstanceDraft(updated)
+      notifications.success('Instance settings saved.', 'Settings')
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to save instance settings.'), 'Settings')
+    }
   }
 
   function handleSavePreferences() {
     savePreferences(preferencesDraft)
+    notifications.success('Preferences saved.', 'Settings')
   }
 
   return (
     <Flex direction="column" gap="4">
       <Heading size="6">Settings</Heading>
+
+      <Card>
+        <Flex direction="column" gap="2">
+          <Heading size="4">Frontend runtime</Heading>
+          <Text size="2" color="gray">Version: {frontendConfig.version}</Text>
+          <Text size="2" color="gray">Environment: {frontendConfig.runtimeEnvironment}</Text>
+          <Text size="2" color="gray">API base URL: {frontendConfig.apiBaseUrl}</Text>
+        </Flex>
+      </Card>
 
       <Card>
         <Flex direction="column" gap="3">

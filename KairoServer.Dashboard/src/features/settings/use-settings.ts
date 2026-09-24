@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { invalidateQueryKeys } from '../shared/query-invalidation'
 import {
   getInstanceSettings,
   updateInstanceSettings,
@@ -8,7 +9,7 @@ import {
 export function useInstanceSettingsQuery(enabled = true) {
   return useQuery({
     queryKey: ['settings', 'instance'],
-    queryFn: () => getInstanceSettings(),
+    queryFn: ({ signal }) => getInstanceSettings({ signal }),
     enabled,
   })
 }
@@ -19,7 +20,7 @@ export function useUpdateInstanceSettingsMutation() {
   return useMutation({
     mutationFn: (request: UpdateInstanceSettingsRequest) => updateInstanceSettings(request),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['settings', 'instance'] })
+      await invalidateQueryKeys(queryClient, [['settings', 'instance']])
     },
   })
 }

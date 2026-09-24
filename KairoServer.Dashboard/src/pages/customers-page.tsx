@@ -2,22 +2,37 @@ import {
   Badge,
   Button,
   Card,
+  Dialog,
   Flex,
   Heading,
+  Link,
   Select,
   Table,
   Text,
   TextField,
 } from '@radix-ui/themes'
-import { useMemo, useState, type FormEvent } from 'react'
-import { NavLink, useSearchParams } from 'react-router-dom'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { FormDialog } from '../components/dialogs/form-dialog'
+import { getServerValidation } from '../components/forms/form-validation'
+import { ListFeedback } from '../components/lists/list-feedback'
+import { ListPagination } from '../components/lists/list-pagination'
 import {
   useCreateCustomerMutation,
   useCustomersQuery,
   useDisableCustomerMutation,
   useEnableCustomerMutation,
 } from '../features/customers/use-customers'
+import { useBulkSelection } from '../hooks/use-bulk-selection'
+import { useConfirmDialog } from '../hooks/use-confirm-dialog'
+import { useNotifications } from '../hooks/use-notifications'
+import {
+  parseBooleanParam,
+  parsePositiveInt,
+  useUrlQueryParams,
+} from '../hooks/use-url-query-params'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { CustomerListQuery } from '../services/api/customers-api'
 import { useAppSelector } from '../store/hooks'
@@ -25,33 +40,10 @@ import { useAppSelector } from '../store/hooks'
 type SortBy = 'id' | 'name' | 'createdAt' | 'updatedAt'
 type SortDirection = 'asc' | 'desc'
 
-function parseBooleanParam(value: string | null): boolean | undefined {
-  if (value === 'true') {
-    return true
-  }
-
-  if (value === 'false') {
-    return false
-  }
-
-  return undefined
-}
-
-function parsePositiveInt(value: string | null, fallback: number) {
-  if (!value) {
-    return fallback
-  }
-
-  const parsed = Number.parseInt(value, 10)
-  if (Number.isNaN(parsed) || parsed < 1) {
-    return fallback
-  }
-
-  return parsed
-}
-
 export function CustomersPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { searchParams, updateParams } = useUrlQueryParams()
+  const confirm = useConfirmDialog()
+  const notifications = useNotifications()
   const { currentUser } = useAppSelector((state) => state.auth)
 
   const canReadCustomers = hasPermission(currentUser, 'customers.read')
@@ -87,22 +79,17 @@ export function CustomersPage() {
   const [searchInput, setSearchInput] = useState(searchParam)
   const [newCustomerId, setNewCustomerId] = useState('')
   const [newCustomerName, setNewCustomerName] = useState('')
+  const [customerIdTouched, setCustomerIdTouched] = useState(false)
+  const [customerNameTouched, setCustomerNameTouched] = useState(false)
+  const [isCreateCustomerOpen, setIsCreateCustomerOpen] = useState(false)
+  const createCustomerButtonRef = useRef<HTMLButtonElement>(null)
   const [rowActionId, setRowActionId] = useState<string | null>(null)
+  const [bulkActionPending, setBulkActionPending] = useState(false)
+  const [bulkActionError, setBulkActionError] = useState<string | null>(null)
+  const [createError, setCreateError] = useState<string | null>(null)
 
-  function updateParams(updates: Record<string, string | null>) {
-    const next = new URLSearchParams(searchParams)
-
-    Object.entries(updates).forEach(([key, value]) => {
-      if (!value) {
-        next.delete(key)
-        return
-      }
-
-      next.set(key, value)
-    })
-
-    setSearchParams(next)
-  }
+  const customerIdError = !newCustomerId.trim() ? 'Customer id is required.' : null
+  const customerNameError = !newCustomerName.trim() ? 'Customer name is required.' : null
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -128,17 +115,41 @@ export function CustomersPage() {
   async function handleCreateCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteCustomers || !newCustomerId.trim() || !newCustomerName.trim()) {
+    if (!canWriteCustomers || customerIdError || customerNameError) {
+      setCustomerIdTouched(true)
+      setCustomerNameTouched(true)
       return
     }
 
-    await createCustomerMutation.mutateAsync({
-      id: newCustomerId.trim(),
-      name: newCustomerName.trim(),
-    })
+    setCreateError(null)
 
-    setNewCustomerId('')
-    setNewCustomerName('')
+    try {
+      await createCustomerMutation.mutateAsync({
+        id: newCustomerId.trim(),
+        name: newCustomerName.trim(),
+      })
+
+      setNewCustomerId('')
+      setNewCustomerName('')
+      setCustomerIdTouched(false)
+      setCustomerNameTouched(false)
+      setIsCreateCustomerOpen(false)
+      notifications.success('Customer created successfully.', 'Create customer')
+    } catch (error) {
+      setCreateError(getServerValidation(error, 'Unable to create customer.').formError)
+      notifications.error(getApiErrorMessage(error, 'Unable to create customer.'), 'Create customer')
+    }
+  }
+
+  function handleCreateCustomerOpenChange(open: boolean) {
+    setIsCreateCustomerOpen(open)
+
+    if (!open) {
+      setCreateError(null)
+      setCustomerIdTouched(false)
+      setCustomerNameTouched(false)
+      window.setTimeout(() => createCustomerButtonRef.current?.focus(), 0)
+    }
   }
 
   async function handleToggleEnabled(id: string, enabled: boolean) {
@@ -146,16 +157,93 @@ export function CustomersPage() {
       return
     }
 
+    if (enabled) {
+      const confirmed = await confirm({
+        title: 'Disable customer',
+        description:
+          'Disable this customer? New deliveries for this customer may be blocked until it is enabled again.',
+        confirmText: 'Disable customer',
+        cancelText: 'Cancel',
+        confirmColor: 'red',
+      })
+
+      if (!confirmed) {
+        return
+      }
+    }
+
     setRowActionId(id)
 
     try {
       if (enabled) {
         await disableCustomerMutation.mutateAsync(id)
+        notifications.success(`Customer ${id} disabled.`, 'Customer updated')
       } else {
         await enableCustomerMutation.mutateAsync(id)
+        notifications.success(`Customer ${id} enabled.`, 'Customer updated')
       }
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to update customer.'), 'Customer updated')
     } finally {
       setRowActionId(null)
+    }
+  }
+
+  const customers = useMemo(() => customersQuery.data?.items ?? [], [customersQuery.data?.items])
+  const paging = customersQuery.data
+  const hasActiveFilters = searchParam.trim().length > 0 || enabledParam !== undefined
+  const visibleIds = useMemo(() => customers.map((customer) => customer.id), [customers])
+  const {
+    selectedIds,
+    selectedCount,
+    allVisibleSelected,
+    toggleSelection,
+    toggleVisibleSelection,
+    clearSelection,
+    isSelected,
+  } = useBulkSelection(visibleIds)
+
+  async function handleBulkToggle(enabled: boolean) {
+    if (!canWriteCustomers || selectedIds.length === 0) {
+      return
+    }
+
+    if (enabled) {
+      const confirmed = await confirm({
+        title: 'Disable selected customers',
+        description: `Disable ${selectedIds.length} selected customer${selectedIds.length === 1 ? '' : 's'}? New deliveries for those customers may be blocked until re-enabled.`,
+        confirmText: 'Disable selected',
+        cancelText: 'Cancel',
+        confirmColor: 'red',
+      })
+
+      if (!confirmed) {
+        return
+      }
+    }
+
+    setBulkActionError(null)
+    setBulkActionPending(true)
+
+    try {
+      await Promise.all(
+        selectedIds.map((id) =>
+          enabled
+            ? disableCustomerMutation.mutateAsync(id)
+            : enableCustomerMutation.mutateAsync(id),
+        ),
+      )
+
+      clearSelection()
+      notifications.success(
+        `${selectedIds.length} customer${selectedIds.length === 1 ? '' : 's'} ${enabled ? 'disabled' : 'enabled'}.`,
+        'Bulk update',
+      )
+    } catch (error) {
+      setBulkActionError(getApiErrorMessage(error, 'Unable to apply bulk action.'))
+      notifications.error(getApiErrorMessage(error, 'Unable to apply bulk action.'), 'Bulk update')
+    } finally {
+      setBulkActionPending(false)
     }
   }
 
@@ -173,46 +261,104 @@ export function CustomersPage() {
     )
   }
 
-  const customers = customersQuery.data?.items ?? []
-  const paging = customersQuery.data
-
   return (
-    <Flex direction="column" gap="4">
-      <Heading size="6">Customers</Heading>
+    <Flex direction="column" gap="5">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Customers</h1>
+          <p className="page-subtitle">
+            Manage the customers that own contracts and receive deliveries.
+          </p>
+        </div>
+        {canWriteCustomers ? (
+          <Button
+            ref={createCustomerButtonRef}
+            size="2"
+            onClick={() => setIsCreateCustomerOpen(true)}
+          >
+            New customer
+          </Button>
+        ) : null}
+      </div>
 
       {canWriteCustomers ? (
-        <Card>
-          <form onSubmit={handleCreateCustomer}>
-            <Flex direction="column" gap="3">
-              <Heading size="4">Create customer</Heading>
-              <TextField.Root
-                placeholder="Customer id (e.g. acme)"
-                value={newCustomerId}
-                onChange={(event) => setNewCustomerId(event.target.value)}
-              />
-              <TextField.Root
-                placeholder="Customer name"
-                value={newCustomerName}
-                onChange={(event) => setNewCustomerName(event.target.value)}
-              />
-              {createCustomerMutation.isError ? (
-                <Text color="red" size="2">
-                  {getApiErrorMessage(createCustomerMutation.error, 'Unable to create customer.')}
-                </Text>
-              ) : null}
+        <FormDialog
+          open={isCreateCustomerOpen}
+          onOpenChange={handleCreateCustomerOpenChange}
+          title="Create customer"
+          description="Add a customer that can own contracts and receive deliveries."
+          descriptionId="customers-create-dialog-description"
+          footer={
+            <>
+              <Dialog.Close>
+                <Button type="button" variant="soft" color="gray">
+                  Cancel
+                </Button>
+              </Dialog.Close>
               <Button
                 type="submit"
+                form="customers-create-form"
                 disabled={
                   createCustomerMutation.isPending ||
-                  !newCustomerId.trim() ||
-                  !newCustomerName.trim()
+                  !!customerIdError ||
+                  !!customerNameError
                 }
               >
-                {createCustomerMutation.isPending ? 'Creating...' : 'Create customer'}
+                {createCustomerMutation.isPending ? 'Creating…' : 'Create customer'}
               </Button>
-            </Flex>
+            </>
+          }
+        >
+          <form id="customers-create-form" onSubmit={handleCreateCustomer}>
+            <div className="field">
+              <label className="field-label" htmlFor="customers-create-id">
+                Customer id
+              </label>
+              <TextField.Root
+                id="customers-create-id"
+                size="2"
+                placeholder="e.g. acme"
+                value={newCustomerId}
+                onChange={(event) => setNewCustomerId(event.target.value)}
+                aria-invalid={customerIdTouched && customerIdError ? 'true' : 'false'}
+                aria-describedby="customers-create-id-error"
+                onBlur={() => setCustomerIdTouched(true)}
+              />
+              {customerIdTouched ? (
+                <FieldErrorText id="customers-create-id-error" message={customerIdError} />
+              ) : null}
+            </div>
+
+            <div className="field">
+              <label className="field-label" htmlFor="customers-create-name">
+                Customer name
+              </label>
+              <TextField.Root
+                id="customers-create-name"
+                size="2"
+                placeholder="Acme Inc."
+                value={newCustomerName}
+                onChange={(event) => setNewCustomerName(event.target.value)}
+                aria-invalid={customerNameTouched && customerNameError ? 'true' : 'false'}
+                aria-describedby="customers-create-name-error"
+                onBlur={() => setCustomerNameTouched(true)}
+              />
+              {customerNameTouched ? (
+                <FieldErrorText id="customers-create-name-error" message={customerNameError} />
+              ) : null}
+            </div>
+
+            <FormErrorText
+              id="customers-create-submit-error"
+              message={
+                createError ??
+                (createCustomerMutation.isError
+                  ? getApiErrorMessage(createCustomerMutation.error, 'Unable to create customer.')
+                  : null)
+              }
+            />
           </form>
-        </Card>
+        </FormDialog>
       ) : null}
 
       <Card>
@@ -230,6 +376,35 @@ export function CustomersPage() {
             </form>
 
             <Flex gap="2" align="center">
+              {selectedCount > 0 ? (
+                <Flex gap="2" align="center">
+                  <Text size="2" color="gray">{selectedCount} selected</Text>
+                  <Button
+                    size="1"
+                    variant="soft"
+                    disabled={bulkActionPending || !canWriteCustomers}
+                    onClick={() => {
+                      void handleBulkToggle(false)
+                    }}
+                  >
+                    Enable selected
+                  </Button>
+                  <Button
+                    size="1"
+                    variant="soft"
+                    disabled={bulkActionPending || !canWriteCustomers}
+                    onClick={() => {
+                      void handleBulkToggle(true)
+                    }}
+                  >
+                    Disable selected
+                  </Button>
+                  <Button size="1" variant="ghost" onClick={clearSelection}>
+                    Clear
+                  </Button>
+                </Flex>
+              ) : null}
+
               <Text size="2" color="gray">
                 Enabled
               </Text>
@@ -280,120 +455,147 @@ export function CustomersPage() {
             </Flex>
           </Flex>
 
-          {customersQuery.isLoading ? (
-            <Text size="2" color="gray">
-              Loading customers...
-            </Text>
-          ) : customersQuery.isError ? (
-            <Text size="2" color="red">
-              {customersQuery.error instanceof ApiError &&
-              customersQuery.error.status === 403
+          <ListFeedback
+            isLoading={customersQuery.isLoading}
+            isError={customersQuery.isError}
+            error={customersQuery.error}
+            isEmpty={customers.length === 0}
+            loadingMessage="Loading customers..."
+            errorMessage={
+              customersQuery.error instanceof ApiError && customersQuery.error.status === 403
                 ? 'The backend denied access (403).'
-                : getApiErrorMessage(customersQuery.error, 'Unable to load customers.')}
-            </Text>
-          ) : customers.length === 0 ? (
-            <Card>
-              <Text size="2" color="gray">
-                No customers found for the selected filters.
-              </Text>
-            </Card>
-          ) : (
+                : getApiErrorMessage(customersQuery.error, 'Unable to load customers.')
+            }
+            emptyMessage="No customers found for the selected filters."
+            emptyTitle={hasActiveFilters ? 'No customers match current filters' : 'No customers yet'}
+            emptyDescription={
+              hasActiveFilters
+                ? 'Try broadening or clearing filters to see matching customers.'
+                : canWriteCustomers
+                  ? 'Create your first customer to start managing contracts and deliveries.'
+                  : 'Customers will appear here when available.'
+            }
+            emptyAction={
+              hasActiveFilters
+                ? {
+                    label: 'Clear filters',
+                    onClick: () =>
+                      updateParams({
+                        search: null,
+                        enabled: null,
+                        sortBy: null,
+                        sortDirection: null,
+                        page: '1',
+                        pageSize: null,
+                      }),
+                  }
+                : {
+                    label: 'Refresh',
+                    onClick: () => {
+                      void customersQuery.refetch()
+                    },
+                  }
+            }
+          >
             <>
-              <Table.Root>
-                <Table.Header>
-                  <Table.Row>
-                    <Table.ColumnHeaderCell>
-                      <Button variant="ghost" onClick={() => handleSort('id')}>
-                        ID
-                      </Button>
-                    </Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>
-                      <Button variant="ghost" onClick={() => handleSort('name')}>
-                        Name
-                      </Button>
-                    </Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>State</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>
-                      <Button variant="ghost" onClick={() => handleSort('updatedAt')}>
-                        Updated
-                      </Button>
-                    </Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {customers.map((customer) => {
-                    const pending = rowActionId === customer.id
-
-                    return (
-                      <Table.Row key={customer.id}>
-                        <Table.RowHeaderCell>{customer.id}</Table.RowHeaderCell>
-                        <Table.Cell>{customer.name}</Table.Cell>
-                        <Table.Cell>
-                          <Badge color={customer.enabled ? 'green' : 'gray'}>
-                            {customer.enabled ? 'Enabled' : 'Disabled'}
-                          </Badge>
-                        </Table.Cell>
-                        <Table.Cell>
-                          {new Date(customer.updatedAt).toLocaleString()}
-                        </Table.Cell>
-                        <Table.Cell>
-                          <Flex gap="2">
-                            <Button asChild size="1" variant="ghost">
-                              <NavLink to={`/customers/${encodeURIComponent(customer.id)}`}>
-                                Detail
-                              </NavLink>
-                            </Button>
-                            <Button
-                              size="1"
-                              variant="soft"
-                              disabled={!canWriteCustomers || pending}
-                              onClick={() =>
-                                handleToggleEnabled(customer.id, customer.enabled)
-                              }
-                            >
-                              {pending
-                                ? 'Saving...'
-                                : customer.enabled
-                                  ? 'Disable'
-                                  : 'Enable'}
-                            </Button>
-                          </Flex>
-                        </Table.Cell>
-                      </Table.Row>
-                    )
-                  })}
-                </Table.Body>
-              </Table.Root>
-
-              <Flex align="center" justify="between" gap="3">
-                <Text size="2" color="gray">
-                  {paging
-                    ? `Page ${paging.page} of ${paging.totalPages} · ${paging.totalCount} total`
-                    : ''}
+              {bulkActionError ? (
+                <Text size="2" color="red">
+                  {bulkActionError}
                 </Text>
+              ) : null}
 
-                <Flex gap="2">
-                  <Button
-                    variant="soft"
-                    disabled={!paging?.hasPrevious}
-                    onClick={() =>
-                      updateParams({ page: String(Math.max(1, pageParam - 1)) })
-                    }
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="soft"
-                    disabled={!paging?.hasNext}
-                    onClick={() => updateParams({ page: String(pageParam + 1) })}
-                  >
-                    Next
-                  </Button>
-                </Flex>
-              </Flex>
+              <div className="responsive-table">
+                <Table.Root aria-label="Customers table">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeaderCell>
+                        <input
+                          type="checkbox"
+                          checked={allVisibleSelected}
+                          onChange={toggleVisibleSelection}
+                          aria-label="Select all visible customers"
+                        />
+                      </Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>
+                        <Button variant="ghost" onClick={() => handleSort('id')}>
+                          ID
+                        </Button>
+                      </Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>
+                        <Button variant="ghost" onClick={() => handleSort('name')}>
+                          Name
+                        </Button>
+                      </Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>State</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>
+                        <Button variant="ghost" onClick={() => handleSort('updatedAt')}>
+                          Updated
+                        </Button>
+                      </Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {customers.map((customer) => {
+                      const pending = rowActionId === customer.id
+
+                      return (
+                        <Table.Row key={customer.id}>
+                          <Table.Cell>
+                            <input
+                              type="checkbox"
+                              checked={isSelected(customer.id)}
+                              onChange={() => toggleSelection(customer.id)}
+                              aria-label={`Select customer ${customer.id}`}
+                            />
+                          </Table.Cell>
+                          <Table.RowHeaderCell>{customer.id}</Table.RowHeaderCell>
+                          <Table.Cell>{customer.name}</Table.Cell>
+                          <Table.Cell>
+                            <Badge color={customer.enabled ? 'green' : 'gray'}>
+                              {customer.enabled ? 'Enabled' : 'Disabled'}
+                            </Badge>
+                          </Table.Cell>
+                          <Table.Cell>
+                            {new Date(customer.updatedAt).toLocaleString()}
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Flex gap="2" align="center">
+                              <Link asChild size="1">
+                                <NavLink to={`/customers/${encodeURIComponent(customer.id)}`}>
+                                  Detail
+                                </NavLink>
+                              </Link>
+                              <Button
+                                size="1"
+                                variant="soft"
+                                disabled={!canWriteCustomers || pending}
+                                onClick={() =>
+                                  handleToggleEnabled(customer.id, customer.enabled)
+                                }
+                              >
+                                {pending
+                                  ? 'Saving...'
+                                  : customer.enabled
+                                    ? 'Disable'
+                                    : 'Enable'}
+                              </Button>
+                            </Flex>
+                          </Table.Cell>
+                        </Table.Row>
+                      )
+                    })}
+                  </Table.Body>
+                </Table.Root>
+              </div>
+
+              <ListPagination
+                paging={paging}
+                onPrevious={() => updateParams({ page: String(Math.max(1, pageParam - 1)) })}
+                onNext={() => updateParams({ page: String(pageParam + 1) })}
+              />
             </>
-          )}
+          </ListFeedback>
         </Flex>
       </Card>
     </Flex>

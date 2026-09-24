@@ -4,26 +4,36 @@ import {
   Card,
   Flex,
   Heading,
+  Link,
   Select,
   Table,
   Text,
   TextField,
 } from '@radix-ui/themes'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { NavLink, useSearchParams } from 'react-router-dom'
+import { useMemo, useState, type FormEvent } from 'react'
+import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { SearchIcon } from '../components/icons/nav-icons'
+import { ListFeedback } from '../components/lists/list-feedback'
+import { ListPagination } from '../components/lists/list-pagination'
 import {
   useContractsQuery,
-  useCreateContractMutation,
   useDisableContractMutation,
   useEnableContractMutation,
 } from '../features/contracts/use-contracts'
 import { useLocalUserPreferences } from '../features/settings/local-user-preferences'
+import { useBulkSelection } from '../hooks/use-bulk-selection'
+import { useConfirmDialog } from '../hooks/use-confirm-dialog'
+import { useNotifications } from '../hooks/use-notifications'
+import {
+  parseBooleanParam,
+  parsePositiveInt,
+  useUrlQueryParams,
+} from '../hooks/use-url-query-params'
 import {
   deleteSavedView,
   getSavedViews,
   upsertSavedView,
-  type SavedView,
 } from '../features/saved-views/saved-views-storage'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { ContractListQuery, DestinationType } from '../services/api/contracts-api'
@@ -31,31 +41,6 @@ import { useAppSelector } from '../store/hooks'
 
 type SortBy = 'createdAt' | 'updatedAt' | 'name' | 'customerId' | 'destinationType'
 type SortDirection = 'asc' | 'desc'
-
-function parseBooleanParam(value: string | null): boolean | undefined {
-  if (value === 'true') {
-    return true
-  }
-
-  if (value === 'false') {
-    return false
-  }
-
-  return undefined
-}
-
-function parsePositiveInt(value: string | null, fallback: number) {
-  if (!value) {
-    return fallback
-  }
-
-  const parsed = Number.parseInt(value, 10)
-  if (Number.isNaN(parsed) || parsed < 1) {
-    return fallback
-  }
-
-  return parsed
-}
 
 const destinationValues: DestinationType[] = [
   'Http',
@@ -66,10 +51,12 @@ const destinationValues: DestinationType[] = [
 ]
 
 export function ContractsPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const { searchParams, setSearchParams, updateParams } = useUrlQueryParams()
+  const confirm = useConfirmDialog()
+  const notifications = useNotifications()
   const { currentUser } = useAppSelector((state) => state.auth)
   const { preferences } = useLocalUserPreferences(currentUser?.subject)
-  const [savedViews, setSavedViews] = useState<SavedView[]>([])
+  const [savedViewsVersion, setSavedViewsVersion] = useState(0)
   const [selectedSavedViewId, setSelectedSavedViewId] = useState('')
   const [savedViewName, setSavedViewName] = useState('')
 
@@ -114,35 +101,18 @@ export function ContractsPage() {
   )
 
   const contractsQuery = useContractsQuery(query)
-  const createContractMutation = useCreateContractMutation()
   const enableContractMutation = useEnableContractMutation()
   const disableContractMutation = useDisableContractMutation()
 
   const [searchInput, setSearchInput] = useState(searchParam)
-  const [createCustomerId, setCreateCustomerId] = useState('')
-  const [createName, setCreateName] = useState('')
-  const [createEventType, setCreateEventType] = useState('')
-  const [createUrl, setCreateUrl] = useState('')
   const [rowActionId, setRowActionId] = useState<string | null>(null)
+  const [bulkActionPending, setBulkActionPending] = useState(false)
+  const [bulkActionError, setBulkActionError] = useState<string | null>(null)
 
-  useEffect(() => {
-    setSavedViews(getSavedViews(currentUser?.subject, 'contracts'))
-  }, [currentUser?.subject])
-
-  function updateParams(updates: Record<string, string | null>) {
-    const next = new URLSearchParams(searchParams)
-
-    Object.entries(updates).forEach(([key, value]) => {
-      if (!value) {
-        next.delete(key)
-        return
-      }
-
-      next.set(key, value)
-    })
-
-    setSearchParams(next)
-  }
+  const savedViews = useMemo(() => {
+    void savedViewsVersion
+    return getSavedViews(currentUser?.subject, 'contracts')
+  }, [currentUser?.subject, savedViewsVersion])
 
   function handleSaveCurrentView() {
     if (!currentUser?.subject || !savedViewName.trim()) {
@@ -154,7 +124,9 @@ export function ContractsPage() {
       query: searchParams.toString(),
     })
 
-    setSavedViews(next)
+    if (next) {
+      setSavedViewsVersion((value) => value + 1)
+    }
     setSavedViewName('')
   }
 
@@ -171,7 +143,7 @@ export function ContractsPage() {
     setSearchParams(new URLSearchParams(selected.query))
   }
 
-  function handleDeleteSavedView() {
+  async function handleDeleteSavedView() {
     if (!currentUser?.subject || !selectedSavedViewId) {
       return
     }
@@ -181,12 +153,22 @@ export function ContractsPage() {
       return
     }
 
-    if (!window.confirm(`Delete saved view "${selected.name}"?`)) {
+    const confirmed = await confirm({
+      title: 'Delete saved view',
+      description: `Delete saved view "${selected.name}"?`,
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      confirmColor: 'red',
+    })
+
+    if (!confirmed) {
       return
     }
 
     const next = deleteSavedView(currentUser.subject, 'contracts', selectedSavedViewId)
-    setSavedViews(next)
+    if (next) {
+      setSavedViewsVersion((value) => value + 1)
+    }
     setSelectedSavedViewId('')
   }
 
@@ -211,35 +193,24 @@ export function ContractsPage() {
     })
   }
 
-  async function handleCreateContract(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    if (
-      !canWriteContracts ||
-      !createCustomerId.trim() ||
-      !createEventType.trim() ||
-      !createUrl.trim()
-    ) {
-      return
-    }
-
-    await createContractMutation.mutateAsync({
-      customerId: createCustomerId.trim(),
-      name: createName.trim() || null,
-      eventTypes: [createEventType.trim()],
-      url: createUrl.trim(),
-      authenticationType: 'none',
-    })
-
-    setCreateCustomerId('')
-    setCreateName('')
-    setCreateEventType('')
-    setCreateUrl('')
-  }
-
   async function handleToggleEnabled(id: string, enabled: boolean) {
     if (!canWriteContracts) {
       return
+    }
+
+    if (enabled) {
+      const confirmed = await confirm({
+        title: 'Disable contract',
+        description:
+          'Disable this contract? Event matching can stop for this contract until it is enabled again.',
+        confirmText: 'Disable contract',
+        cancelText: 'Cancel',
+        confirmColor: 'red',
+      })
+
+      if (!confirmed) {
+        return
+      }
     }
 
     setRowActionId(id)
@@ -247,11 +218,77 @@ export function ContractsPage() {
     try {
       if (enabled) {
         await disableContractMutation.mutateAsync(id)
+        notifications.success(`Contract ${id} disabled.`, 'Contract updated')
       } else {
         await enableContractMutation.mutateAsync(id)
+        notifications.success(`Contract ${id} enabled.`, 'Contract updated')
       }
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to update contract.'), 'Contract updated')
     } finally {
       setRowActionId(null)
+    }
+  }
+
+  const contracts = useMemo(() => contractsQuery.data?.items ?? [], [contractsQuery.data?.items])
+  const paging = contractsQuery.data
+  const hasActiveFilters =
+    searchParam.trim().length > 0 ||
+    customerIdParam.trim().length > 0 ||
+    enabledParam !== undefined ||
+    destinationTypeParam !== undefined
+  const visibleIds = useMemo(() => contracts.map((contract) => contract.id), [contracts])
+  const {
+    selectedIds,
+    selectedCount,
+    allVisibleSelected,
+    toggleSelection,
+    toggleVisibleSelection,
+    clearSelection,
+    isSelected,
+  } = useBulkSelection(visibleIds)
+
+  async function handleBulkToggle(enabled: boolean) {
+    if (!canWriteContracts || selectedIds.length === 0) {
+      return
+    }
+
+    if (enabled) {
+      const confirmed = await confirm({
+        title: 'Disable selected contracts',
+        description: `Disable ${selectedIds.length} selected contract${selectedIds.length === 1 ? '' : 's'}? Event matching can stop for those contracts until re-enabled.`,
+        confirmText: 'Disable selected',
+        cancelText: 'Cancel',
+        confirmColor: 'red',
+      })
+
+      if (!confirmed) {
+        return
+      }
+    }
+
+    setBulkActionError(null)
+    setBulkActionPending(true)
+
+    try {
+      await Promise.all(
+        selectedIds.map((id) =>
+          enabled
+            ? disableContractMutation.mutateAsync(id)
+            : enableContractMutation.mutateAsync(id),
+        ),
+      )
+
+      clearSelection()
+      notifications.success(
+        `${selectedIds.length} contract${selectedIds.length === 1 ? '' : 's'} ${enabled ? 'disabled' : 'enabled'}.`,
+        'Bulk update',
+      )
+    } catch (error) {
+      setBulkActionError(getApiErrorMessage(error, 'Unable to apply bulk action.'))
+      notifications.error(getApiErrorMessage(error, 'Unable to apply bulk action.'), 'Bulk update')
+    } finally {
+      setBulkActionPending(false)
     }
   }
 
@@ -269,68 +306,21 @@ export function ContractsPage() {
     )
   }
 
-  const contracts = contractsQuery.data?.items ?? []
-  const paging = contractsQuery.data
-
   return (
-    <Flex direction="column" gap="4">
-      <Heading size="6">Contracts</Heading>
-
-      {canWriteContracts ? (
-        <Flex>
-          <Button asChild>
+    <Flex direction="column" gap="5">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Contracts</h1>
+          <p className="page-subtitle">
+            Define how customer events are matched and delivered to destinations.
+          </p>
+        </div>
+        {canWriteContracts ? (
+          <Button asChild size="2">
             <NavLink to="/contracts/new">New contract</NavLink>
           </Button>
-        </Flex>
-      ) : null}
-
-      {canWriteContracts ? (
-        <Card>
-          <form onSubmit={handleCreateContract}>
-            <Flex direction="column" gap="3">
-              <Heading size="4">Create contract</Heading>
-              <TextField.Root
-                placeholder="Customer id"
-                value={createCustomerId}
-                onChange={(event) => setCreateCustomerId(event.target.value)}
-              />
-              <TextField.Root
-                placeholder="Contract name (optional)"
-                value={createName}
-                onChange={(event) => setCreateName(event.target.value)}
-              />
-              <TextField.Root
-                placeholder="Event type (e.g. orders.created)"
-                value={createEventType}
-                onChange={(event) => setCreateEventType(event.target.value)}
-              />
-              <TextField.Root
-                placeholder="HTTP destination URL (https://...)"
-                value={createUrl}
-                onChange={(event) => setCreateUrl(event.target.value)}
-              />
-
-              {createContractMutation.isError ? (
-                <Text color="red" size="2">
-                  {getApiErrorMessage(createContractMutation.error, 'Unable to create contract.')}
-                </Text>
-              ) : null}
-
-              <Button
-                type="submit"
-                disabled={
-                  createContractMutation.isPending ||
-                  !createCustomerId.trim() ||
-                  !createEventType.trim() ||
-                  !createUrl.trim()
-                }
-              >
-                {createContractMutation.isPending ? 'Creating...' : 'Create contract'}
-              </Button>
-            </Flex>
-          </form>
-        </Card>
-      ) : null}
+        ) : null}
+      </div>
 
       <Card>
         <Flex direction="column" gap="3">
@@ -338,15 +328,53 @@ export function ContractsPage() {
             <form onSubmit={handleSearchSubmit}>
               <Flex gap="2" align="center">
                 <TextField.Root
+                  size="2"
+                  className="toolbar-search"
                   placeholder="Search id, customer, name, event type"
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
-                />
-                <Button type="submit">Search</Button>
+                  aria-label="Search contracts"
+                >
+                  <TextField.Slot>
+                    <SearchIcon width={15} height={15} />
+                  </TextField.Slot>
+                </TextField.Root>
+                <Button type="submit" size="2" variant="soft">
+                  Search
+                </Button>
               </Flex>
             </form>
 
             <Flex gap="2" align="center" wrap="wrap">
+              {selectedCount > 0 ? (
+                <Flex gap="2" align="center">
+                  <Text size="2" color="gray">{selectedCount} selected</Text>
+                  <Button
+                    size="1"
+                    variant="soft"
+                    disabled={bulkActionPending || !canWriteContracts}
+                    onClick={() => {
+                      void handleBulkToggle(false)
+                    }}
+                  >
+                    Enable selected
+                  </Button>
+                  <Button
+                    size="1"
+                    variant="soft"
+                    disabled={bulkActionPending || !canWriteContracts}
+                    onClick={() => {
+                      void handleBulkToggle(true)
+                    }}
+                  >
+                    Disable selected
+                  </Button>
+                  <Button size="1" variant="ghost" onClick={clearSelection}>
+                    Clear
+                  </Button>
+                </Flex>
+              ) : null}
+
               <TextField.Root
                 placeholder="Filter customer id"
                 value={customerIdParam}
@@ -452,7 +480,14 @@ export function ContractsPage() {
               <Button type="button" variant="soft" onClick={handleApplySavedView}>
                 Apply saved view
               </Button>
-              <Button type="button" variant="outline" color="red" onClick={handleDeleteSavedView}>
+              <Button
+                type="button"
+                variant="outline"
+                color="red"
+                onClick={() => {
+                  void handleDeleteSavedView()
+                }}
+              >
                 Delete
               </Button>
             </Flex>
@@ -468,28 +503,64 @@ export function ContractsPage() {
             </Flex>
           </Flex>
 
-          {contractsQuery.isLoading ? (
-            <Text size="2" color="gray">
-              Loading contracts...
-            </Text>
-          ) : contractsQuery.isError ? (
-            <Text size="2" color="red">
-              {contractsQuery.error instanceof ApiError &&
-              contractsQuery.error.status === 403
+          <ListFeedback
+            isLoading={contractsQuery.isLoading}
+            isError={contractsQuery.isError}
+            error={contractsQuery.error}
+            isEmpty={contracts.length === 0}
+            loadingMessage="Loading contracts..."
+            errorMessage={
+              contractsQuery.error instanceof ApiError && contractsQuery.error.status === 403
                 ? 'The backend denied access (403).'
-                : getApiErrorMessage(contractsQuery.error, 'Unable to load contracts.')}
-            </Text>
-          ) : contracts.length === 0 ? (
-            <Card>
-              <Text size="2" color="gray">
-                No contracts found for the selected filters.
-              </Text>
-            </Card>
-          ) : (
+                : getApiErrorMessage(contractsQuery.error, 'Unable to load contracts.')
+            }
+            emptyMessage="No contracts found for the selected filters."
+            emptyTitle={hasActiveFilters ? 'No contracts match current filters' : 'No contracts yet'}
+            emptyDescription={
+              hasActiveFilters
+                ? 'Try adjusting or clearing filters to see matching contracts.'
+                : canWriteContracts
+                  ? 'Create your first contract to start routing events to destinations.'
+                  : 'Contracts will appear here when available.'
+            }
+            emptyAction={
+              hasActiveFilters
+                ? {
+                    label: 'Clear filters',
+                    onClick: () =>
+                      setSearchParams(
+                        new URLSearchParams({
+                          page: '1',
+                          pageSize: String(defaultPageSize),
+                        }),
+                      ),
+                  }
+                : {
+                    label: 'Refresh',
+                    onClick: () => {
+                      void contractsQuery.refetch()
+                    },
+                  }
+            }
+          >
             <>
+              {bulkActionError ? (
+                <Text size="2" color="red">
+                  {bulkActionError}
+                </Text>
+              ) : null}
+
               <Table.Root size={preferences.denseTables ? '1' : '2'}>
                 <Table.Header>
                   <Table.Row>
+                    <Table.ColumnHeaderCell>
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleVisibleSelection}
+                        aria-label="Select all visible contracts"
+                      />
+                    </Table.ColumnHeaderCell>
                     <Table.ColumnHeaderCell>
                       <Button variant="ghost" onClick={() => handleSort('name')}>
                         Name
@@ -521,6 +592,14 @@ export function ContractsPage() {
 
                     return (
                       <Table.Row key={contract.id}>
+                        <Table.Cell>
+                          <input
+                            type="checkbox"
+                            checked={isSelected(contract.id)}
+                            onChange={() => toggleSelection(contract.id)}
+                            aria-label={`Select contract ${contract.id}`}
+                          />
+                        </Table.Cell>
                         <Table.RowHeaderCell>{contract.name ?? contract.id}</Table.RowHeaderCell>
                         <Table.Cell>{contract.customerId}</Table.Cell>
                         <Table.Cell>{contract.eventTypes.join(', ') || '-'}</Table.Cell>
@@ -533,11 +612,11 @@ export function ContractsPage() {
                         <Table.Cell>{new Date(contract.updatedAt).toLocaleString()}</Table.Cell>
                         <Table.Cell>
                           <Flex gap="2">
-                            <Button asChild size="1" variant="ghost">
+                            <Link asChild size="1">
                               <NavLink to={`/contracts/${encodeURIComponent(contract.id)}`}>
                                 Detail
                               </NavLink>
-                            </Button>
+                            </Link>
                             <Button
                               size="1"
                               variant="soft"
@@ -560,34 +639,13 @@ export function ContractsPage() {
                 </Table.Body>
               </Table.Root>
 
-              <Flex align="center" justify="between" gap="3">
-                <Text size="2" color="gray">
-                  {paging
-                    ? `Page ${paging.page} of ${paging.totalPages} · ${paging.totalCount} total`
-                    : ''}
-                </Text>
-
-                <Flex gap="2">
-                  <Button
-                    variant="soft"
-                    disabled={!paging?.hasPrevious}
-                    onClick={() =>
-                      updateParams({ page: String(Math.max(1, pageParam - 1)) })
-                    }
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="soft"
-                    disabled={!paging?.hasNext}
-                    onClick={() => updateParams({ page: String(pageParam + 1) })}
-                  >
-                    Next
-                  </Button>
-                </Flex>
-              </Flex>
+              <ListPagination
+                paging={paging}
+                onPrevious={() => updateParams({ page: String(Math.max(1, pageParam - 1)) })}
+                onNext={() => updateParams({ page: String(pageParam + 1) })}
+              />
             </>
-          )}
+          </ListFeedback>
         </Flex>
       </Card>
     </Flex>

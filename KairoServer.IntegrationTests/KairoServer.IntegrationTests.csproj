@@ -39,7 +39,6 @@
 
   <ItemGroup>
     <None Include="..\migration\*.sql" Link="Migrations\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <None Update="Migrations\006_create_delivery_attempts.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

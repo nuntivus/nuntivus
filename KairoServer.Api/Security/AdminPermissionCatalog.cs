@@ -15,6 +15,7 @@ namespace KairoServer.Api.Security
             "events.read",
             "deliveries.read",
             "delivery-failures.read",
+            "audit-logs.read",
             "destination-health.read",
             "event-definitions.read",
             "users.self.read",

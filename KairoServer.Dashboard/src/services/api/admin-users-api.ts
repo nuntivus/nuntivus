@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost, apiPut } from './api-client'
+import { apiDelete, apiGet, apiPost, apiPut, type ApiRequestOptions } from './api-client'
 
 export interface AdminUserRoleAssignment {
   subject: string
@@ -12,19 +12,21 @@ export interface CreateAdminUserRequest {
   subject: string
   displayName?: string | null
   roles: string[]
+  password?: string | null
 }
 
 export interface ReplaceAdminUserRolesRequest {
   displayName?: string | null
   roles: string[]
+  password?: string | null
 }
 
-export async function listAdminUsers() {
-  return apiGet<AdminUserRoleAssignment[]>('/v1/admin/users')
+export async function listAdminUsers(options?: ApiRequestOptions) {
+  return apiGet<AdminUserRoleAssignment[]>('/v1/admin/users', undefined, options)
 }
 
-export async function getAdminUser(subject: string) {
-  return apiGet<AdminUserRoleAssignment>(`/v1/admin/users/${encodeURIComponent(subject)}`)
+export async function getAdminUser(subject: string, options?: ApiRequestOptions) {
+  return apiGet<AdminUserRoleAssignment>(`/v1/admin/users/${encodeURIComponent(subject)}`, undefined, options)
 }
 
 export async function createAdminUser(request: CreateAdminUserRequest) {

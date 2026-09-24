@@ -14,6 +14,7 @@ import {
 import { useState, type FormEvent } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
 import {
   useActivateSchemaVersionMutation,
   useCreateSchemaDraftMutation,
@@ -24,6 +25,7 @@ import {
   useRelatedContractsQuery,
   useUpdateEventDefinitionDescriptionMutation,
 } from '../features/event-definitions/use-event-definitions'
+import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
 
@@ -42,6 +44,7 @@ function mapSchemaStateColor(state: string): 'gray' | 'green' | 'amber' {
 
 export function EventDefinitionDetailPage() {
   const { eventType } = useParams()
+  const notifications = useNotifications()
   const { currentUser } = useAppSelector((state) => state.auth)
 
   const canReadDefinitions = hasPermission(currentUser, 'event-definitions.read')
@@ -62,8 +65,18 @@ export function EventDefinitionDetailPage() {
   const [schemaJsonInput, setSchemaJsonInput] = useState('')
   const [compatibilityMode, setCompatibilityMode] = useState<'Backward' | 'Forward'>('Backward')
   const [selectedSchemaVersion, setSelectedSchemaVersion] = useState<number | undefined>(undefined)
+  const [schemaDraftError, setSchemaDraftError] = useState<string | null>(null)
 
   const selectedSchemaQuery = useEventSchemaVersionQuery(eventType, selectedSchemaVersion)
+
+  const schemaVersionValue = Number.parseInt(schemaVersionInput, 10)
+  const schemaVersionError =
+    !schemaVersionInput.trim()
+      ? 'Version is required.'
+      : Number.isNaN(schemaVersionValue) || schemaVersionValue <= 0
+        ? 'Version must be a positive number.'
+        : null
+  const schemaJsonError = !schemaJsonInput.trim() ? 'Schema JSON is required.' : null
 
   const definition = definitionQuery.data
   const schemaItems = schemasQuery.data?.items ?? []
@@ -131,31 +144,57 @@ export function EventDefinitionDetailPage() {
       return
     }
 
-    await descriptionMutation.mutateAsync({
-      description: descriptionInput.trim() || null,
-    })
+    try {
+      await descriptionMutation.mutateAsync({
+        description: descriptionInput.trim() || null,
+      })
+      notifications.success('Description saved.', 'Event definition')
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to update description.'), 'Event definition')
+    }
+  }
+
+  async function handleActivateSchema(version: number) {
+    try {
+      await activateSchemaMutation.mutateAsync(version)
+      notifications.success(`Schema v${version} activated.`, 'Event definition')
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to activate schema version.'), 'Event definition')
+    }
+  }
+
+  async function handleDeprecateSchema(version: number) {
+    try {
+      await deprecateSchemaMutation.mutateAsync(version)
+      notifications.success(`Schema v${version} deprecated.`, 'Event definition')
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to deprecate schema version.'), 'Event definition')
+    }
   }
 
   async function handleCreateSchemaDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteDefinitions || !schemaVersionInput.trim() || !schemaJsonInput.trim()) {
+    if (!canWriteDefinitions || schemaVersionError || schemaJsonError) {
       return
     }
 
-    const version = Number.parseInt(schemaVersionInput, 10)
-    if (Number.isNaN(version) || version <= 0) {
-      return
+    setSchemaDraftError(null)
+
+    try {
+      await createSchemaMutation.mutateAsync({
+        version: schemaVersionValue,
+        schema: schemaJsonInput,
+        compatibilityMode,
+      })
+
+      setSchemaVersionInput('')
+      setSchemaJsonInput('')
+      notifications.success('Schema draft created.', 'Event definition')
+    } catch (error) {
+      setSchemaDraftError(getApiErrorMessage(error, 'Unable to create schema draft.'))
+      notifications.error(getApiErrorMessage(error, 'Unable to create schema draft.'), 'Event definition')
     }
-
-    await createSchemaMutation.mutateAsync({
-      version,
-      schema: schemaJsonInput,
-      compatibilityMode,
-    })
-
-    setSchemaVersionInput('')
-    setSchemaJsonInput('')
   }
 
   return (
@@ -191,14 +230,17 @@ export function EventDefinitionDetailPage() {
               disabled={!canWriteDefinitions || descriptionMutation.isPending}
             />
 
-            {descriptionMutation.isError ? (
-              <Text size="2" color="red">
-                {getApiErrorMessage(
-                  descriptionMutation.error,
-                  'Unable to update description.',
-                )}
-              </Text>
-            ) : null}
+            <FormErrorText
+              id="event-definition-description-error"
+              message={
+                descriptionMutation.isError
+                  ? getApiErrorMessage(
+                      descriptionMutation.error,
+                      'Unable to update description.',
+                    )
+                  : null
+              }
+            />
 
             <Button type="submit" disabled={!canWriteDefinitions || descriptionMutation.isPending}>
               {descriptionMutation.isPending ? 'Saving...' : 'Save description'}
@@ -256,7 +298,7 @@ export function EventDefinitionDetailPage() {
                             variant="soft"
                             disabled={!canWriteDefinitions || schema.state === 'Active'}
                             onClick={() => {
-                              void activateSchemaMutation.mutateAsync(schema.version)
+                              void handleActivateSchema(schema.version)
                             }}
                           >
                             Activate
@@ -267,7 +309,7 @@ export function EventDefinitionDetailPage() {
                             color="amber"
                             disabled={!canWriteDefinitions || schema.state === 'Deprecated'}
                             onClick={() => {
-                              void deprecateSchemaMutation.mutateAsync(schema.version)
+                              void handleDeprecateSchema(schema.version)
                             }}
                           >
                             Deprecate
@@ -311,7 +353,10 @@ export function EventDefinitionDetailPage() {
               value={schemaVersionInput}
               onChange={(entry) => setSchemaVersionInput(entry.target.value)}
               disabled={!canWriteDefinitions || createSchemaMutation.isPending}
+              aria-invalid={schemaVersionError ? 'true' : 'false'}
+              aria-describedby={schemaVersionError ? 'event-definition-schema-version-error' : undefined}
             />
+            <FieldErrorText id="event-definition-schema-version-error" message={schemaVersionError} />
             <Select.Root
               value={compatibilityMode}
               onValueChange={(value) => setCompatibilityMode(value as 'Backward' | 'Forward')}
@@ -328,17 +373,24 @@ export function EventDefinitionDetailPage() {
               onChange={(entry) => setSchemaJsonInput(entry.target.value)}
               rows={10}
               disabled={!canWriteDefinitions || createSchemaMutation.isPending}
+              aria-invalid={schemaJsonError ? 'true' : 'false'}
+              aria-describedby={schemaJsonError ? 'event-definition-schema-json-error' : undefined}
             />
+            <FieldErrorText id="event-definition-schema-json-error" message={schemaJsonError} />
 
-            {createSchemaMutation.isError ? (
-              <Text size="2" color="red">
-                {getApiErrorMessage(createSchemaMutation.error, 'Unable to create schema draft.')}
-              </Text>
-            ) : null}
+            <FormErrorText
+              id="event-definition-schema-submit-error"
+              message={
+                schemaDraftError ??
+                (createSchemaMutation.isError
+                  ? getApiErrorMessage(createSchemaMutation.error, 'Unable to create schema draft.')
+                  : null)
+              }
+            />
 
             <Button
               type="submit"
-              disabled={!canWriteDefinitions || createSchemaMutation.isPending}
+              disabled={!canWriteDefinitions || createSchemaMutation.isPending || !!schemaVersionError || !!schemaJsonError}
             >
               {createSchemaMutation.isPending ? 'Creating...' : 'Create schema draft'}
             </Button>
