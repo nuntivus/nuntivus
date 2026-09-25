@@ -1,6 +1,9 @@
-import { Card, Flex, Heading, Separator, Text } from '@radix-ui/themes'
+import { Card, Flex, Heading, Select, Separator, Text } from '@radix-ui/themes'
+import { useState } from 'react'
+import { DashboardTimeChart } from '../components/observability/dashboard-time-chart'
 import {
   useDashboardOverviewQuery,
+  useDashboardTimeSeriesQuery,
   useRecentEventsQuery,
   useRecentFailuresQuery,
   useSuccessfulDeliveriesCountQuery,
@@ -8,10 +11,13 @@ import {
 import { getApiErrorMessage } from '../services/api/api-client'
 
 export function DashboardPage() {
-  const overviewQuery = useDashboardOverviewQuery()
-  const successfulQuery = useSuccessfulDeliveriesCountQuery()
-  const recentEventsQuery = useRecentEventsQuery()
-  const recentFailuresQuery = useRecentFailuresQuery()
+  const [refreshInterval, setRefreshInterval] = useState(30_000)
+  const [rangeSeconds, setRangeSeconds] = useState(3600)
+  const overviewQuery = useDashboardOverviewQuery(refreshInterval)
+  const successfulQuery = useSuccessfulDeliveriesCountQuery(refreshInterval)
+  const recentEventsQuery = useRecentEventsQuery(refreshInterval)
+  const recentFailuresQuery = useRecentFailuresQuery(refreshInterval)
+  const timeSeriesQuery = useDashboardTimeSeriesQuery(rangeSeconds, refreshInterval)
 
   const overview = overviewQuery.data
   const recentEvents = recentEventsQuery.data ?? []
@@ -44,37 +50,58 @@ export function DashboardPage() {
 
   return (
     <Flex direction="column" gap="4">
-      <Heading size="6">Overview</Heading>
+      <Flex justify="between" align="center" wrap="wrap" gap="3">
+        <Heading size="6">Overview</Heading>
+        <Flex align="center" wrap="wrap" gap="3">
+          <Text size="2" as="label" htmlFor="dashboard-range">Graph window</Text>
+          <Select.Root value={String(rangeSeconds)} onValueChange={(value) => setRangeSeconds(Number(value))}>
+            <Select.Trigger id="dashboard-range" aria-label="Graph window" />
+            <Select.Content>
+              <Select.Item value="15">15 seconds</Select.Item>
+              <Select.Item value="30">30 seconds</Select.Item>
+              <Select.Item value="60">1 minute</Select.Item>
+              <Select.Item value="3600">1 hour</Select.Item>
+            </Select.Content>
+          </Select.Root>
+          <Text size="2" as="label" htmlFor="dashboard-refresh">Refresh every</Text>
+          <Select.Root value={String(refreshInterval)} onValueChange={(value) => setRefreshInterval(Number(value))}>
+            <Select.Trigger id="dashboard-refresh" aria-label="Refresh interval" />
+            <Select.Content>
+              <Select.Item value="15000">15 seconds</Select.Item>
+              <Select.Item value="30000">30 seconds</Select.Item>
+              <Select.Item value="60000">1 minute</Select.Item>
+              <Select.Item value="3600000">1 hour</Select.Item>
+            </Select.Content>
+          </Select.Root>
+        </Flex>
+      </Flex>
 
       <Flex gap="3" wrap="wrap">
         <MetricCard
           title="Successful deliveries"
           value={successfulQuery.data?.toString()}
           loading={successfulQuery.isLoading}
-          error={getApiErrorMessage(
-            successfulQuery.error,
-            'Unable to load successful deliveries.',
-          )}
+          error={successfulQuery.isError
+            ? getApiErrorMessage(successfulQuery.error, 'Unable to load successful deliveries.')
+            : undefined}
         />
 
         <MetricCard
           title="Failed deliveries"
           value={overview?.totalFailedDeliveries.toString()}
           loading={overviewQuery.isLoading}
-          error={getApiErrorMessage(
-            overviewQuery.error,
-            'Unable to load failed deliveries.',
-          )}
+          error={overviewQuery.isError
+            ? getApiErrorMessage(overviewQuery.error, 'Unable to load failed deliveries.')
+            : undefined}
         />
 
         <MetricCard
           title="Dead deliveries"
           value={overview?.totalDeadDeliveries.toString()}
           loading={overviewQuery.isLoading}
-          error={getApiErrorMessage(
-            overviewQuery.error,
-            'Unable to load dead deliveries.',
-          )}
+          error={overviewQuery.isError
+            ? getApiErrorMessage(overviewQuery.error, 'Unable to load dead deliveries.')
+            : undefined}
         />
 
         <MetricCard
@@ -91,6 +118,34 @@ export function DashboardPage() {
           error={ratesError}
         />
       </Flex>
+
+      <div className="responsive-panel-grid">
+        <DashboardTimeChart
+          title="Delivery outcomes"
+          buckets={timeSeriesQuery.data?.buckets ?? []}
+          series={[
+            { key: 'delivered', label: 'Delivered', color: 'var(--green-9)' },
+            { key: 'failed', label: 'Failed', color: 'var(--orange-9)' },
+            { key: 'dead', label: 'Dead', color: 'var(--red-9)' },
+          ]}
+          loading={timeSeriesQuery.isLoading}
+          error={timeSeriesQuery.isError
+            ? getApiErrorMessage(timeSeriesQuery.error, 'Unable to load delivery history.')
+            : undefined}
+        />
+        <DashboardTimeChart
+          title="Event and delivery throughput"
+          buckets={timeSeriesQuery.data?.buckets ?? []}
+          series={[
+            { key: 'events', label: 'Events received', color: 'var(--accent-9)' },
+            { key: 'deliveries', label: 'Deliveries updated', color: 'var(--purple-9)' },
+          ]}
+          loading={timeSeriesQuery.isLoading}
+          error={timeSeriesQuery.isError
+            ? getApiErrorMessage(timeSeriesQuery.error, 'Unable to load throughput history.')
+            : undefined}
+        />
+      </div>
 
       <div className="responsive-panel-grid">
         <Card style={{ flex: '1 1 420px' }}>

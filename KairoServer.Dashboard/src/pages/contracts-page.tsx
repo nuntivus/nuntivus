@@ -21,7 +21,6 @@ import {
   useDisableContractMutation,
   useEnableContractMutation,
 } from '../features/contracts/use-contracts'
-import { useLocalUserPreferences } from '../features/settings/local-user-preferences'
 import { useBulkSelection } from '../hooks/use-bulk-selection'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
@@ -30,11 +29,6 @@ import {
   parsePositiveInt,
   useUrlQueryParams,
 } from '../hooks/use-url-query-params'
-import {
-  deleteSavedView,
-  getSavedViews,
-  upsertSavedView,
-} from '../features/saved-views/saved-views-storage'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { ContractListQuery, DestinationType } from '../services/api/contracts-api'
 import { useAppSelector } from '../store/hooks'
@@ -55,14 +49,10 @@ export function ContractsPage() {
   const confirm = useConfirmDialog()
   const notifications = useNotifications()
   const { currentUser } = useAppSelector((state) => state.auth)
-  const { preferences } = useLocalUserPreferences(currentUser?.subject)
-  const [savedViewsVersion, setSavedViewsVersion] = useState(0)
-  const [selectedSavedViewId, setSelectedSavedViewId] = useState('')
-  const [savedViewName, setSavedViewName] = useState('')
 
   const canReadContracts = hasPermission(currentUser, 'contracts.read')
   const canWriteContracts = hasPermission(currentUser, 'contracts.write')
-  const defaultPageSize = preferences.tablePageSizes.contracts || preferences.defaultPageSize
+  const defaultPageSize = 20
 
   const searchParam = searchParams.get('search') ?? ''
   const customerIdParam = searchParams.get('customerId') ?? ''
@@ -108,69 +98,6 @@ export function ContractsPage() {
   const [rowActionId, setRowActionId] = useState<string | null>(null)
   const [bulkActionPending, setBulkActionPending] = useState(false)
   const [bulkActionError, setBulkActionError] = useState<string | null>(null)
-
-  const savedViews = useMemo(() => {
-    void savedViewsVersion
-    return getSavedViews(currentUser?.subject, 'contracts')
-  }, [currentUser?.subject, savedViewsVersion])
-
-  function handleSaveCurrentView() {
-    if (!currentUser?.subject || !savedViewName.trim()) {
-      return
-    }
-
-    const next = upsertSavedView(currentUser.subject, 'contracts', {
-      name: savedViewName.trim(),
-      query: searchParams.toString(),
-    })
-
-    if (next) {
-      setSavedViewsVersion((value) => value + 1)
-    }
-    setSavedViewName('')
-  }
-
-  function handleApplySavedView() {
-    if (!selectedSavedViewId) {
-      return
-    }
-
-    const selected = savedViews.find((item) => item.id === selectedSavedViewId)
-    if (!selected) {
-      return
-    }
-
-    setSearchParams(new URLSearchParams(selected.query))
-  }
-
-  async function handleDeleteSavedView() {
-    if (!currentUser?.subject || !selectedSavedViewId) {
-      return
-    }
-
-    const selected = savedViews.find((item) => item.id === selectedSavedViewId)
-    if (!selected) {
-      return
-    }
-
-    const confirmed = await confirm({
-      title: 'Delete saved view',
-      description: `Delete saved view "${selected.name}"?`,
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
-      confirmColor: 'red',
-    })
-
-    if (!confirmed) {
-      return
-    }
-
-    const next = deleteSavedView(currentUser.subject, 'contracts', selectedSavedViewId)
-    if (next) {
-      setSavedViewsVersion((value) => value + 1)
-    }
-    setSelectedSavedViewId('')
-  }
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -464,45 +391,6 @@ export function ContractsPage() {
             </Flex>
           </Flex>
 
-          <Flex direction="column" gap="2">
-            <Text size="2" color="gray">Saved views</Text>
-            <Flex wrap="wrap" gap="2" align="center">
-              <Select.Root value={selectedSavedViewId} onValueChange={setSelectedSavedViewId}>
-                <Select.Trigger placeholder="Choose saved view" />
-                <Select.Content>
-                  {savedViews.map((view) => (
-                    <Select.Item key={view.id} value={view.id}>
-                      {view.name}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-              <Button type="button" variant="soft" onClick={handleApplySavedView}>
-                Apply saved view
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                color="red"
-                onClick={() => {
-                  void handleDeleteSavedView()
-                }}
-              >
-                Delete
-              </Button>
-            </Flex>
-            <Flex wrap="wrap" gap="2" align="center">
-              <TextField.Root
-                placeholder="Save current filters as..."
-                value={savedViewName}
-                onChange={(event) => setSavedViewName(event.target.value)}
-              />
-              <Button type="button" onClick={handleSaveCurrentView}>
-                Save current view
-              </Button>
-            </Flex>
-          </Flex>
-
           <ListFeedback
             isLoading={contractsQuery.isLoading}
             isError={contractsQuery.isError}
@@ -550,7 +438,7 @@ export function ContractsPage() {
                 </Text>
               ) : null}
 
-              <Table.Root size={preferences.denseTables ? '1' : '2'}>
+              <Table.Root size="2">
                 <Table.Header>
                   <Table.Row>
                     <Table.ColumnHeaderCell>
@@ -615,6 +503,11 @@ export function ContractsPage() {
                             <Link asChild size="1">
                               <NavLink to={`/contracts/${encodeURIComponent(contract.id)}`}>
                                 Detail
+                              </NavLink>
+                            </Link>
+                            <Link asChild size="1">
+                              <NavLink to={`/test-events?contractId=${encodeURIComponent(contract.id)}`}>
+                                Test event
                               </NavLink>
                             </Link>
                             <Button

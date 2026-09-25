@@ -234,12 +234,14 @@ namespace KairoServer.Infastructure.Persistence.Postgres
             DateTime CreatedAt,
             DateTime UpdatedAt);
 
-        private sealed record ListRow(
-            string Subject,
-            string? DisplayName,
-            DateTime CreatedAt,
-            DateTime UpdatedAt,
-            string[] Roles);
+        private sealed class ListRow
+        {
+            public string Subject { get; set; } = string.Empty;
+            public string? DisplayName { get; set; }
+            public DateTime CreatedAt { get; set; }
+            public DateTime UpdatedAt { get; set; }
+            public string[] Roles { get; set; } = Array.Empty<string>();
+        }
 
         private static DateTimeOffset ToUtcDateTimeOffset(DateTime value)
             => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc));

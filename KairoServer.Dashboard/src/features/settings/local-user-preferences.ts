@@ -4,24 +4,10 @@ export type ThemePreference = 'light' | 'dark'
 
 export interface UserPreferences {
   theme: ThemePreference
-  defaultPageSize: number
-  denseTables: boolean
-  tablePageSizes: {
-    deliveries: number
-    events: number
-    contracts: number
-  }
 }
 
 const defaultPreferences: UserPreferences = {
   theme: 'light',
-  defaultPageSize: 20,
-  denseTables: false,
-  tablePageSizes: {
-    deliveries: 20,
-    events: 20,
-    contracts: 20,
-  },
 }
 
 const keyPrefix = 'kairo.dashboard.preferences.v1'
@@ -31,24 +17,9 @@ function getStorageKey(subject: string) {
   return `${keyPrefix}.${subject}`
 }
 
-function normalizePageSize(value: number | undefined, fallback: number) {
-  if (!value || Number.isNaN(value) || value < 1) {
-    return fallback
-  }
-
-  return value
-}
-
 function normalizePreferences(value: Partial<UserPreferences> | null | undefined): UserPreferences {
   return {
     theme: value?.theme === 'dark' ? 'dark' : 'light',
-    defaultPageSize: normalizePageSize(value?.defaultPageSize, 20),
-    denseTables: Boolean(value?.denseTables),
-    tablePageSizes: {
-      deliveries: normalizePageSize(value?.tablePageSizes?.deliveries, value?.defaultPageSize ?? 20),
-      events: normalizePageSize(value?.tablePageSizes?.events, value?.defaultPageSize ?? 20),
-      contracts: normalizePageSize(value?.tablePageSizes?.contracts, value?.defaultPageSize ?? 20),
-    },
   }
 }
 

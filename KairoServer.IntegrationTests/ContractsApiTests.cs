@@ -11,6 +11,7 @@ using KairoServer.Api.Controllers.Events;
 using KairoServer.Contracts.CustomerContracts;
 using KairoServer.Contracts.Customers;
 using KairoServer.Contracts.Events;
+using KairoServer.Domain.Outbox;
 using Npgsql;
 
 namespace KairoServer.IntegrationTests
@@ -27,6 +28,49 @@ namespace KairoServer.IntegrationTests
             _client = fixture.CreateClient();
             _client.DefaultRequestHeaders.Add("X-Test-Auth", "on");
             _client.DefaultRequestHeaders.Add("X-Test-Role", "Operator");
+        }
+
+        [Fact]
+        public async Task Put_preserves_redacted_http_credentials_and_advanced_options()
+        {
+            await CreateCustomerAsync("acme");
+            var create = await _client.PostAsJsonAsync("/v1/contracts", new CreateContractRequest(
+                "acme", new[] { "orders.created" },
+                new HttpDestinationConfig("https://hooks.example.com/acme",
+                    new HttpAuthentication("bearer", new HttpCredential("ref", "secret.acme.webhook"))),
+                Transformation: new ContractPayloadTransformationRequest(1,
+                    new[] { new ContractPayloadFieldMappingRequest("order.id", "payload.orderId") }),
+                RateLimit: new ContractRateLimitConfig(5)));
+            Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+            var created = await create.Content.ReadFromJsonAsync<ContractCreated>();
+            var get = await _client.GetAsync($"/v1/contracts/{created!.Id}");
+            Assert.Equal(HttpStatusCode.OK, get.StatusCode);
+            var original = await get.Content.ReadFromJsonAsync<ContractView>();
+            var redacted = JsonSerializer.Deserialize<HttpDestinationConfig>(original!.DestinationConfiguration);
+            Assert.Equal("***", redacted!.Authentication.Credential!.Value);
+
+            using var update = new HttpRequestMessage(HttpMethod.Put, $"/v1/contracts/{created.Id}")
+            {
+                Content = JsonContent.Create(new UpdateContractRequest(
+                    "Renamed", original.EventTypes, redacted with { Url = "https://hooks.example.com/updated" },
+                    original.SchemaTargets.Select(t => new ContractSchemaTargetRequest(t.EventType, t.Version)).ToArray(),
+                    RateLimit: original.RateLimit,
+                    Transformation: new ContractPayloadTransformationRequest(1,
+                        new[] { new ContractPayloadFieldMappingRequest("order.id", "payload.orderId") })))
+            };
+            update.Headers.IfMatch.Add(get.Headers.ETag!);
+            var put = await _client.SendAsync(update);
+            Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+            var body = await put.Content.ReadFromJsonAsync<ContractView>();
+            Assert.Equal("Renamed", body!.Name);
+            Assert.Equal(5, body.RateLimit!.PerSecond);
+            Assert.Single(body.Transformation!.FieldMappings);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var persisted = await conn.ExecuteScalarAsync<string>(
+                "SELECT destination_config::text FROM contracts WHERE id = @id;", new { id = created.Id });
+            Assert.Contains("secret.acme.webhook", persisted);
+            Assert.DoesNotContain("***", persisted);
         }
 
         public Task InitializeAsync() => _fixture.ResetAsync();
@@ -50,6 +94,94 @@ namespace KairoServer.IntegrationTests
                     new HttpAuthentication("hmac", new HttpCredential("ref", "secret.acme.webhook")),
                     Headers: null,
                     TimeoutSeconds: 30));
+
+        [Fact]
+        public async Task Test_event_preview_and_send_target_only_selected_contract()
+        {
+            await CreateCustomerAsync("test-target");
+            var targetRequest = ValidRequest("test-target") with
+            {
+                Filter = new ContractFilterRequest(PayloadRules: new[]
+                {
+                    new ContractFilterRuleRequest("orderId", ContractFilterOperator.Equals, "matching")
+                })
+            };
+            var targetResponse = await _client.PostAsJsonAsync("/v1/contracts", targetRequest);
+            var target = await targetResponse.Content.ReadFromJsonAsync<ContractCreated>();
+            Assert.Equal(HttpStatusCode.Created, targetResponse.StatusCode);
+            Assert.NotNull(target);
+            var otherResponse = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("test-target"));
+            var other = await otherResponse.Content.ReadFromJsonAsync<ContractCreated>();
+            Assert.Equal(HttpStatusCode.Created, otherResponse.StatusCode);
+            Assert.NotNull(other);
+
+            var mismatch = new ContractTestEventRequest(
+                "orders.created", JsonSerializer.SerializeToElement(new { orderId = "other" }), null);
+            var previewResponse = await _client.PostAsJsonAsync($"/v1/contracts/{target!.Id:D}/test/preview", mismatch);
+            Assert.Equal(HttpStatusCode.OK, previewResponse.StatusCode);
+            var preview = await previewResponse.Content.ReadFromJsonAsync<ContractTestPreviewView>();
+            Assert.NotNull(preview);
+            Assert.False(preview!.Matches);
+
+            var rejected = await _client.PostAsJsonAsync($"/v1/contracts/{target.Id:D}/test/send", mismatch);
+            Assert.Equal(HttpStatusCode.Conflict, rejected.StatusCode);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            Assert.Equal(0, await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM events WHERE source_id = @id;", new { id = target.Id }));
+
+            var request = new ContractTestEventRequest(
+                "orders.created", JsonSerializer.SerializeToElement(new { orderId = "matching" }),
+                JsonSerializer.SerializeToElement(new { label = "smoke" }));
+            var acceptedPreview = await _client.PostAsJsonAsync($"/v1/contracts/{target.Id:D}/test/preview", request);
+            Assert.True((await acceptedPreview.Content.ReadFromJsonAsync<ContractTestPreviewView>())!.Matches);
+            Assert.Equal(0, await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM events WHERE source_id = @id;", new { id = target.Id }));
+
+            _client.DefaultRequestHeaders.Add("X-Operator-Id", "contract-test-operator");
+            var sent = await _client.PostAsJsonAsync($"/v1/contracts/{target.Id:D}/test/send", request);
+            Assert.Equal(HttpStatusCode.OK, sent.StatusCode);
+            var result = await sent.Content.ReadFromJsonAsync<ContractTestSendView>();
+            Assert.NotNull(result);
+
+            Assert.Equal(1, await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM deliveries WHERE event_id = @eventId AND contract_id = @contractId AND id = @deliveryId;",
+                new { eventId = result!.EventId, contractId = target.Id, deliveryId = result.DeliveryId }));
+            Assert.Equal(0, await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM deliveries WHERE event_id = @eventId AND contract_id = @contractId;",
+                new { eventId = result.EventId, contractId = other!.Id }));
+            Assert.Equal(1, await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM outbox_messages WHERE event_id = @eventId AND type = @type;",
+                new { eventId = result.EventId, type = OutboxMessageType.DeliveryReady }));
+            Assert.Equal(0, await conn.ExecuteScalarAsync<long>(
+                "SELECT COUNT(*) FROM outbox_messages WHERE event_id = @eventId AND type = @type;",
+                new { eventId = result.EventId, type = OutboxMessageType.EventAccepted }));
+            Assert.Equal("contract-test-operator", await conn.ExecuteScalarAsync<string>(
+                "SELECT actor_id FROM audit_logs WHERE event_id = @eventId AND action = 'test_event_sent';",
+                new { eventId = result.EventId }));
+        }
+
+        [Fact]
+        public async Task Test_event_send_requires_operator_and_valid_payload()
+        {
+            await CreateCustomerAsync("test-auth");
+            var created = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("test-auth"));
+            var contract = await created.Content.ReadFromJsonAsync<ContractCreated>();
+            Assert.NotNull(contract);
+
+            var invalid = new ContractTestEventRequest("orders.created", JsonSerializer.SerializeToElement("text"), null);
+            Assert.Equal(HttpStatusCode.BadRequest,
+                (await _client.PostAsJsonAsync($"/v1/contracts/{contract!.Id:D}/test/preview", invalid)).StatusCode);
+
+            using var viewer = _fixture.CreateClient();
+            viewer.DefaultRequestHeaders.Add("X-Test-Auth", "on");
+            viewer.DefaultRequestHeaders.Add("X-Test-Role", "Viewer");
+            var valid = new ContractTestEventRequest("orders.created", JsonSerializer.SerializeToElement(new { id = 1 }), null);
+            Assert.Equal(HttpStatusCode.OK,
+                (await viewer.PostAsJsonAsync($"/v1/contracts/{contract.Id:D}/test/preview", valid)).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden,
+                (await viewer.PostAsJsonAsync($"/v1/contracts/{contract.Id:D}/test/send", valid)).StatusCode);
+        }
 
         [Fact]
         public async Task Create_returns_201_and_persists_contract_with_event_types()

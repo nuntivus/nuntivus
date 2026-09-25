@@ -19,6 +19,7 @@ const EventDetailPage = lazy(() => import('../pages/event-detail-page').then((mo
 const EventDefinitionDetailPage = lazy(() => import('../pages/event-definition-detail-page').then((module) => ({ default: module.EventDefinitionDetailPage })))
 const EventDefinitionsPage = lazy(() => import('../pages/event-definitions-page').then((module) => ({ default: module.EventDefinitionsPage })))
 const EventsPage = lazy(() => import('../pages/events-page').then((module) => ({ default: module.EventsPage })))
+const TestEventsPage = lazy(() => import('../pages/test-events-page').then((module) => ({ default: module.TestEventsPage })))
 const ForbiddenPage = lazy(() => import('../pages/forbidden-page').then((module) => ({ default: module.ForbiddenPage })))
 const LoginPage = lazy(() => import('../pages/login-page').then((module) => ({ default: module.LoginPage })))
 const NotFoundPage = lazy(() => import('../pages/not-found-page').then((module) => ({ default: module.NotFoundPage })))
@@ -58,6 +59,7 @@ export function AppRouter() {
               <Route element={<RequirePermission permissions={['contracts.read']} />}>
                 <Route path="contracts" element={<ContractsPage />} />
                 <Route path="contracts/:id" element={<ContractDetailPage />} />
+                <Route path="test-events" element={<TestEventsPage />} />
               </Route>
               <Route element={<RequirePermission permissions={['contracts.write']} />}>
                 <Route path="contracts/new" element={<ContractCreatePage />} />

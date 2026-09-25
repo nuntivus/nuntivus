@@ -9,6 +9,51 @@ import type { PagedResponse } from './paged-response'
 
 export type DestinationType = 'Http' | 'Kafka' | 'Nats' | 'RabbitMq' | 'Sqs'
 
+export interface ContractSchemaTarget {
+  eventType: string
+  version: number
+}
+
+export type ContractFilterOperator =
+  | 'Equals' | 'NotEquals' | 'GreaterThan' | 'GreaterThanOrEqual'
+  | 'LessThan' | 'LessThanOrEqual' | 'Contains' | 'StartsWith'
+  | 'EndsWith' | 'In' | 'NotIn'
+
+export interface ContractFilterRule {
+  selector: string
+  operator: ContractFilterOperator
+  value?: string | null
+  values?: string[]
+}
+
+export interface ContractFilter {
+  metadataRules: ContractFilterRule[]
+  payloadRules: ContractFilterRule[]
+}
+
+export interface ContractTransformation {
+  version: number
+  fieldMappings: { sourceSelector: string; targetSelector: string }[]
+}
+
+export interface ContractRateLimit {
+  perSecond?: number | null
+  perMinute?: number | null
+  burst?: number | null
+}
+
+export interface ContractOrdering {
+  keySelector?: string | null
+}
+
+export interface ContractOptions {
+  schemaTargets?: ContractSchemaTarget[] | null
+  filter?: ContractFilter | null
+  transformation?: ContractTransformation | null
+  rateLimit?: ContractRateLimit | null
+  ordering?: ContractOrdering | null
+}
+
 export interface Contract {
   id: string
   customerId: string
@@ -21,7 +66,7 @@ export interface Contract {
   name?: string | null
 }
 
-export interface ContractDetail {
+export interface ContractDetail extends ContractOptions {
   id: string
   customerId: string
   enabled: boolean
@@ -44,7 +89,7 @@ export interface ContractListQuery {
   pageSize: number
 }
 
-export interface CreateContractRequest {
+export interface CreateContractRequest extends ContractOptions {
   customerId: string
   eventTypes: string[]
   name?: string | null
@@ -63,6 +108,22 @@ export type UpdateContractRequest = CreateContractRequest
 export interface ContractDetailResponse {
   contract: ContractDetail
   etag: string | null
+}
+
+export interface ContractTestEventRequest {
+  type: string
+  payload: Record<string, unknown>
+  metadata: Record<string, string>
+}
+
+export interface ContractTestPreview {
+  matches: boolean
+  reason: string
+}
+
+export interface ContractTestSend {
+  eventId: string
+  deliveryId: string
 }
 
 export interface DeliveryListItem {
@@ -317,6 +378,11 @@ export async function createContract(request: CreateContractRequest) {
     eventTypes: request.eventTypes,
     configuration: mapDestinationToApi(destination),
     name: request.name ?? null,
+    schemaTargets: request.schemaTargets ?? null,
+    filter: request.filter ?? null,
+    transformation: request.transformation ?? null,
+    rateLimit: request.rateLimit ?? null,
+    ordering: request.ordering ?? null,
   })
 }
 
@@ -336,6 +402,14 @@ export async function getContractById(
   }
 }
 
+export async function previewContractTestEvent(id: string, request: ContractTestEventRequest) {
+  return apiPost<ContractTestPreview>(`/v1/contracts/${encodeURIComponent(id)}/test/preview`, request)
+}
+
+export async function sendContractTestEvent(id: string, request: ContractTestEventRequest) {
+  return apiPost<ContractTestSend>(`/v1/contracts/${encodeURIComponent(id)}/test/send`, request)
+}
+
 export async function replaceContract(
   id: string,
   etag: string,
@@ -349,6 +423,11 @@ export async function replaceContract(
       name: request.name ?? null,
       eventTypes: request.eventTypes,
       configuration: mapDestinationToApi(destination),
+      schemaTargets: request.schemaTargets ?? null,
+      filter: request.filter ?? null,
+      transformation: request.transformation ?? null,
+      rateLimit: request.rateLimit ?? null,
+      ordering: request.ordering ?? null,
     },
     {
       headers: {

@@ -151,6 +151,11 @@ export function ContractDetailPage() {
           <Button asChild variant="soft">
             <NavLink to="/contracts">Back to list</NavLink>
           </Button>
+          <Button asChild variant="soft">
+            <NavLink to={`/test-events?contractId=${encodeURIComponent(contract.id)}`}>
+              Test event
+            </NavLink>
+          </Button>
           <Button
             variant="soft"
             onClick={() => navigate(`/contracts/${encodeURIComponent(contract.id)}/edit`)}
@@ -248,6 +253,28 @@ export function ContractDetailPage() {
               Disable
             </Button>
           </Flex>
+        </Flex>
+      </Card>
+
+      <Card>
+        <Flex direction="column" gap="3">
+          <Heading size="4">Advanced contract settings</Heading>
+          {([
+            ['Schema targets', contract.schemaTargets],
+            ['Filters', contract.filter],
+            ['Payload transformation', contract.transformation],
+            ['Rate limit', contract.rateLimit],
+            ['Ordering', contract.ordering],
+          ] as const).map(([label, value]) => (
+            <Flex direction="column" gap="1" key={label}>
+              <Text size="2" weight="medium">{label}</Text>
+              <Text size="2" color="gray" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                {value == null || (Array.isArray(value) && !value.length)
+                  ? 'Not configured'
+                  : JSON.stringify(value, null, 2)}
+              </Text>
+            </Flex>
+          ))}
         </Flex>
       </Card>
 

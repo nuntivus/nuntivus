@@ -25,6 +25,7 @@ namespace KairoServer.Application.Contracts
         private readonly IAuditLogRepository _auditLogs;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IDestinationConfigDispatcher _destinations;
+        private readonly IDestinationConfigUpdateResolver _destinationUpdates;
         private readonly IAppLogger<ContractService> _logger;
 
         public ContractService(
@@ -34,6 +35,7 @@ namespace KairoServer.Application.Contracts
             IAuditLogRepository auditLogs,
             IUnitOfWork unitOfWork,
             IDestinationConfigDispatcher destinations,
+            IDestinationConfigUpdateResolver destinationUpdates,
             IAppLogger<ContractService> logger)
         {
             _repository = repository;
@@ -42,6 +44,7 @@ namespace KairoServer.Application.Contracts
             _auditLogs = auditLogs;
             _unitOfWork = unitOfWork;
             _destinations = destinations;
+            _destinationUpdates = destinationUpdates;
             _logger = logger;
         }
 
@@ -451,10 +454,6 @@ namespace KairoServer.Application.Contracts
             if (orderingValidation.IsFailure)
                 return Result<ContractView>.Fail(orderingValidation.Errors);
 
-            var destinationResult = _destinations.Build(request.Configuration);
-            if (destinationResult.IsFailure)
-                return Result<ContractView>.Fail(destinationResult.Errors);
-
             try
             {
                 var lookup = await _repository.GetByIdAsync(id, cancellationToken);
@@ -467,6 +466,14 @@ namespace KairoServer.Application.Contracts
 
                 if (existing.UpdatedAt != expectedUpdatedAt)
                     return Result.Failure<ContractView>(Error.Conflict("If-Match ETag does not match current contract version."));
+
+                var resolvedConfiguration = _destinationUpdates.Resolve(request.Configuration, existing.Destination);
+                if (resolvedConfiguration.IsFailure)
+                    return Result<ContractView>.Fail(resolvedConfiguration.Errors);
+
+                var destinationResult = _destinations.Build(resolvedConfiguration.Value);
+                if (destinationResult.IsFailure)
+                    return Result<ContractView>.Fail(destinationResult.Errors);
 
                 var now = DateTimeOffset.UtcNow;
                 var domainSchemaTargets = new List<ContractSchemaTarget>(schemaTargets.Count);
@@ -630,10 +637,6 @@ namespace KairoServer.Application.Contracts
             if (request?.Configuration is null)
                 return Result.Failure<ContractView>(Error.Validation("Destination configuration is required."));
 
-            var destinationResult = _destinations.Build(request.Configuration);
-            if (destinationResult.IsFailure)
-                return Result<ContractView>.Fail(destinationResult.Errors);
-
             try
             {
                 var lookup = await _repository.GetByIdAsync(id, cancellationToken);
@@ -643,6 +646,10 @@ namespace KairoServer.Application.Contracts
                 var contract = lookup.Value;
                 if (contract is null)
                     return Result.Failure<ContractView>(Error.NotFound($"Contract '{id}' was not found."));
+
+                var destinationResult = _destinations.Build(request.Configuration);
+                if (destinationResult.IsFailure)
+                    return Result<ContractView>.Fail(destinationResult.Errors);
 
                 var destinationToApply = destinationResult.Value;
                 if (rotate)

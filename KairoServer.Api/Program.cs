@@ -9,6 +9,7 @@ using KairoServer.Application.Deliveries.Queries;
 using KairoServer.Application.Deliveries.Recovery;
 using KairoServer.Application.Events;
 using KairoServer.Application.Events.Queries;
+using KairoServer.Application.Matching;
 using KairoServer.Application.Persistence;
 using KairoServer.Application.Security;
 using KairoServer.Application.Settings;
@@ -164,7 +165,8 @@ builder.Services.AddCors(options =>
                 return parsedOrigin.IsLoopback;
             })
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .WithExposedHeaders("ETag");
     });
 });
 
@@ -343,7 +345,10 @@ builder.Services.AddScoped<ISourceIngestionService, SourceIngestionService>();
 builder.Services.AddScoped<IEventDefinitionService, EventDefinitionService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContractService, ContractService>();
+builder.Services.AddScoped<IContractTestEventService, ContractTestEventService>();
 builder.Services.AddScoped<IDashboardOverviewQueryService, DashboardOverviewQueryService>();
+builder.Services.AddSingleton<IContractFilterEvaluator, ContractFilterEvaluator>();
+builder.Services.AddScoped<IDashboardTimeSeriesQueryService, PostgresDashboardTimeSeriesQueryService>();
 builder.Services.AddScoped<IAuditLogQueryService, AuditLogQueryService>();
 builder.Services.AddScoped<ICustomerAdminSummaryQueryService, CustomerAdminSummaryQueryService>();
 builder.Services.AddScoped<IContractAdminSummaryQueryService, ContractAdminSummaryQueryService>();
@@ -371,6 +376,7 @@ builder.Services.AddSingleton<IDestinationConfigHandler, NatsDestinationConfigHa
 builder.Services.AddSingleton<IDestinationConfigHandler, RabbitMqDestinationConfigHandler>();
 builder.Services.AddSingleton<IDestinationConfigHandler, SqsDestinationConfigHandler>();
 builder.Services.AddSingleton<IDestinationConfigDispatcher, DestinationConfigDispatcher>();
+builder.Services.AddSingleton<IDestinationConfigUpdateResolver, DestinationConfigUpdateResolver>();
 
 var app = builder.Build();
 

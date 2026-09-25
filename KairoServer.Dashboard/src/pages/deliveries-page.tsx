@@ -16,14 +16,7 @@ import { hasPermission } from '../auth/permissions'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
 import { useDeliveriesQuery } from '../features/deliveries/use-deliveries'
-import { useLocalUserPreferences } from '../features/settings/local-user-preferences'
-import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
-import {
-  deleteSavedView,
-  getSavedViews,
-  upsertSavedView,
-} from '../features/saved-views/saved-views-storage'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type {
   DeliveryListItem,
@@ -49,16 +42,10 @@ function isFailedOrRetrying(item: DeliveryListItem) {
 
 export function DeliveriesPage() {
   const { searchParams, setSearchParams, updateParams } = useUrlQueryParams()
-  const confirm = useConfirmDialog()
   const { currentUser } = useAppSelector((state) => state.auth)
-  const { preferences } = useLocalUserPreferences(currentUser?.subject)
-  const [savedViewsVersion, setSavedViewsVersion] = useState(0)
-  const [selectedSavedViewId, setSelectedSavedViewId] = useState('')
-  const [savedViewName, setSavedViewName] = useState('')
 
   const canReadDeliveries = hasPermission(currentUser, 'deliveries.read')
-  const defaultPageSize =
-    preferences.tablePageSizes.deliveries || preferences.defaultPageSize
+  const defaultPageSize = 20
 
   const eventIdParam = searchParams.get('eventId') ?? ''
   const customerIdParam = searchParams.get('customerId') ?? ''
@@ -78,11 +65,6 @@ export function DeliveriesPage() {
   const [eventIdInput, setEventIdInput] = useState(eventIdParam)
   const [customerIdInput, setCustomerIdInput] = useState(customerIdParam)
   const [contractIdInput, setContractIdInput] = useState(contractIdParam)
-
-  const savedViews = useMemo(() => {
-    void savedViewsVersion
-    return getSavedViews(currentUser?.subject, 'deliveries')
-  }, [currentUser?.subject, savedViewsVersion])
 
   const query = useMemo<DeliveryListQuery>(
     () => ({
@@ -114,64 +96,6 @@ export function DeliveriesPage() {
   )
 
   const deliveriesQuery = useDeliveriesQuery(query)
-
-  function handleSaveCurrentView() {
-    if (!currentUser?.subject || !savedViewName.trim()) {
-      return
-    }
-
-    const next = upsertSavedView(currentUser.subject, 'deliveries', {
-      name: savedViewName.trim(),
-      query: searchParams.toString(),
-    })
-
-    if (next) {
-      setSavedViewsVersion((value) => value + 1)
-    }
-    setSavedViewName('')
-  }
-
-  function handleApplySavedView() {
-    if (!selectedSavedViewId) {
-      return
-    }
-
-    const selected = savedViews.find((item) => item.id === selectedSavedViewId)
-    if (!selected) {
-      return
-    }
-
-    setSearchParams(new URLSearchParams(selected.query))
-  }
-
-  async function handleDeleteSavedView() {
-    if (!currentUser?.subject || !selectedSavedViewId) {
-      return
-    }
-
-    const selected = savedViews.find((item) => item.id === selectedSavedViewId)
-    if (!selected) {
-      return
-    }
-
-    const confirmed = await confirm({
-      title: 'Delete saved view',
-      description: `Delete saved view "${selected.name}"?`,
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
-      confirmColor: 'red',
-    })
-
-    if (!confirmed) {
-      return
-    }
-
-    const next = deleteSavedView(currentUser.subject, 'deliveries', selectedSavedViewId)
-    if (next) {
-      setSavedViewsVersion((value) => value + 1)
-    }
-    setSelectedSavedViewId('')
-  }
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -341,45 +265,6 @@ export function DeliveriesPage() {
               </Button>
             </Flex>
 
-            <Flex direction="column" gap="2">
-              <Text size="2" color="gray">Saved views</Text>
-              <Flex wrap="wrap" gap="2" align="center">
-                <Select.Root value={selectedSavedViewId} onValueChange={setSelectedSavedViewId}>
-                  <Select.Trigger placeholder="Choose saved view" aria-label="Saved views" />
-                  <Select.Content>
-                    {savedViews.map((view) => (
-                      <Select.Item key={view.id} value={view.id}>
-                        {view.name}
-                      </Select.Item>
-                    ))}
-                  </Select.Content>
-                </Select.Root>
-                <Button type="button" variant="soft" onClick={handleApplySavedView}>
-                  Apply saved view
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  color="red"
-                  onClick={() => {
-                    void handleDeleteSavedView()
-                  }}
-                >
-                  Delete
-                </Button>
-              </Flex>
-              <Flex wrap="wrap" gap="2" align="center">
-                <TextField.Root
-                  aria-label="Saved view name"
-                  placeholder="Save current filters as..."
-                  value={savedViewName}
-                  onChange={(event) => setSavedViewName(event.target.value)}
-                />
-                <Button type="button" onClick={handleSaveCurrentView}>
-                  Save current view
-                </Button>
-              </Flex>
-            </Flex>
           </Flex>
         </form>
       </Card>
@@ -428,7 +313,7 @@ export function DeliveriesPage() {
           >
             <>
               <div className="responsive-table">
-                <Table.Root size={preferences.denseTables ? '1' : '2'} aria-label="Deliveries table">
+                <Table.Root size="2" aria-label="Deliveries table">
                   <Table.Header>
                     <Table.Row>
                       <Table.ColumnHeaderCell>ID</Table.ColumnHeaderCell>

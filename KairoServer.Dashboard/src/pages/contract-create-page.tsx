@@ -12,6 +12,8 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
 import { getServerValidation } from '../components/forms/form-validation'
+import { ContractOptionsForm } from '../features/contracts/contract-options-form'
+import { backendConfigToFormState, formStateToBackendConfig, validateAdvancedContractOptions } from '../features/contracts/contract-options'
 import { DestinationConfigurationForm } from '../features/contracts/destination-forms/destination-configuration-form'
 import {
   createDefaultDestinationFormState,
@@ -52,6 +54,8 @@ export function ContractCreatePage() {
   const [selectedEventType, setSelectedEventType] = useState('')
   const [newEventType, setNewEventType] = useState('')
   const [destination, setDestination] = useState(createDefaultDestinationFormState())
+  const [optionsDraft, setOptionsDraft] = useState(() => backendConfigToFormState())
+  const [rawEditing, setRawEditing] = useState<string[]>([])
   const [step, setStep] = useState<0 | 1 | 2>(0)
   const [basicsAttempted, setBasicsAttempted] = useState(false)
   const [destinationAttempted, setDestinationAttempted] = useState(false)
@@ -63,6 +67,7 @@ export function ContractCreatePage() {
   const customerError = !customerId ? 'Customer is required.' : null
   const eventTypeError = !eventType ? 'Event type is required.' : null
   const destinationError = validateDestinationFormState(destination)
+  const optionErrors = validateAdvancedContractOptions(optionsDraft, eventType ? [eventType] : [])
 
   const destinationSummary = (() => {
     switch (destination.type) {
@@ -83,6 +88,11 @@ export function ContractCreatePage() {
     event.preventDefault()
 
     if (!canWriteContracts || createMutation.isPending) {
+      return
+    }
+
+    if (step === 2 && (rawEditing.length || Object.keys(optionErrors).length)) {
+      setSubmitError('Correct the advanced contract options before creating the contract.')
       return
     }
 
@@ -114,6 +124,7 @@ export function ContractCreatePage() {
         name: name.trim() || null,
         eventTypes: [eventType],
         destination: mapDestinationFormToConfig(destination),
+        ...formStateToBackendConfig(optionsDraft),
         url: '',
         authenticationType: 'none',
       })
@@ -222,6 +233,7 @@ export function ContractCreatePage() {
             {step === 2 ? (
               <>
                 <Heading size="4">Review contract</Heading>
+                <ContractOptionsForm value={optionsDraft} onChange={setOptionsDraft} eventTypes={eventType ? [eventType] : []} disabled={createMutation.isPending} onRawEditingChange={(key, editing) => setRawEditing((current) => editing ? [...current.filter((item) => item !== key), key] : current.filter((item) => item !== key))} />
                 <Text size="2" color="gray">Confirm the details before creating the contract. Credentials are not shown.</Text>
                 <Card>
                   <Flex direction="column" gap="2">
@@ -246,14 +258,14 @@ export function ContractCreatePage() {
                 <NavLink to="/contracts">Cancel</NavLink>
               </Button>
               {step > 0 ? (
-                <Button type="button" variant="soft" color="gray" onClick={() => {
+                <Button type="button" variant="soft" color="gray" disabled={rawEditing.length > 0} onClick={() => {
                   setSubmitError(null)
                   setStep(step === 2 ? 1 : 0)
                 }}>
                   Back
                 </Button>
               ) : null}
-              <Button type="submit" disabled={createMutation.isPending}>
+              <Button type="submit" disabled={createMutation.isPending || (step === 2 && (rawEditing.length > 0 || Object.keys(optionErrors).length > 0))}>
                 {createMutation.isPending ? 'Creating…' : step === 2 ? 'Create contract' : 'Next'}
               </Button>
             </Flex>

@@ -9,6 +9,21 @@ export interface DashboardOverview {
   totalDeadDeliveries: number
 }
 
+export interface DashboardTimeBucket {
+  start: string
+  events: number
+  deliveries: number
+  delivered: number
+  failed: number
+  dead: number
+}
+
+export interface DashboardTimeSeries {
+  asOf: string
+  rangeSeconds: number
+  buckets: DashboardTimeBucket[]
+}
+
 export interface EventListItem {
   id: string
   idempotencyKey: string
@@ -33,6 +48,10 @@ export interface FailedDeliveryItem {
 
 export async function getDashboardOverview(options?: ApiRequestOptions) {
   return apiGet<DashboardOverview>('/v1/admin/overview', undefined, options)
+}
+
+export async function getDashboardTimeSeries(rangeSeconds: number, options?: ApiRequestOptions) {
+  return apiGet<DashboardTimeSeries>('/v1/admin/overview/timeseries', { rangeSeconds }, options)
 }
 
 export async function getSuccessfulDeliveriesCount(options?: ApiRequestOptions) {

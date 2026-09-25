@@ -89,6 +89,33 @@ namespace KairoServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Admin_users_list_returns_users_with_and_without_roles()
+        {
+            using var client = _fixture.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Test-Auth", "on");
+            client.DefaultRequestHeaders.Add("X-Test-Role", "Admin");
+
+            var createResponse = await client.PutAsJsonAsync(
+                "/v1/admin/users/ops-user/roles",
+                new ReplaceAdminUserRolesRequest("Ops User", new[] { "Viewer", "Operator" }));
+            Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            await conn.OpenAsync();
+            await conn.ExecuteAsync(
+                "INSERT INTO admin_users(subject, display_name, created_at, updated_at) VALUES (@subject, @displayName, @now, @now);",
+                new { subject = "no-roles", displayName = "No Roles", now = DateTimeOffset.UtcNow });
+
+            var response = await client.GetAsync("/v1/admin/users");
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var users = await response.Content.ReadFromJsonAsync<AdminUserRoleAssignmentResponse[]>();
+            Assert.NotNull(users);
+            Assert.Equal(new[] { "Operator", "Viewer" }, Assert.Single(users!, user => user.Subject == "ops-user").Roles);
+            Assert.Empty(Assert.Single(users, user => user.Subject == "no-roles").Roles);
+        }
+
+        [Fact]
         public async Task Admin_user_roles_replace_returns_forbidden_for_non_admin()
         {
             using var client = _fixture.CreateClient();

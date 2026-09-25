@@ -1,11 +1,15 @@
 using System;
 using System.Globalization;
 using System.Security.Claims;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using KairoServer.Api.Common;
+using KairoServer.Api.Controllers.Events;
 using KairoServer.Api.Security;
 using KairoServer.Application.Contracts;
+using KairoServer.Application.Matching;
+using KairoServer.Common;
 using KairoServer.Common.Logging;
 using KairoServer.Contracts.CustomerContracts;
 using Microsoft.AspNetCore.Authorization;
@@ -20,14 +24,58 @@ namespace KairoServer.Api.Controllers.Contracts
     public class ContractsController : Controller
     {
         private readonly IContractService _contracts;
+        private readonly IContractTestEventService _testEvents;
+        private readonly IEventPublishRequestValidator _eventValidator;
         private readonly IAppLogger<ContractsController> _logger;
 
         public ContractsController(
             IContractService contracts,
+            IContractTestEventService testEvents,
+            IEventPublishRequestValidator eventValidator,
             IAppLogger<ContractsController> logger)
         {
             _contracts = contracts;
+            _testEvents = testEvents;
+            _eventValidator = eventValidator;
             _logger = logger;
+        }
+
+        [HttpPost("{id:guid}/test/preview")]
+        public async Task<IActionResult> PreviewTestEvent(
+            Guid id,
+            [FromBody] ContractTestEventRequest request,
+            CancellationToken cancellationToken)
+        {
+            var validation = ValidateTestEvent(id, request);
+            if (validation.IsFailure)
+                return new BadRequestObjectResult(ApiErrorResponse.From(validation.Errors, HttpContext));
+
+            return (await _testEvents.PreviewAsync(id, request, cancellationToken)).ToOk(HttpContext);
+        }
+
+        [HttpPost("{id:guid}/test/send")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
+        public async Task<IActionResult> SendTestEvent(
+            Guid id,
+            [FromBody] ContractTestEventRequest request,
+            CancellationToken cancellationToken)
+        {
+            var validation = ValidateTestEvent(id, request);
+            if (validation.IsFailure)
+                return new BadRequestObjectResult(ApiErrorResponse.From(validation.Errors, HttpContext));
+
+            return (await _testEvents.SendAsync(id, request, GetActorId() ?? string.Empty, cancellationToken))
+                .ToOk(HttpContext);
+        }
+
+        private Result ValidateTestEvent(Guid id, ContractTestEventRequest request)
+        {
+            if (request is null || request.Payload.ValueKind != JsonValueKind.Object)
+                return Result.Failure(Error.Validation("payload must be a JSON object."));
+
+            return _eventValidator.Validate(new PublishEventRequest(
+                "test", request.Type, id.ToString("D"), DateTimeOffset.UtcNow,
+                request.Metadata, request.Payload));
         }
 
         [HttpPost]

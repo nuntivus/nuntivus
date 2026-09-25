@@ -12,6 +12,8 @@ import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
 import { getServerValidation } from '../components/forms/form-validation'
+import { ContractOptionsForm } from '../features/contracts/contract-options-form'
+import { backendConfigToFormState, formStateToBackendConfig, validateAdvancedContractOptions } from '../features/contracts/contract-options'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
 import { useUnsavedChangesGuard } from '../hooks/use-unsaved-changes-guard'
@@ -28,13 +30,47 @@ import {
   useReplaceContractMutation,
 } from '../features/contracts/use-contracts'
 import { getApiErrorMessage } from '../services/api/api-client'
-import type { DestinationType } from '../services/api/contracts-api'
+import type { ContractOptions, DestinationType } from '../services/api/contracts-api'
 import { useAppSelector } from '../store/hooks'
 
 type EditorInitialState = {
   name: string
   eventTypesInput: string
   destination: DestinationFormState
+  destinationConfiguration: string
+  options: ContractOptions
+}
+
+function normalizeConfigurationKey(key: string): string {
+  const words = key
+    .replace(/[_\s-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .trim()
+    .split(' ')
+    .filter((word) => word.length > 0)
+
+  if (words.length === 0) {
+    return key
+  }
+
+  return words
+    .map((word, index) =>
+      index === 0
+        ? word.toLowerCase()
+        : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
+    )
+    .join('')
+}
+
+function normalizeConfiguration(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeConfiguration)
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
+      normalizeConfigurationKey(key), normalizeConfiguration(entry),
+    ]))
+  }
+  return value
 }
 
 function parseEventTypes(value: string) {
@@ -87,7 +123,7 @@ function parseDestinationConfiguration(
   const base = createDefaultDestinationFormState(destinationType)
 
   try {
-    const parsed = JSON.parse(configurationText) as {
+    const parsed = normalizeConfiguration(JSON.parse(configurationText)) as {
       type?: string
       url?: string
       authentication?: {
@@ -339,9 +375,12 @@ function ContractEditorForm({
   const [name, setName] = useState(initial.name)
   const [eventTypesInput, setEventTypesInput] = useState(initial.eventTypesInput)
   const [destination, setDestination] = useState(initial.destination)
+  const [optionsDraft, setOptionsDraft] = useState(() => backendConfigToFormState(initial.options))
+  const [rawEditing, setRawEditing] = useState<string[]>([])
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const eventTypes = useMemo(() => parseEventTypes(eventTypesInput), [eventTypesInput])
+  const optionErrors = useMemo(() => validateAdvancedContractOptions(optionsDraft, eventTypes), [optionsDraft, eventTypes])
 
   const fieldErrors = useMemo(() => {
     const errors: Record<string, string> = {}
@@ -350,13 +389,17 @@ function ContractEditorForm({
       errors.eventTypes = 'At least one event type is required.'
     }
 
+    if (Object.keys(optionErrors).length) {
+      errors.options = 'Correct the advanced contract options before saving.'
+    }
+
     const destinationError = validateDestinationFormState(destination)
     if (destinationError) {
       errors.destination = destinationError
     }
 
     return errors
-  }, [destination, eventTypes.length])
+  }, [destination, eventTypes.length, optionErrors])
 
   const hasValidationError = Object.keys(fieldErrors).length > 0
 
@@ -365,12 +408,14 @@ function ContractEditorForm({
       name: name.trim(),
       eventTypes,
       destination: mapDestinationFormToConfig(destination),
+      options: optionsDraft,
     })
 
     const initialSnapshot = JSON.stringify({
       name: initial.name.trim(),
       eventTypes: parseEventTypes(initial.eventTypesInput),
       destination: mapDestinationFormToConfig(initial.destination),
+      options: backendConfigToFormState(initial.options),
     })
 
     return currentSnapshot !== initialSnapshot
@@ -380,15 +425,17 @@ function ContractEditorForm({
     initial.destination,
     initial.eventTypesInput,
     initial.name,
+    initial.options,
     name,
+    optionsDraft,
   ])
 
-  useUnsavedChangesGuard({ when: dirty })
+  useUnsavedChangesGuard({ when: dirty || rawEditing.length > 0 })
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteContracts || replaceMutation.isPending || hasValidationError) {
+    if (!canWriteContracts || replaceMutation.isPending || hasValidationError || rawEditing.length > 0) {
       return
     }
 
@@ -410,13 +457,37 @@ function ContractEditorForm({
     setSubmitError(null)
 
     try {
+      const destinationConfig = mapDestinationFormToConfig(destination)
+      const storedDestination = normalizeConfiguration(JSON.parse(initial.destinationConfiguration)) as Record<string, unknown>
+      const mergedDestination = destinationConfig.type === initial.destination.type.toLowerCase()
+        ? {
+            ...storedDestination,
+            ...destinationConfig,
+            ...('credentials' in destinationConfig && destinationConfig.credentials
+              ? { credentials: { ...(storedDestination.credentials as Record<string, unknown> ?? {}), ...destinationConfig.credentials } }
+              : {}),
+            ...(destinationConfig.type === 'http'
+              ? {
+                  headers: storedDestination.headers,
+                  timeoutSeconds: storedDestination.timeoutSeconds,
+                }
+              : {}),
+          }
+        : destinationConfig
+      if (destinationConfig.type === 'http' && mergedDestination.type === 'http') {
+        delete (mergedDestination as Record<string, unknown>).secretHeaders
+      }
+      const destinationPayload = destinationConfig.type === 'http'
+        ? { ...mergedDestination, authenticationType: destinationConfig.authenticationType, credential: destinationConfig.credential }
+        : mergedDestination
       const result = await replaceMutation.mutateAsync({
         etag,
         payload: {
           customerId,
           name: name.trim() || null,
           eventTypes,
-          destination: mapDestinationFormToConfig(destination),
+          destination: destinationPayload as typeof destinationConfig,
+          ...formStateToBackendConfig(optionsDraft),
           url: '',
           authenticationType: 'none',
         },
@@ -479,10 +550,8 @@ function ContractEditorForm({
             onChange={setDestination}
           />
           <FieldErrorText id="contract-edit-destination-error" message={fieldErrors.destination} />
-
-          <Text size="2" color="gray">
-            Filters and transformations editing will be added in a later iteration.
-          </Text>
+          <ContractOptionsForm value={optionsDraft} onChange={setOptionsDraft} eventTypes={eventTypes} disabled={!canWriteContracts || replaceMutation.isPending} onRawEditingChange={(key, editing) => setRawEditing((current) => editing ? [...current.filter((item) => item !== key), key] : current.filter((item) => item !== key))} />
+          <FieldErrorText id="contract-edit-options-error" message={fieldErrors.options} />
 
           <FormErrorText
             id="contract-edit-submit-error"
@@ -497,7 +566,7 @@ function ContractEditorForm({
           <Flex gap="2">
             <Button
               type="submit"
-              disabled={!canWriteContracts || replaceMutation.isPending || hasValidationError || !dirty}
+              disabled={!canWriteContracts || replaceMutation.isPending || hasValidationError || rawEditing.length > 0 || !dirty}
             >
               {replaceMutation.isPending ? 'Saving...' : 'Save changes'}
             </Button>
@@ -560,7 +629,9 @@ export function ContractEditPage() {
     return (
       <Card>
         <Text size="2" color="red">
-          {getApiErrorMessage(detailQuery.error, 'Unable to load contract for editing.')}
+          {detailQuery.isError
+            ? getApiErrorMessage(detailQuery.error, 'Unable to load contract for editing.')
+            : 'The contract ETag is unavailable. Check that the API exposes the ETag response header.'}
         </Text>
       </Card>
     )
@@ -585,6 +656,14 @@ export function ContractEditPage() {
           name: contract.name ?? '',
           eventTypesInput: contract.eventTypes.join(', '),
           destination,
+          destinationConfiguration: contract.destinationConfiguration,
+          options: {
+            schemaTargets: contract.schemaTargets,
+            filter: contract.filter,
+            transformation: contract.transformation,
+            rateLimit: contract.rateLimit,
+            ordering: contract.ordering,
+          },
         }}
       />
     </Flex>

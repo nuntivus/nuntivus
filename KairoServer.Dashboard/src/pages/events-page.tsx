@@ -17,14 +17,7 @@ import { ListFeedback } from '../components/lists/list-feedback'
 import { SearchIcon } from '../components/icons/nav-icons'
 import { ListPagination } from '../components/lists/list-pagination'
 import { useEventsQuery } from '../features/events/use-events'
-import { useLocalUserPreferences } from '../features/settings/local-user-preferences'
-import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
-import {
-  deleteSavedView,
-  getSavedViews,
-  upsertSavedView,
-} from '../features/saved-views/saved-views-storage'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { DeliveryListItem, EventListQuery } from '../services/api/events-api'
 import { useAppSelector } from '../store/hooks'
@@ -89,15 +82,10 @@ function summarizeDeliveries(deliveries: DeliveryListItem[]) {
 
 export function EventsPage() {
   const { searchParams, setSearchParams, updateParams } = useUrlQueryParams()
-  const confirm = useConfirmDialog()
   const { currentUser } = useAppSelector((state) => state.auth)
-  const { preferences } = useLocalUserPreferences(currentUser?.subject)
-  const [savedViewsVersion, setSavedViewsVersion] = useState(0)
-  const [selectedSavedViewId, setSelectedSavedViewId] = useState('')
-  const [savedViewName, setSavedViewName] = useState('')
 
   const canReadEvents = hasPermission(currentUser, 'events.read')
-  const defaultPageSize = preferences.tablePageSizes.events || preferences.defaultPageSize
+  const defaultPageSize = 20
 
   const idParam = searchParams.get('id') ?? ''
   const typeParam = searchParams.get('type') ?? ''
@@ -117,11 +105,6 @@ export function EventsPage() {
   const [idInput, setIdInput] = useState(idParam)
   const [typeInput, setTypeInput] = useState(typeParam)
   const [sourceInput, setSourceInput] = useState(sourceParam)
-
-  const savedViews = useMemo(() => {
-    void savedViewsVersion
-    return getSavedViews(currentUser?.subject, 'events')
-  }, [currentUser?.subject, savedViewsVersion])
 
   const query = useMemo<EventListQuery>(
     () => ({
@@ -151,64 +134,6 @@ export function EventsPage() {
   )
 
   const eventsQuery = useEventsQuery(query)
-
-  function handleSaveCurrentView() {
-    if (!currentUser?.subject || !savedViewName.trim()) {
-      return
-    }
-
-    const next = upsertSavedView(currentUser.subject, 'events', {
-      name: savedViewName.trim(),
-      query: searchParams.toString(),
-    })
-
-    if (next) {
-      setSavedViewsVersion((value) => value + 1)
-    }
-    setSavedViewName('')
-  }
-
-  function handleApplySavedView() {
-    if (!selectedSavedViewId) {
-      return
-    }
-
-    const selected = savedViews.find((item) => item.id === selectedSavedViewId)
-    if (!selected) {
-      return
-    }
-
-    setSearchParams(new URLSearchParams(selected.query))
-  }
-
-  async function handleDeleteSavedView() {
-    if (!currentUser?.subject || !selectedSavedViewId) {
-      return
-    }
-
-    const selected = savedViews.find((item) => item.id === selectedSavedViewId)
-    if (!selected) {
-      return
-    }
-
-    const confirmed = await confirm({
-      title: 'Delete saved view',
-      description: `Delete saved view "${selected.name}"?`,
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
-      confirmColor: 'red',
-    })
-
-    if (!confirmed) {
-      return
-    }
-
-    const next = deleteSavedView(currentUser.subject, 'events', selectedSavedViewId)
-    if (next) {
-      setSavedViewsVersion((value) => value + 1)
-    }
-    setSelectedSavedViewId('')
-  }
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -422,60 +347,6 @@ export function EventsPage() {
               </Select.Root>
             </div>
 
-            <hr className="filter-divider" />
-
-            <div className="saved-views-bar">
-              <span className="saved-views-label">Saved views</span>
-              <Select.Root
-                size="2"
-                value={selectedSavedViewId}
-                onValueChange={setSelectedSavedViewId}
-              >
-                <Select.Trigger placeholder="Choose view" aria-label="Saved views" />
-                <Select.Content>
-                  {savedViews.map((view) => (
-                    <Select.Item key={view.id} value={view.id}>
-                      {view.name}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-              <Button
-                type="button"
-                size="2"
-                variant="soft"
-                color="gray"
-                onClick={handleApplySavedView}
-              >
-                Apply
-              </Button>
-              {selectedSavedViewId ? (
-                <Button
-                  type="button"
-                  size="2"
-                  variant="ghost"
-                  color="red"
-                  onClick={() => {
-                    void handleDeleteSavedView()
-                  }}
-                >
-                  Delete
-                </Button>
-              ) : null}
-
-              <div className="saved-views-grow" />
-
-              <TextField.Root
-                size="2"
-                aria-label="Saved view name"
-                placeholder="Save current filters as…"
-                value={savedViewName}
-                onChange={(event) => setSavedViewName(event.target.value)}
-              />
-              <Button type="button" size="2" onClick={handleSaveCurrentView}>
-                Save view
-              </Button>
-            </div>
           </div>
         </form>
       </Card>
@@ -524,7 +395,7 @@ export function EventsPage() {
           >
             <>
               <div className="responsive-table">
-                <Table.Root size={preferences.denseTables ? '1' : '2'} aria-label="Events table">
+                <Table.Root size="2" aria-label="Events table">
                   <Table.Header>
                     <Table.Row>
                       <Table.ColumnHeaderCell>ID</Table.ColumnHeaderCell>
