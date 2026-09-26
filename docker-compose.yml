@@ -1,34 +1,34 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: kairo-postgres
+    container_name: nuntivus-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: kairo
+      POSTGRES_DB: nuntivus
     ports:
       - "5432:5432"
     volumes:
-      - kairo-postgres-data:/var/lib/postgresql/data
+      - nuntivus-postgres-data:/var/lib/postgresql/data
       # SQL files in /docker-entrypoint-initdb.d run on first start, in name order.
       - ./001_create_events.sql:/docker-entrypoint-initdb.d/001_create_events.sql:ro
       - ./002_create_outbox_messages.sql:/docker-entrypoint-initdb.d/002_create_outbox_messages.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d kairo"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nuntivus"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   nats:
     image: nats:2.10-alpine
-    container_name: kairo-nats
+    container_name: nuntivus-nats
     # -js enables JetStream, -sd points to the persistent store, -m exposes monitoring.
     command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
       - "4222:4222"   # client
       - "8222:8222"   # monitoring
     volumes:
-      - kairo-nats-data:/data
+      - nuntivus-nats-data:/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
       interval: 5s
@@ -38,7 +38,7 @@ services:
   # One-shot container that provisions the JetStream stream once NATS is healthy.
   nats-init:
     image: natsio/nats-box:latest
-    container_name: kairo-nats-init
+    container_name: nuntivus-nats-init
     depends_on:
       nats:
         condition: service_healthy
@@ -46,7 +46,7 @@ services:
     command:
       - |
         set -e
-        nats --server nats://nats:4222 stream add KAIRO_EVENTS \
+        nats --server nats://nats:4222 stream add NUNTIVUS_EVENTS \
           --subjects "event.>" \
           --storage file \
           --retention limits \
@@ -58,29 +58,29 @@ services:
           --max-msg-size=-1 \
           --dupe-window=2m \
           --defaults || \
-        nats --server nats://nats:4222 stream info KAIRO_EVENTS
+        nats --server nats://nats:4222 stream info NUNTIVUS_EVENTS
     restart: "no"
 
   api:
     build:
       context: .
-      dockerfile: KairoServer.Api/Dockerfile
-    container_name: kairo-api
+      dockerfile: NuntivusServer.Api/Dockerfile
+    container_name: nuntivus-api
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=kairo;Username=postgres;Password=postgres"
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=nuntivus;Username=postgres;Password=postgres"
     ports:
       - "8080:8080"
 
   worker:
     build:
       context: .
-      dockerfile: KairoServer.Worker/Dockerfile
-    container_name: kairo-worker
+      dockerfile: NuntivusServer.Worker/Dockerfile
+    container_name: nuntivus-worker
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,10 +90,10 @@ services:
         condition: service_completed_successfully
     environment:
       DOTNET_ENVIRONMENT: Development
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=kairo;Username=postgres;Password=postgres"
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=nuntivus;Username=postgres;Password=postgres"
       Nats__Url: "nats://nats:4222"
-      Nats__Stream: "KAIRO_EVENTS"
+      Nats__Stream: "NUNTIVUS_EVENTS"
 
 volumes:
-  kairo-postgres-data:
-  kairo-nats-data:
+  nuntivus-postgres-data:
+  nuntivus-nats-data:

@@ -1,13 +1,13 @@
 # Restore Guide
 
-Use this guide to restore Kairo from PostgreSQL and JetStream backups.
+Use this guide to restore Nuntivus from PostgreSQL and JetStream backups.
 
 ## Fast path (recommended)
 
 From repository root:
 
 ```powershell
-./scripts/ops.ps1 restore -DbDumpPath backups/<timestamp>/kairo-postgres-<timestamp>.sql -JetStreamDumpPath backups/<timestamp>/kairo-jetstream-<timestamp>.tgz
+./scripts/ops.ps1 restore -DbDumpPath backups/<timestamp>/nuntivus-postgres-<timestamp>.sql -JetStreamDumpPath backups/<timestamp>/nuntivus-jetstream-<timestamp>.tgz
 ```
 
 The script stops dependent services, restores Postgres and JetStream, restarts the stack, and waits for API readiness.
@@ -24,7 +24,7 @@ Replace `<dump-file>` with your backup file.
 
 ```bash
 cat <dump-file> | docker compose --env-file .env -f docker-compose.prod.yml exec -T postgres \
-  pg_restore -U "$KAIRO_POSTGRES_USER" -d "$KAIRO_POSTGRES_DB" --clean --if-exists --no-owner --no-privileges
+  pg_restore -U "$NUNTIVUS_POSTGRES_USER" -d "$NUNTIVUS_POSTGRES_DB" --clean --if-exists --no-owner --no-privileges
 ```
 
 ## 3. Restore JetStream volume
@@ -36,10 +36,10 @@ cat <dump-file> | docker compose --env-file .env -f docker-compose.prod.yml exec
 ```bash
 docker compose --env-file .env -f docker-compose.prod.yml stop nats
 
-docker run --rm -v kairo-nats-data:/data alpine sh -c 'rm -rf /data/*'
+docker run --rm -v nuntivus-nats-data:/data alpine sh -c 'rm -rf /data/*'
 
 docker run --rm \
-  -v kairo-nats-data:/data \
+  -v nuntivus-nats-data:/data \
   -v "${PWD}:/backup" \
   alpine sh -c 'cd /data && tar xzf /backup/<jetstream-backup-file>.tgz'
 ```

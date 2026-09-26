@@ -1,12 +1,12 @@
 # Admin API Authentication and RBAC
 
-Kairo admin endpoints (`/v1/admin/*`) are protected by JWT authentication and role-based authorization.
+Nuntivus admin endpoints (`/v1/admin/*`) are protected by JWT authentication and role-based authorization.
 
 ## Authentication architecture decision
 
-Kairo uses external identity-provider issued access tokens (OIDC/OAuth2) validated by the API with JWT bearer authentication.
+Nuntivus uses external identity-provider issued access tokens (OIDC/OAuth2) validated by the API with JWT bearer authentication.
 
-- Kairo does not implement local username/password login.
+- Nuntivus does not implement local username/password login.
 - Session lifetime, re-authentication, and token issuance are owned by the identity provider.
 - Frontend authorization checks are UX-only; backend authorization remains the security boundary.
 
@@ -25,13 +25,13 @@ Using environment variables:
 Example:
 
 ```bash
-Authentication__Authority=https://login.example.com/realms/kairo
-Authentication__Audience=kairo-api
+Authentication__Authority=https://login.example.com/realms/nuntivus
+Authentication__Audience=nuntivus-api
 ```
 
 ## Roles and policies
 
-Kairo defines these admin roles:
+Nuntivus defines these admin roles:
 
 - `Viewer`
 - `Operator`
@@ -66,8 +66,8 @@ Issuer/audience behavior:
 
 ## Frontend bootstrap auth contract
 
-Kairo exposes `GET /v1/auth/me` for dashboard session bootstrap.
-Kairo also exposes admin-scoped RBAC bootstrap endpoints:
+Nuntivus exposes `GET /v1/auth/me` for dashboard session bootstrap.
+Nuntivus also exposes admin-scoped RBAC bootstrap endpoints:
 
 - `GET /v1/admin/users/me`
 - `GET /v1/admin/roles`

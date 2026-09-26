@@ -1,18 +1,18 @@
-<img width="2172" height="724" alt="Kairo Event" src="https://github.com/user-attachments/assets/4736401d-056f-4b5d-b536-bafac2f48e71" />
+<img width="2172" height="724" alt="Nuntivus Event" src="https://github.com/user-attachments/assets/4736401d-056f-4b5d-b536-bafac2f48e71" />
 
-# ✈️ Kairo Server
+# ✈️ Nuntivus Server
 
 **Self-hosted customer event infrastructure for SaaS and platform teams.**
 
-> **Publish once. Define each customer's event contract. Kairo handles the rest.**
+> **Publish once. Define each customer's event contract. Nuntivus handles the rest.**
 
-Kairo Server is the core backend of **Kairo Event**.
+Nuntivus Server is the core backend of **Nuntivus Event**.
 
-Kairo helps SaaS and platform teams define, deliver, evolve, and operate the events they expose to customers and external systems.
+Nuntivus helps SaaS and platform teams define, deliver, evolve, and operate the events they expose to customers and external systems.
 
 Applications publish business events once.
 
-Kairo manages how each customer consumes them:
+Nuntivus manages how each customer consumes them:
 
 * which events they receive
 * which schema and version they use
@@ -25,11 +25,11 @@ Kairo manages how each customer consumes them:
 * schema migrations and deprecations
 * operational impact when something changes or fails
 
-Kairo is designed to become the **customer event control plane** between your applications and the systems operated by your customers and partners.
+Nuntivus is designed to become the **customer event control plane** between your applications and the systems operated by your customers and partners.
 
 ---
 
-## Why Kairo?
+## Why Nuntivus?
 
 Customer-facing event delivery often starts simple:
 
@@ -99,17 +99,17 @@ It becomes:
 
 > How do we manage the event contract between our platform and every customer?
 
-Kairo provides that infrastructure.
+Nuntivus provides that infrastructure.
 
 Your applications publish business events.
 
-Kairo owns the customer-facing event lifecycle.
+Nuntivus owns the customer-facing event lifecycle.
 
 ---
 
 # Core Idea
 
-Kairo separates the event produced by your application from the way each customer consumes it.
+Nuntivus separates the event produced by your application from the way each customer consumes it.
 
 ```text
                     INTERNAL SYSTEMS
@@ -119,7 +119,7 @@ Kairo separates the event produced by your application from the way each custome
                          │ order.created
                          ▼
                     ┌─────────┐
-                    │  Kairo  │
+                    │  Nuntivus  │
                     └────┬────┘
                          │
                   Canonical Event
@@ -146,7 +146,7 @@ The producer does not need to know:
 * their rate limit
 * their authentication method
 
-Kairo owns that contract.
+Nuntivus owns that contract.
 
 ---
 
@@ -175,7 +175,7 @@ Delivery
 
 ## Source
 
-A **Source** represents where an event enters Kairo.
+A **Source** represents where an event enters Nuntivus.
 
 Examples:
 
@@ -191,11 +191,11 @@ SQS
 
 Different sources can use different protocols.
 
-Once accepted, incoming data is normalized into Kairo's internal event model.
+Once accepted, incoming data is normalized into Nuntivus's internal event model.
 
-Sources exist to bring business events into Kairo.
+Sources exist to bring business events into Nuntivus.
 
-Kairo is not intended to become a general-purpose integration or anything-to-anything routing platform.
+Nuntivus is not intended to become a general-purpose integration or anything-to-anything routing platform.
 
 ---
 
@@ -280,7 +280,7 @@ order.created
      └── v3
 ```
 
-Kairo can use these relationships to understand:
+Nuntivus can use these relationships to understand:
 
 * which customers consume each version
 * which contracts depend on a schema
@@ -313,7 +313,7 @@ ACME
 └── Invoices
 ```
 
-This customer-centric model allows Kairo to answer operational questions such as:
+This customer-centric model allows Nuntivus to answer operational questions such as:
 
 ```text
 What events does ACME consume?
@@ -333,7 +333,7 @@ Which incidents currently affect ACME?
 
 A **Contract** defines how one customer consumes one or more event types.
 
-This is the central concept in Kairo.
+This is the central concept in Nuntivus.
 
 A contract may define:
 
@@ -439,7 +439,7 @@ The application still publishes only:
 order.created
 ```
 
-Kairo handles the difference.
+Nuntivus handles the difference.
 
 ---
 
@@ -485,9 +485,9 @@ Umbrella   SQS      → delivered
 
 # Runtime Delivery
 
-Kairo is still a reliable event delivery engine.
+Nuntivus is still a reliable event delivery engine.
 
-A customer contract is useful only if Kairo can execute it reliably.
+A customer contract is useful only if Nuntivus can execute it reliably.
 
 The runtime is responsible for:
 
@@ -535,7 +535,7 @@ with additional protocols added over time.
 
 Customer-facing events evolve.
 
-Kairo should help teams evolve them without losing track of external consumers.
+Nuntivus should help teams evolve them without losing track of external consumers.
 
 Example:
 
@@ -548,7 +548,7 @@ v3 → current
 v4 → proposed
 ```
 
-Before publishing `v4`, Kairo can determine:
+Before publishing `v4`, Nuntivus can determine:
 
 ```text
 Affected contracts: 48
@@ -573,7 +573,7 @@ without manually searching documentation, source code, queues, or spreadsheets.
 
 # Version Migration
 
-Kairo tracks which customers still depend on older versions.
+Nuntivus tracks which customers still depend on older versions.
 
 Example:
 
@@ -611,9 +611,9 @@ Only when all active contracts have migrated can the platform safely retire the 
 
 # Impact Analysis
 
-Kairo connects static configuration with runtime behavior.
+Nuntivus connects static configuration with runtime behavior.
 
-If a schema, destination, broker, event definition, or policy changes, Kairo should be able to determine the affected customers.
+If a schema, destination, broker, event definition, or policy changes, Nuntivus should be able to determine the affected customers.
 
 Example:
 
@@ -686,7 +686,7 @@ Status:
 SLO violated
 ```
 
-Kairo can correlate SLO violations with:
+Nuntivus can correlate SLO violations with:
 
 ```text
 destination failures
@@ -704,7 +704,7 @@ This turns delivery telemetry into customer-level operational information.
 
 # Customer Operations
 
-Instead of showing only infrastructure metrics, Kairo should provide a customer-centric operational view.
+Instead of showing only infrastructure metrics, Nuntivus should provide a customer-centric operational view.
 
 Example:
 
@@ -733,7 +733,7 @@ When support receives:
 
 > We didn't receive order `ord_123`.
 
-Kairo should allow the operator to reconstruct exactly what happened.
+Nuntivus should allow the operator to reconstruct exactly what happened.
 
 ```text
 Event
@@ -768,7 +768,7 @@ Total latency
 
 # Safe Replay
 
-Kairo allows operators to replay historical events.
+Nuntivus allows operators to replay historical events.
 
 Replay can be scoped by:
 
@@ -825,7 +825,7 @@ Umbrella    continues
 Wayne       continues
 ```
 
-Kairo is designed around customer-aware:
+Nuntivus is designed around customer-aware:
 
 ```text
 rate limiting
@@ -846,7 +846,7 @@ A SaaS platform publishes:
 order.created
 ```
 
-Kairo handles:
+Nuntivus handles:
 
 ```text
                            Order Service
@@ -857,7 +857,7 @@ Kairo handles:
                                 │
                                 ▼
                          ┌────────────┐
-                         │   Kairo    │
+                         │   Nuntivus    │
                          └──────┬─────┘
                                 │
                          Canonical Event
@@ -878,13 +878,13 @@ Kairo handles:
 
 The Order Service knows none of these customer-specific details.
 
-That is Kairo's responsibility.
+That is Nuntivus's responsibility.
 
 ---
 
-# What Problem Does Kairo Solve?
+# What Problem Does Nuntivus Solve?
 
-Without Kairo, SaaS and platform teams often accumulate:
+Without Nuntivus, SaaS and platform teams often accumulate:
 
 ```text
 webhook workers
@@ -922,14 +922,14 @@ customer-specific integration code
 
 Over time, the company has accidentally built its own customer event platform.
 
-Kairo centralizes that responsibility.
+Nuntivus centralizes that responsibility.
 
 ```text
 Application
     │
     │ business event
     ▼
-  Kairo
+  Nuntivus
     │
     ├── contract → ACME
     ├── contract → Globex
@@ -941,11 +941,11 @@ Application
 
 # Positioning
 
-Kairo focuses on:
+Nuntivus focuses on:
 
 > **The contract between a platform's business events and the customers that consume them.**
 
-Kairo combines:
+Nuntivus combines:
 
 ```text
 Event Catalog
@@ -967,9 +967,9 @@ The goal is to allow platforms to safely operate and evolve customer-facing even
 
 ---
 
-# What Kairo Is Not
+# What Nuntivus Is Not
 
-Kairo is not intended to be:
+Nuntivus is not intended to be:
 
 * a Kafka replacement
 * a general-purpose message broker
@@ -980,7 +980,7 @@ Kairo is not intended to be:
 * a generic API gateway
 * an arbitrary anything-to-anything integration engine
 
-Kairo focuses specifically on the boundary between:
+Nuntivus focuses specifically on the boundary between:
 
 ```text
 your platform
@@ -1001,7 +1001,7 @@ customers / partners / external consumers
                             │
                             ▼
                    ┌─────────────────┐
-                   │    Kairo API    │
+                   │    Nuntivus API    │
                    │   ASP.NET Core  │
                    └────────┬────────┘
                             │
@@ -1129,7 +1129,7 @@ operational dashboards
 
 # Delivery Guarantees
 
-Kairo uses **at-least-once processing**.
+Nuntivus uses **at-least-once processing**.
 
 An accepted event should not disappear because a:
 
@@ -1159,19 +1159,19 @@ Telemetry     OpenTelemetry
 Deployment    Docker / Docker Compose
 ```
 
-The Kairo dashboard is maintained separately from the server runtime.
+The Nuntivus dashboard is maintained separately from the server runtime.
 
 ---
 
 # Self-Hosting
 
-Kairo is designed to be self-hosted from the beginning.
+Nuntivus is designed to be self-hosted from the beginning.
 
 A minimal deployment consists of:
 
 ```text
-Kairo API
-Kairo Worker
+Nuntivus API
+Nuntivus Worker
 PostgreSQL
 NATS JetStream
 ```
@@ -1203,7 +1203,7 @@ retry workers
 SLO processors
 ```
 
-without changing the Kairo programming model.
+without changing the Nuntivus programming model.
 
 ---
 
@@ -1214,11 +1214,11 @@ Do not commit production secrets to `appsettings*.json`.
 
 ## Destination credential encryption key
 
-Kairo requires `DestinationCredentials:EncryptionKey` (base64, exactly 32 bytes) for protected destination credentials.
+Nuntivus requires `DestinationCredentials:EncryptionKey` (base64, exactly 32 bytes) for protected destination credentials.
 
 This setting is validated at startup for API and Worker.
 
-- Prefer environment variable `KAIRO_DESTINATION_CREDENTIALS_KEY` in production.
+- Prefer environment variable `NUNTIVUS_DESTINATION_CREDENTIALS_KEY` in production.
 - Rotate this key through your secret manager and rollout process.
 - Keep non-production keys isolated per environment.
 
@@ -1238,20 +1238,20 @@ This setting is validated at startup for API and Worker.
 
 ## Configuration model and startup validation
 
-Kairo API and Worker use typed configuration sections (`Database`, `Nats`, `Worker`, `Delivery`, `DeliveryDispatcher`, `DeliveryOrdering`, `RetentionCleanup`, `EndpointSecurity`, `DestinationCredentials`, `Cache`, `HostOptions`) and validate them during startup.
+Nuntivus API and Worker use typed configuration sections (`Database`, `Nats`, `Worker`, `Delivery`, `DeliveryDispatcher`, `DeliveryOrdering`, `RetentionCleanup`, `EndpointSecurity`, `DestinationCredentials`, `Cache`, `HostOptions`) and validate them during startup.
 
-Supported `KAIRO_*` env mappings include:
+Supported `NUNTIVUS_*` env mappings include:
 
-- `KAIRO_DATABASE_CONNECTION_STRING` -> `Database:PostgresConnectionString`
-- `KAIRO_POSTGRES_CONNECTION_STRING` -> `Database:PostgresConnectionString`
-- `KAIRO_DESTINATION_CREDENTIALS_KEY` -> `DestinationCredentials:EncryptionKey`
-- `KAIRO_NATS_URL` -> `Nats:Url`
-- `KAIRO_NATS_STREAM` -> `Nats:Stream`
-- `KAIRO_NATS_SUBJECTS` -> `Nats:Subjects`
-- `KAIRO_OTLP_ENDPOINT` -> `OpenTelemetry:OtlpEndpoint`
-- `KAIRO_SHUTDOWN_TIMEOUT_SECONDS` -> `HostOptions:ShutdownTimeout`
-- `KAIRO_DATABASE_MIGRATIONS_MODE` -> `DatabaseMigrations:Mode`
-- `KAIRO_DATABASE_MIGRATIONS_PATH` -> `DatabaseMigrations:MigrationsPath`
+- `NUNTIVUS_DATABASE_CONNECTION_STRING` -> `Database:PostgresConnectionString`
+- `NUNTIVUS_POSTGRES_CONNECTION_STRING` -> `Database:PostgresConnectionString`
+- `NUNTIVUS_DESTINATION_CREDENTIALS_KEY` -> `DestinationCredentials:EncryptionKey`
+- `NUNTIVUS_NATS_URL` -> `Nats:Url`
+- `NUNTIVUS_NATS_STREAM` -> `Nats:Stream`
+- `NUNTIVUS_NATS_SUBJECTS` -> `Nats:Subjects`
+- `NUNTIVUS_OTLP_ENDPOINT` -> `OpenTelemetry:OtlpEndpoint`
+- `NUNTIVUS_SHUTDOWN_TIMEOUT_SECONDS` -> `HostOptions:ShutdownTimeout`
+- `NUNTIVUS_DATABASE_MIGRATIONS_MODE` -> `DatabaseMigrations:Mode`
+- `NUNTIVUS_DATABASE_MIGRATIONS_PATH` -> `DatabaseMigrations:MigrationsPath`
 
 ---
 
@@ -1299,9 +1299,9 @@ contract:
 Future CLI workflows may include:
 
 ```bash
-kairo validate
-kairo diff
-kairo apply
+nuntivus validate
+nuntivus diff
+nuntivus apply
 ```
 
 The goal is to make customer event contracts reviewable, versioned, and reproducible.
@@ -1311,15 +1311,15 @@ The goal is to make customer event contracts reviewable, versioned, and reproduc
 # Project Structure
 
 ```text
-kairo-server/
+nuntivus-server/
 │
 ├── src/
-│   ├── Kairo.Api/
-│   ├── Kairo.Worker/
-│   ├── Kairo.Application/
-│   ├── Kairo.Domain/
-│   ├── Kairo.Infrastructure/
-│   └── Kairo.Contracts/
+│   ├── Nuntivus.Api/
+│   ├── Nuntivus.Worker/
+│   ├── Nuntivus.Application/
+│   ├── Nuntivus.Domain/
+│   ├── Nuntivus.Infrastructure/
+│   └── Nuntivus.Contracts/
 │
 ├── tests/
 │
@@ -1336,22 +1336,22 @@ The backend follows a modular architecture with vertical application slices and 
 
 # Related Projects
 
-The Kairo Event ecosystem may include separate repositories for:
+The Nuntivus Event ecosystem may include separate repositories for:
 
 ```text
-kairo-server       Core control plane and delivery runtime
-kairo-dashboard    Web administration interface
-kairo-sdk-dotnet   .NET SDK
-kairo-sdk-js       JavaScript / TypeScript SDK
-kairo-cli          Command-line and GitOps tooling
-kairo-docs         Documentation
+nuntivus-server       Core control plane and delivery runtime
+nuntivus-dashboard    Web administration interface
+nuntivus-sdk-dotnet   .NET SDK
+nuntivus-sdk-js       JavaScript / TypeScript SDK
+nuntivus-cli          Command-line and GitOps tooling
+nuntivus-docs         Documentation
 ```
 
 ---
 
 # Vision
 
-Kairo aims to become the infrastructure layer SaaS and platform companies use to manage customer-facing events.
+Nuntivus aims to become the infrastructure layer SaaS and platform companies use to manage customer-facing events.
 
 Instead of every application knowing:
 
@@ -1367,7 +1367,7 @@ which SLO
 
 applications publish business events once.
 
-Kairo manages the external contract.
+Nuntivus manages the external contract.
 
 ```text
 Publish
@@ -1381,13 +1381,13 @@ Observe
 Evolve
 ```
 
-> **Define how every customer consumes your events. Kairo handles delivery, reliability, and evolution.**
+> **Define how every customer consumes your events. Nuntivus handles delivery, reliability, and evolution.**
 
 ---
 
 # Idempotency Guarantees
 
-Kairo uses **at-least-once processing** across pipeline stages and enforces deterministic outcomes for duplicates.
+Nuntivus uses **at-least-once processing** across pipeline stages and enforces deterministic outcomes for duplicates.
 
 ## Ingestion (`POST /events`)
 
@@ -1425,7 +1425,7 @@ These guarantees provide repeat-safe behavior under retries, redeliveries, and o
 
 ## Failure-Recovery Coverage (Chaos Integration)
 
-Kairo's integration suite validates at-least-once durability and safe recovery under controlled failure injection:
+Nuntivus's integration suite validates at-least-once durability and safe recovery under controlled failure injection:
 
 | Failure mode | Expected guarantee |
 | --- | --- |
@@ -1445,7 +1445,7 @@ These tests exercise crash/restart/outage behavior directly and verify the core 
 # Status
 
 > [!WARNING]
-> Kairo is currently in early development and is **not yet production ready**.
+> Nuntivus is currently in early development and is **not yet production ready**.
 
 APIs, schemas, configuration, domain concepts, and architecture may change before the first stable release.
 
@@ -1453,6 +1453,6 @@ APIs, schemas, configuration, domain concepts, and architecture may change befor
 
 # License
 
-Kairo Event is source-available and self-hostable.
+Nuntivus Event is source-available and self-hostable.
 
 See [`LICENSE`](LICENSE) for the terms that apply to the current version.

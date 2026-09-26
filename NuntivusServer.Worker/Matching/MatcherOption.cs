@@ -1,0 +1,59 @@
+using System;
+
+namespace NuntivusServer.Worker.Matching
+{
+    /// <summary>
+    /// Configuration for the contract matcher JetStream consumer loop.
+    /// </summary>
+    public sealed class MatcherOption
+    {
+        public string WorkerName { get; set; } = "contract-matcher";
+
+        /// <summary>
+        /// Durable consumer name shared by all matcher worker replicas so
+        /// JetStream distributes messages across them.
+        /// </summary>
+        public string DurableName { get; set; } = "contract-matcher";
+
+        /// <summary>
+        /// Subject filter for the durable consumer.
+        /// </summary>
+        public string FilterSubject { get; set; } = "event.accepted";
+
+        /// <summary>
+        /// Maximum messages per pull-fetch batch.
+        /// </summary>
+        public int BatchSize { get; set; } = 32;
+
+        /// <summary>
+        /// Maximum number of messages processed in parallel per worker instance.
+        /// </summary>
+        public int MaxConcurrentMessages { get; set; } = 8;
+
+        /// <summary>
+        /// Maximum time a fetch waits for messages before returning empty.
+        /// </summary>
+        public TimeSpan FetchTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
+        /// <summary>
+        /// Backoff applied to <c>NAK</c> so failed messages are redelivered
+        /// after a short delay instead of tight-looping.
+        /// </summary>
+        public TimeSpan NakDelay { get; set; } = TimeSpan.FromSeconds(2);
+
+        /// <summary>
+        /// JetStream <c>MaxAckPending</c> cap for the durable consumer.
+        /// </summary>
+        public int MaxAckPending { get; set; } = 1000;
+
+        /// <summary>
+        /// Time JetStream waits for an ACK before automatic redelivery.
+        /// </summary>
+        public TimeSpan AckWait { get; set; } = TimeSpan.FromSeconds(30);
+
+        /// <summary>
+        /// Maximum times JetStream will redeliver the same message before poison handling.
+        /// </summary>
+        public int MaxDeliver { get; set; } = 10;
+    }
+}

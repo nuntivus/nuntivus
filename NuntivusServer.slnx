@@ -1,0 +1,26 @@
+<Solution>
+  <Folder Name="/doc/">
+    <File Path="../../../Desktop/architecture .png" />
+    <File Path="../../../Desktop/technically flow.png" />
+  </Folder>
+  <Folder Name="/migration/">
+    <File Path="migration/001_initial_schema.sql" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path="../../../Desktop/AI_CONTEXT.md" />
+    <File Path="../../README.md" />
+  </Folder>
+  <Project Path="NuntivusServer.Api/NuntivusServer.Api.csproj" />
+  <Project Path="NuntivusServer.Application/NuntivusServer.Application.csproj" />
+  <Project Path="NuntivusServer.Common/NuntivusServer.Common.csproj" Id="cb9b9f49-5153-447f-a7b1-dd8c89f2f0de" />
+  <Project Path="NuntivusServer.Contracts/NuntivusServer.Contracts.csproj" />
+  <Project Path="NuntivusServer.Dashboard/nuntivusserver.dashboard.esproj">
+    <Build />
+    <Deploy />
+  </Project>
+  <Project Path="NuntivusServer.Domain/NuntivusServer.Domain.csproj" />
+  <Project Path="NuntivusServer.Infastructure/NuntivusServer.Infastructure.csproj" />
+  <Project Path="NuntivusServer.IntegrationTests/NuntivusServer.IntegrationTests.csproj" />
+  <Project Path="NuntivusServer.UnitTests/NuntivusServer.UnitTests.csproj" />
+  <Project Path="NuntivusServer.Worker/NuntivusServer.Worker.csproj" />
+</Solution>

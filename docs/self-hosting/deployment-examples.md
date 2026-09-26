@@ -17,11 +17,11 @@ Recommended VM baseline:
 - 4+ GB RAM
 - SSD storage for persistent volumes
 
-## Example 2: Reverse proxy + Kairo API
+## Example 2: Reverse proxy + Nuntivus API
 
 Expose only API through a reverse proxy (Nginx/Caddy/Traefik):
 
-- proxy external HTTPS traffic to `kairo-api:8080`
+- proxy external HTTPS traffic to `nuntivus-api:8080`
 - keep Postgres and NATS internal/private
 
 ## Example 3: Scale worker replicas
@@ -47,5 +47,5 @@ If using managed PostgreSQL:
 If using external NATS/JetStream:
 
 - remove/disable `nats` service in your deployment overlay
-- set `KAIRO_NATS_URL` to external URL
+- set `NUNTIVUS_NATS_URL` to external URL
 - ensure stream name/subjects match worker configuration

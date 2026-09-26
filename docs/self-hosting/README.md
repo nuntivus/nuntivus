@@ -1,6 +1,6 @@
 # Self-Hosting Operations
 
-This directory contains production self-hosting operational guides for Kairo.
+This directory contains production self-hosting operational guides for Nuntivus.
 
 Quick automation script:
 

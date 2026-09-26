@@ -1,6 +1,6 @@
 # Delivery Ordering Guarantee
 
-Kairo delivery processing is at-least-once for all contracts.
+Nuntivus delivery processing is at-least-once for all contracts.
 
 For contracts with ordering enabled:
 

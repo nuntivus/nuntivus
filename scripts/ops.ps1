@@ -19,7 +19,7 @@ $ErrorActionPreference = "Stop"
 
 function Write-Info([string]$Message)
 {
-	Write-Host "[kairo-ops] $Message"
+	Write-Host "[nuntivus-ops] $Message"
 }
 
 function Get-RequiredEnvValue([hashtable]$Map, [string]$Key, [string]$Default = "")
@@ -136,18 +136,18 @@ function Wait-ApiReady([int]$Port)
 	throw "API readiness check did not pass at $uri after $attempts attempts."
 }
 
-function Invoke-KairoBackup
+function Invoke-NuntivusBackup
 {
 	$envMap = Get-EnvMap -Path $EnvFile
-	$dbUser = Get-RequiredEnvValue -Map $envMap -Key "KAIRO_POSTGRES_USER"
-	$dbName = Get-RequiredEnvValue -Map $envMap -Key "KAIRO_POSTGRES_DB"
-	$currentTag = Get-RequiredEnvValue -Map $envMap -Key "KAIRO_IMAGE_TAG" -Default "latest"
+	$dbUser = Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_POSTGRES_USER"
+	$dbName = Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_POSTGRES_DB"
+	$currentTag = Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_IMAGE_TAG" -Default "latest"
 
 	$timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 	$backupDir = Join-Path $BackupRoot $timestamp
 	New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
 
-	$dbDumpName = "kairo-postgres-$timestamp.sql"
+	$dbDumpName = "nuntivus-postgres-$timestamp.sql"
 	$dbDumpPath = Join-Path $backupDir $dbDumpName
 
 	Write-Info "Creating PostgreSQL backup..."
@@ -161,12 +161,12 @@ function Invoke-KairoBackup
 
 	Invoke-Compose @("exec", "-T", "postgres", "sh", "-ec", "rm -f /tmp/$dbDumpName")
 
-	$jetStreamDumpName = "kairo-jetstream-$timestamp.tgz"
+	$jetStreamDumpName = "nuntivus-jetstream-$timestamp.tgz"
 	$jetStreamDumpPath = Join-Path $backupDir $jetStreamDumpName
 	$resolvedBackupDir = (Resolve-Path -LiteralPath $backupDir).Path
 
 	Write-Info "Creating JetStream backup..."
-	& docker run --rm -v "kairo-nats-data:/data" -v "${resolvedBackupDir}:/backup" alpine sh -ec "cd /data && tar czf /backup/$jetStreamDumpName ."
+	& docker run --rm -v "nuntivus-nats-data:/data" -v "${resolvedBackupDir}:/backup" alpine sh -ec "cd /data && tar czf /backup/$jetStreamDumpName ."
 	if ($LASTEXITCODE -ne 0)
 	{
 		throw "Failed to create JetStream volume archive."
@@ -199,7 +199,7 @@ function Invoke-KairoBackup
 	return $backupDir
 }
 
-function Invoke-KairoRestore
+function Invoke-NuntivusRestore
 {
 	if ([string]::IsNullOrWhiteSpace($DbDumpPath) -or [string]::IsNullOrWhiteSpace($JetStreamDumpPath))
 	{
@@ -217,36 +217,36 @@ function Invoke-KairoRestore
 	}
 
 	$envMap = Get-EnvMap -Path $EnvFile
-	$dbUser = Get-RequiredEnvValue -Map $envMap -Key "KAIRO_POSTGRES_USER"
-	$dbName = Get-RequiredEnvValue -Map $envMap -Key "KAIRO_POSTGRES_DB"
-	$apiPort = [int](Get-RequiredEnvValue -Map $envMap -Key "KAIRO_API_PORT" -Default "8080")
+	$dbUser = Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_POSTGRES_USER"
+	$dbName = Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_POSTGRES_DB"
+	$apiPort = [int](Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_API_PORT" -Default "8080")
 
 	Write-Info "Stopping API/worker/NATS before restore..."
 	Invoke-Compose @("stop", "api", "worker", "nats")
 
 	Write-Info "Restoring PostgreSQL..."
 	$postgresContainer = Get-ComposeContainerId -Service "postgres"
-	& docker cp "$DbDumpPath" "$postgresContainer`:/tmp/kairo-restore.sql"
+	& docker cp "$DbDumpPath" "$postgresContainer`:/tmp/nuntivus-restore.sql"
 	if ($LASTEXITCODE -ne 0)
 	{
 		throw "Failed to copy SQL restore file into PostgreSQL container."
 	}
 
-	Invoke-Compose @("exec", "-T", "postgres", "sh", "-ec", "psql -U '$dbUser' -d '$dbName' -v ON_ERROR_STOP=1 -f /tmp/kairo-restore.sql")
-	Invoke-Compose @("exec", "-T", "postgres", "sh", "-ec", "rm -f /tmp/kairo-restore.sql")
+	Invoke-Compose @("exec", "-T", "postgres", "sh", "-ec", "psql -U '$dbUser' -d '$dbName' -v ON_ERROR_STOP=1 -f /tmp/nuntivus-restore.sql")
+	Invoke-Compose @("exec", "-T", "postgres", "sh", "-ec", "rm -f /tmp/nuntivus-restore.sql")
 
 	Write-Info "Restoring JetStream volume..."
 	$resolvedJetStreamPath = (Resolve-Path -LiteralPath $JetStreamDumpPath).Path
 	$jetStreamParent = Split-Path -Path $resolvedJetStreamPath -Parent
 	$jetStreamFile = Split-Path -Path $resolvedJetStreamPath -Leaf
 
-	& docker run --rm -v "kairo-nats-data:/data" alpine sh -ec "rm -rf /data/*"
+	& docker run --rm -v "nuntivus-nats-data:/data" alpine sh -ec "rm -rf /data/*"
 	if ($LASTEXITCODE -ne 0)
 	{
 		throw "Failed to clear JetStream volume before restore."
 	}
 
-	& docker run --rm -v "kairo-nats-data:/data" -v "${jetStreamParent}:/backup" alpine sh -ec "cd /data && tar xzf /backup/$jetStreamFile"
+	& docker run --rm -v "nuntivus-nats-data:/data" -v "${jetStreamParent}:/backup" alpine sh -ec "cd /data && tar xzf /backup/$jetStreamFile"
 	if ($LASTEXITCODE -ne 0)
 	{
 		throw "Failed to extract JetStream archive."
@@ -259,7 +259,7 @@ function Invoke-KairoRestore
 	Write-Info "Restore completed successfully."
 }
 
-function Invoke-KairoUpgrade
+function Invoke-NuntivusUpgrade
 {
 	if ([string]::IsNullOrWhiteSpace($Tag))
 	{
@@ -267,17 +267,17 @@ function Invoke-KairoUpgrade
 	}
 
 	$envMap = Get-EnvMap -Path $EnvFile
-	$previousTag = Get-RequiredEnvValue -Map $envMap -Key "KAIRO_IMAGE_TAG" -Default "latest"
-	$apiPort = [int](Get-RequiredEnvValue -Map $envMap -Key "KAIRO_API_PORT" -Default "8080")
+	$previousTag = Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_IMAGE_TAG" -Default "latest"
+	$apiPort = [int](Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_API_PORT" -Default "8080")
 
 	if (-not $SkipBackup)
 	{
 		Write-Info "Running pre-upgrade backup..."
-		$null = Invoke-KairoBackup
+		$null = Invoke-NuntivusBackup
 	}
 
-	Write-Info "Updating KAIRO_IMAGE_TAG from '$previousTag' to '$Tag'"
-	Set-EnvValue -Path $EnvFile -Key "KAIRO_IMAGE_TAG" -Value $Tag
+	Write-Info "Updating NUNTIVUS_IMAGE_TAG from '$previousTag' to '$Tag'"
+	Set-EnvValue -Path $EnvFile -Key "NUNTIVUS_IMAGE_TAG" -Value $Tag
 
 	try
 	{
@@ -293,52 +293,52 @@ function Invoke-KairoUpgrade
 	catch
 	{
 		Write-Info "Upgrade failed. Rolling back to tag '$previousTag'..."
-		Set-EnvValue -Path $EnvFile -Key "KAIRO_IMAGE_TAG" -Value $previousTag
+		Set-EnvValue -Path $EnvFile -Key "NUNTIVUS_IMAGE_TAG" -Value $previousTag
 		Invoke-Compose @("up", "-d")
 		throw
 	}
 }
 
-function Invoke-KairoRun
+function Invoke-NuntivusRun
 {
 	$envMap = Get-EnvMap -Path $EnvFile
-	$apiPort = [int](Get-RequiredEnvValue -Map $envMap -Key "KAIRO_API_PORT" -Default "8080")
+	$apiPort = [int](Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_API_PORT" -Default "8080")
 
-	Write-Info "Starting Kairo production stack..."
+	Write-Info "Starting Nuntivus production stack..."
 	Invoke-Compose @("up", "-d")
 	Wait-ApiReady -Port $apiPort
 
-	Write-Info "Kairo stack is running."
+	Write-Info "Nuntivus stack is running."
 }
 
-function Invoke-KairoStop
+function Invoke-NuntivusStop
 {
-	Write-Info "Stopping Kairo production stack..."
+	Write-Info "Stopping Nuntivus production stack..."
 	Invoke-Compose @("down")
 
-	Write-Info "Kairo stack stopped."
+	Write-Info "Nuntivus stack stopped."
 }
 
 switch ($Action)
 {
 	"backup"
 	{
-		Invoke-KairoBackup | Out-Null
+		Invoke-NuntivusBackup | Out-Null
 	}
 	"restore"
 	{
-		Invoke-KairoRestore
+		Invoke-NuntivusRestore
 	}
 	"upgrade"
 	{
-		Invoke-KairoUpgrade
+		Invoke-NuntivusUpgrade
 	}
 	"run"
 	{
-		Invoke-KairoRun
+		Invoke-NuntivusRun
 	}
 	"stop"
 	{
-		Invoke-KairoStop
+		Invoke-NuntivusStop
 	}
 }

@@ -1,9 +1,0 @@
-using KairoServer.Contracts.Events;
-
-namespace KairoServer.Api.Controllers.Events
-{
-    public sealed record CreateEventSchemaVersionRequest(
-        int Version,
-        string Schema,
-        SchemaCompatibilityMode CompatibilityMode);
-}

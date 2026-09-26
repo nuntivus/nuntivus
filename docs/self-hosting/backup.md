@@ -20,7 +20,7 @@ Output:
 ## 1. What to back up
 
 - PostgreSQL logical backup (`pg_dump`)
-- JetStream file store (`kairo-nats-data` volume)
+- JetStream file store (`nuntivus-nats-data` volume)
 - `.env` (stored securely outside the host)
 
 ## 2. PostgreSQL backup
@@ -31,7 +31,7 @@ Run from the repository root:
 mkdir -p backups
 
 docker compose --env-file .env -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U "$KAIRO_POSTGRES_USER" -d "$KAIRO_POSTGRES_DB" -Fc > "backups/kairo-postgres-$(date +%F-%H%M%S).dump"
+  pg_dump -U "$NUNTIVUS_POSTGRES_USER" -d "$NUNTIVUS_POSTGRES_DB" -Fc > "backups/nuntivus-postgres-$(date +%F-%H%M%S).dump"
 ```
 
 ## 3. JetStream backup (volume archive)
@@ -40,9 +40,9 @@ docker compose --env-file .env -f docker-compose.prod.yml exec -T postgres \
 mkdir -p backups
 
 docker run --rm \
-  -v kairo-nats-data:/data \
+  -v nuntivus-nats-data:/data \
   -v "${PWD}/backups:/backup" \
-  alpine sh -c 'cd /data && tar czf /backup/kairo-jetstream-$(date +%F-%H%M%S).tgz .'
+  alpine sh -c 'cd /data && tar czf /backup/nuntivus-jetstream-$(date +%F-%H%M%S).tgz .'
 ```
 
 ## 4. Backup verification

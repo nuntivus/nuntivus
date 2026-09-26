@@ -19,22 +19,22 @@ cp .env.example .env
 
 At minimum configure:
 
-- `KAIRO_POSTGRES_DB`
-- `KAIRO_POSTGRES_USER`
-- `KAIRO_POSTGRES_PASSWORD`
-- `KAIRO_DESTINATION_CREDENTIALS_KEY` (base64, 32-byte key)
-- `KAIRO_ENVIRONMENT=Production`
+- `NUNTIVUS_POSTGRES_DB`
+- `NUNTIVUS_POSTGRES_USER`
+- `NUNTIVUS_POSTGRES_PASSWORD`
+- `NUNTIVUS_DESTINATION_CREDENTIALS_KEY` (base64, 32-byte key)
+- `NUNTIVUS_ENVIRONMENT=Production`
 
 Optional:
 
-- `KAIRO_OTLP_ENDPOINT`
-- `KAIRO_API_PORT`
-- `KAIRO_SHUTDOWN_TIMEOUT_SECONDS`
-- `KAIRO_DATABASE_CONNECTION_STRING` (alternative to compose-generated `ConnectionStrings__Postgres`)
+- `NUNTIVUS_OTLP_ENDPOINT`
+- `NUNTIVUS_API_PORT`
+- `NUNTIVUS_SHUTDOWN_TIMEOUT_SECONDS`
+- `NUNTIVUS_DATABASE_CONNECTION_STRING` (alternative to compose-generated `ConnectionStrings__Postgres`)
 
 ## 4. Standardized runtime configuration
 
-Kairo API and Worker now use typed configuration objects with startup validation.
+Nuntivus API and Worker now use typed configuration objects with startup validation.
 
 Primary sections:
 
@@ -54,20 +54,20 @@ Validation is executed at startup and fails fast when required values are missin
 
 ### Environment variable mapping
 
-In addition to standard `.NET` key mapping (`Section__Property`), Kairo maps these `KAIRO_*` variables:
+In addition to standard `.NET` key mapping (`Section__Property`), Nuntivus maps these `NUNTIVUS_*` variables:
 
-- `KAIRO_DATABASE_CONNECTION_STRING` -> `Database:PostgresConnectionString`
-- `KAIRO_POSTGRES_CONNECTION_STRING` -> `Database:PostgresConnectionString`
-- `KAIRO_DESTINATION_CREDENTIALS_KEY` -> `DestinationCredentials:EncryptionKey`
-- `KAIRO_NATS_URL` -> `Nats:Url`
-- `KAIRO_NATS_STREAM` -> `Nats:Stream`
-- `KAIRO_NATS_SUBJECTS` -> `Nats:Subjects`
-- `KAIRO_OTLP_ENDPOINT` -> `OpenTelemetry:OtlpEndpoint`
-- `KAIRO_SHUTDOWN_TIMEOUT_SECONDS` -> `HostOptions:ShutdownTimeout`
+- `NUNTIVUS_DATABASE_CONNECTION_STRING` -> `Database:PostgresConnectionString`
+- `NUNTIVUS_POSTGRES_CONNECTION_STRING` -> `Database:PostgresConnectionString`
+- `NUNTIVUS_DESTINATION_CREDENTIALS_KEY` -> `DestinationCredentials:EncryptionKey`
+- `NUNTIVUS_NATS_URL` -> `Nats:Url`
+- `NUNTIVUS_NATS_STREAM` -> `Nats:Stream`
+- `NUNTIVUS_NATS_SUBJECTS` -> `Nats:Subjects`
+- `NUNTIVUS_OTLP_ENDPOINT` -> `OpenTelemetry:OtlpEndpoint`
+- `NUNTIVUS_SHUTDOWN_TIMEOUT_SECONDS` -> `HostOptions:ShutdownTimeout`
 
 ### Safe production defaults
 
-When running in `Production`, Kairo enforces safe HTTP destination defaults:
+When running in `Production`, Nuntivus enforces safe HTTP destination defaults:
 
 - `EndpointSecurity:AllowHttpScheme=false`
 - `EndpointSecurity:AllowPrivateNetworkDestinations=false`
@@ -77,13 +77,13 @@ When running in `Production`, Kairo enforces safe HTTP destination defaults:
 
 The production compose stack uses named volumes:
 
-- `kairo-postgres-data` -> PostgreSQL data directory
-- `kairo-nats-data` -> JetStream file store
+- `nuntivus-postgres-data` -> PostgreSQL data directory
+- `nuntivus-nats-data` -> JetStream file store
 
 Verify they exist after startup:
 
 ```bash
-docker volume ls | grep kairo-
+docker volume ls | grep nuntivus-
 ```
 
 ## 6. Migration execution
@@ -93,7 +93,7 @@ docker volume ls | grep kairo-
 Behavior:
 
 1. waits for PostgreSQL readiness
-2. runs `kairo-api --migrate` using the same migration runner used by API/worker startup validation
+2. runs `nuntivus-api --migrate` using the same migration runner used by API/worker startup validation
 3. validates migration filenames (`NNN_description.sql`) and deterministic ordering
 4. acquires a PostgreSQL advisory lock to prevent concurrent migration execution
 5. applies pending migrations transactionally
@@ -107,7 +107,7 @@ Operational controls:
 
 - `DatabaseMigrations__Mode` (`Disabled`, `Validate`, `Apply`)
 - `DatabaseMigrations__MigrationsPath` (default `Migrations`)
-- `KAIRO_DATABASE_MIGRATIONS_MODE` and `KAIRO_DATABASE_MIGRATIONS_PATH` env mappings
+- `NUNTIVUS_DATABASE_MIGRATIONS_MODE` and `NUNTIVUS_DATABASE_MIGRATIONS_PATH` env mappings
 
 Contributor workflow for new migrations:
 
@@ -133,7 +133,7 @@ Check service health:
 ```bash
 docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs migrate
-curl http://localhost:${KAIRO_API_PORT}/health/ready
+curl http://localhost:${NUNTIVUS_API_PORT}/health/ready
 ```
 
 ## 9. Security baseline

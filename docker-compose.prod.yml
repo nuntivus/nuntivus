@@ -1,33 +1,33 @@
 services:
   postgres:
-    image: ${KAIRO_POSTGRES_IMAGE}
-    container_name: kairo-postgres
+    image: ${NUNTIVUS_POSTGRES_IMAGE}
+    container_name: nuntivus-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${KAIRO_POSTGRES_DB}
-      POSTGRES_USER: ${KAIRO_POSTGRES_USER}
-      POSTGRES_PASSWORD: ${KAIRO_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${NUNTIVUS_POSTGRES_DB}
+      POSTGRES_USER: ${NUNTIVUS_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${NUNTIVUS_POSTGRES_PASSWORD}
     ports:
-      - "${KAIRO_POSTGRES_PORT}:5432"
+      - "${NUNTIVUS_POSTGRES_PORT}:5432"
     volumes:
-      - kairo-postgres-data:/var/lib/postgresql/data
+      - nuntivus-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${KAIRO_POSTGRES_USER} -d ${KAIRO_POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${NUNTIVUS_POSTGRES_USER} -d ${NUNTIVUS_POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 15s
 
   nats:
-    image: ${KAIRO_NATS_IMAGE}
-    container_name: kairo-nats
+    image: ${NUNTIVUS_NATS_IMAGE}
+    container_name: nuntivus-nats
     restart: unless-stopped
     command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
-      - "${KAIRO_NATS_CLIENT_PORT}:4222"
-      - "${KAIRO_NATS_MONITOR_PORT}:8222"
+      - "${NUNTIVUS_NATS_CLIENT_PORT}:4222"
+      - "${NUNTIVUS_NATS_MONITOR_PORT}:8222"
     volumes:
-      - kairo-nats-data:/data
+      - nuntivus-nats-data:/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
       interval: 10s
@@ -36,29 +36,29 @@ services:
       start_period: 10s
 
   migrate:
-    image: kairo-api:${KAIRO_IMAGE_TAG}
-    container_name: kairo-migrate
+    image: nuntivus-api:${NUNTIVUS_IMAGE_TAG}
+    container_name: nuntivus-migrate
     restart: "no"
     build:
       context: .
-      dockerfile: KairoServer.Api/Dockerfile
+      dockerfile: NuntivusServer.Api/Dockerfile
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      ASPNETCORE_ENVIRONMENT: ${KAIRO_ENVIRONMENT}
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${KAIRO_POSTGRES_DB};Username=${KAIRO_POSTGRES_USER};Password=${KAIRO_POSTGRES_PASSWORD}
-      Database__PostgresConnectionString: Host=postgres;Port=5432;Database=${KAIRO_POSTGRES_DB};Username=${KAIRO_POSTGRES_USER};Password=${KAIRO_POSTGRES_PASSWORD}
+      ASPNETCORE_ENVIRONMENT: ${NUNTIVUS_ENVIRONMENT}
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${NUNTIVUS_POSTGRES_DB};Username=${NUNTIVUS_POSTGRES_USER};Password=${NUNTIVUS_POSTGRES_PASSWORD}
+      Database__PostgresConnectionString: Host=postgres;Port=5432;Database=${NUNTIVUS_POSTGRES_DB};Username=${NUNTIVUS_POSTGRES_USER};Password=${NUNTIVUS_POSTGRES_PASSWORD}
       DatabaseMigrations__Mode: Apply
-      DestinationCredentials__EncryptionKey: ${KAIRO_DESTINATION_CREDENTIALS_KEY}
+      DestinationCredentials__EncryptionKey: ${NUNTIVUS_DESTINATION_CREDENTIALS_KEY}
     command: ["--migrate"]
 
   api:
-    image: kairo-api:${KAIRO_IMAGE_TAG}
-    container_name: kairo-api
+    image: nuntivus-api:${NUNTIVUS_IMAGE_TAG}
+    container_name: nuntivus-api
     build:
       context: .
-      dockerfile: KairoServer.Api/Dockerfile
+      dockerfile: NuntivusServer.Api/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
@@ -66,13 +66,13 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      ASPNETCORE_ENVIRONMENT: ${KAIRO_ENVIRONMENT}
+      ASPNETCORE_ENVIRONMENT: ${NUNTIVUS_ENVIRONMENT}
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${KAIRO_POSTGRES_DB};Username=${KAIRO_POSTGRES_USER};Password=${KAIRO_POSTGRES_PASSWORD}
-      DestinationCredentials__EncryptionKey: ${KAIRO_DESTINATION_CREDENTIALS_KEY}
-      HostOptions__ShutdownTimeout: 00:00:${KAIRO_SHUTDOWN_TIMEOUT_SECONDS}
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${NUNTIVUS_POSTGRES_DB};Username=${NUNTIVUS_POSTGRES_USER};Password=${NUNTIVUS_POSTGRES_PASSWORD}
+      DestinationCredentials__EncryptionKey: ${NUNTIVUS_DESTINATION_CREDENTIALS_KEY}
+      HostOptions__ShutdownTimeout: 00:00:${NUNTIVUS_SHUTDOWN_TIMEOUT_SECONDS}
     ports:
-      - "${KAIRO_API_PORT}:8080"
+      - "${NUNTIVUS_API_PORT}:8080"
     stop_grace_period: 40s
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/ready"]
@@ -82,11 +82,11 @@ services:
       start_period: 20s
 
   worker:
-    image: kairo-worker:${KAIRO_IMAGE_TAG}
-    container_name: kairo-worker
+    image: nuntivus-worker:${NUNTIVUS_IMAGE_TAG}
+    container_name: nuntivus-worker
     build:
       context: .
-      dockerfile: KairoServer.Worker/Dockerfile
+      dockerfile: NuntivusServer.Worker/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
@@ -96,17 +96,17 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      DOTNET_ENVIRONMENT: ${KAIRO_ENVIRONMENT}
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${KAIRO_POSTGRES_DB};Username=${KAIRO_POSTGRES_USER};Password=${KAIRO_POSTGRES_PASSWORD}
-      Nats__Url: ${KAIRO_NATS_URL}
-      Nats__Stream: ${KAIRO_NATS_STREAM}
+      DOTNET_ENVIRONMENT: ${NUNTIVUS_ENVIRONMENT}
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${NUNTIVUS_POSTGRES_DB};Username=${NUNTIVUS_POSTGRES_USER};Password=${NUNTIVUS_POSTGRES_PASSWORD}
+      Nats__Url: ${NUNTIVUS_NATS_URL}
+      Nats__Stream: ${NUNTIVUS_NATS_STREAM}
       Nats__Subjects__0: event.>
       Nats__Subjects__1: delivery.>
-      DestinationCredentials__EncryptionKey: ${KAIRO_DESTINATION_CREDENTIALS_KEY}
-      OpenTelemetry__OtlpEndpoint: ${KAIRO_OTLP_ENDPOINT}
-      HostOptions__ShutdownTimeout: 00:00:${KAIRO_SHUTDOWN_TIMEOUT_SECONDS}
+      DestinationCredentials__EncryptionKey: ${NUNTIVUS_DESTINATION_CREDENTIALS_KEY}
+      OpenTelemetry__OtlpEndpoint: ${NUNTIVUS_OTLP_ENDPOINT}
+      HostOptions__ShutdownTimeout: 00:00:${NUNTIVUS_SHUTDOWN_TIMEOUT_SECONDS}
     stop_grace_period: 40s
 
 volumes:
-  kairo-postgres-data:
-  kairo-nats-data:
+  nuntivus-postgres-data:
+  nuntivus-nats-data:
