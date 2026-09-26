@@ -7,7 +7,10 @@ import {
 export function useContractDestinationHealthQuery(contractId: string | undefined) {
   return useQuery({
     queryKey: ['destination-health', 'contracts', contractId],
-    queryFn: ({ signal }) => getDestinationHealthByContractId(contractId ?? '', { signal }),
+    queryFn: ({ signal }) => getDestinationHealthByContractId(contractId ?? '', {
+      signal,
+      suppressErrorStatuses: [404],
+    }),
     enabled: !!contractId,
   })
 }

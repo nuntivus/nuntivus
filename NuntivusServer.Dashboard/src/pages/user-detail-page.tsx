@@ -202,10 +202,11 @@ function UserDetailEditor({
         </Text>
         <Text weight="medium">{subject}</Text>
 
-        <Text size="2" color="gray">
+        <Text as="label" htmlFor="user-display-name" size="2" color="gray">
           Display name
         </Text>
         <TextField.Root
+          id="user-display-name"
           value={editorDisplayName}
           onChange={(event) => setEditorDisplayName(event.target.value)}
           disabled={!canManageRoles}

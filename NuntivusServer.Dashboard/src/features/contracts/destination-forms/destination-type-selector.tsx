@@ -14,14 +14,14 @@ export function DestinationTypeSelector({
 }: DestinationTypeSelectorProps) {
   return (
     <>
-      <Text size="2" color="gray">
+      <Text id="destination-type-label" size="2" color="gray">
         Destination type
       </Text>
       <Select.Root
         value={value}
         onValueChange={(next) => onChange(next as DestinationType)}
       >
-        <Select.Trigger />
+        <Select.Trigger aria-labelledby="destination-type-label" />
         <Select.Content>
           {destinationOptions.map((option) => (
             <Select.Item key={option} value={option}>

@@ -115,7 +115,7 @@ export function SettingsPage() {
             Preferences are private to your account and stored locally in this browser.
           </Text>
 
-          <Text size="2" color="gray">Theme</Text>
+          <Text id="settings-theme-label" size="2" color="gray">Theme</Text>
           <Select.Root
             value={preferencesDraft.theme}
             onValueChange={(value) =>
@@ -125,7 +125,7 @@ export function SettingsPage() {
               }))
             }
           >
-            <Select.Trigger />
+            <Select.Trigger aria-labelledby="settings-theme-label" />
             <Select.Content>
               <Select.Item value="light">Light</Select.Item>
               <Select.Item value="dark">Dark</Select.Item>
@@ -174,13 +174,15 @@ export function SettingsPage() {
 
               <Heading size="2">Delivery defaults</Heading>
               <Flex wrap="wrap" gap="2">
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.deliveryDefaults.requestTimeoutSeconds)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                <label className="field">
+                  <Text size="2" color="gray">Request timeout (seconds)</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.deliveryDefaults.requestTimeoutSeconds)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             deliveryDefaults: {
                               ...current.deliveryDefaults,
@@ -190,17 +192,20 @@ export function SettingsPage() {
                               ),
                             },
                           }
-                        : current
-                    )
-                  }
-                />
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.deliveryDefaults.maxAttempts)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                          : current
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <Text size="2" color="gray">Maximum attempts</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.deliveryDefaults.maxAttempts)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             deliveryDefaults: {
                               ...current.deliveryDefaults,
@@ -210,17 +215,20 @@ export function SettingsPage() {
                               ),
                             },
                           }
-                        : current
-                    )
-                  }
-                />
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.deliveryDefaults.batchLimit)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                          : current
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <Text size="2" color="gray">Batch limit</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.deliveryDefaults.batchLimit)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             deliveryDefaults: {
                               ...current.deliveryDefaults,
@@ -230,21 +238,24 @@ export function SettingsPage() {
                               ),
                             },
                           }
-                        : current
-                    )
-                  }
-                />
+                          : current
+                      )
+                    }
+                  />
+                </label>
               </Flex>
 
               <Heading size="2">Retry defaults</Heading>
               <Flex wrap="wrap" gap="2">
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.retryDefaults.initialDelaySeconds)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                <label className="field">
+                  <Text size="2" color="gray">Initial delay (seconds)</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.retryDefaults.initialDelaySeconds)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             retryDefaults: {
                               ...current.retryDefaults,
@@ -254,17 +265,20 @@ export function SettingsPage() {
                               ),
                             },
                           }
-                        : current
-                    )
-                  }
-                />
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.retryDefaults.maxDelaySeconds)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                          : current
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <Text size="2" color="gray">Maximum delay (seconds)</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.retryDefaults.maxDelaySeconds)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             retryDefaults: {
                               ...current.retryDefaults,
@@ -274,38 +288,44 @@ export function SettingsPage() {
                               ),
                             },
                           }
-                        : current
-                    )
-                  }
-                />
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.retryDefaults.backoffMultiplier)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                          : current
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <Text size="2" color="gray">Backoff multiplier</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.retryDefaults.backoffMultiplier)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             retryDefaults: {
                               ...current.retryDefaults,
                               backoffMultiplier: Number.parseFloat(event.target.value) || current.retryDefaults.backoffMultiplier,
                             },
                           }
-                        : current
-                    )
-                  }
-                />
+                          : current
+                      )
+                    }
+                  />
+                </label>
               </Flex>
 
               <Heading size="2">Retention settings</Heading>
               <Flex wrap="wrap" gap="2">
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.retention.eventRetentionDays)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                <label className="field">
+                  <Text size="2" color="gray">Event retention (days)</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.retention.eventRetentionDays)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             retention: {
                               ...current.retention,
@@ -315,17 +335,20 @@ export function SettingsPage() {
                               ),
                             },
                           }
-                        : current
-                    )
-                  }
-                />
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.retention.deliveryAuditRetentionDays)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                          : current
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <Text size="2" color="gray">Delivery audit retention (days)</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.retention.deliveryAuditRetentionDays)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             retention: {
                               ...current.retention,
@@ -335,17 +358,20 @@ export function SettingsPage() {
                               ),
                             },
                           }
-                        : current
-                    )
-                  }
-                />
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.retention.operationAuditRetentionDays)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                          : current
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <Text size="2" color="gray">Operation audit retention (days)</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.retention.operationAuditRetentionDays)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             retention: {
                               ...current.retention,
@@ -355,10 +381,11 @@ export function SettingsPage() {
                               ),
                             },
                           }
-                        : current
-                    )
-                  }
-                />
+                          : current
+                      )
+                    }
+                  />
+                </label>
               </Flex>
 
               <Heading size="2">Security settings</Heading>
@@ -371,12 +398,12 @@ export function SettingsPage() {
                       setInstanceDraft((current) =>
                         current
                           ? {
-                              ...current,
-                              security: {
-                                ...current.security,
-                                requireHttpsDestinations: event.target.checked,
-                              },
-                            }
+                            ...current,
+                            security: {
+                              ...current.security,
+                              requireHttpsDestinations: event.target.checked,
+                            },
+                          }
                           : current
                       )
                     }
@@ -391,12 +418,12 @@ export function SettingsPage() {
                       setInstanceDraft((current) =>
                         current
                           ? {
-                              ...current,
-                              security: {
-                                ...current.security,
-                                allowPrivateNetworkDestinations: event.target.checked,
-                              },
-                            }
+                            ...current,
+                            security: {
+                              ...current.security,
+                              allowPrivateNetworkDestinations: event.target.checked,
+                            },
+                          }
                           : current
                       )
                     }
@@ -411,12 +438,12 @@ export function SettingsPage() {
                       setInstanceDraft((current) =>
                         current
                           ? {
-                              ...current,
-                              security: {
-                                ...current.security,
-                                requireDestinationCredentialEncryption: event.target.checked,
-                              },
-                            }
+                            ...current,
+                            security: {
+                              ...current.security,
+                              requireDestinationCredentialEncryption: event.target.checked,
+                            },
+                          }
                           : current
                       )
                     }
@@ -427,13 +454,15 @@ export function SettingsPage() {
 
               <Heading size="2">HTTP delivery defaults and limits</Heading>
               <Flex wrap="wrap" gap="2">
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.limits.maxEventPayloadBytes)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                <label className="field">
+                  <Text size="2" color="gray">Maximum event payload (bytes)</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.limits.maxEventPayloadBytes)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             limits: {
                               ...current.limits,
@@ -443,17 +472,20 @@ export function SettingsPage() {
                               ),
                             },
                           }
-                        : current
-                    )
-                  }
-                />
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.limits.maxEventMetadataBytes)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                          : current
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <Text size="2" color="gray">Maximum event metadata (bytes)</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.limits.maxEventMetadataBytes)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             limits: {
                               ...current.limits,
@@ -463,17 +495,20 @@ export function SettingsPage() {
                               ),
                             },
                           }
-                        : current
-                    )
-                  }
-                />
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.limits.maxContractsPerCustomer)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                          : current
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <Text size="2" color="gray">Maximum contracts per customer</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.limits.maxContractsPerCustomer)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             limits: {
                               ...current.limits,
@@ -483,17 +518,20 @@ export function SettingsPage() {
                               ),
                             },
                           }
-                        : current
-                    )
-                  }
-                />
-                <TextField.Root
-                  type="number"
-                  value={String(instanceDraft.limits.maxConcurrentReplayJobs)}
-                  onChange={(event) =>
-                    setInstanceDraft((current) =>
-                      current
-                        ? {
+                          : current
+                      )
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <Text size="2" color="gray">Maximum concurrent replay jobs</Text>
+                  <TextField.Root
+                    type="number"
+                    value={String(instanceDraft.limits.maxConcurrentReplayJobs)}
+                    onChange={(event) =>
+                      setInstanceDraft((current) =>
+                        current
+                          ? {
                             ...current,
                             limits: {
                               ...current.limits,
@@ -503,10 +541,11 @@ export function SettingsPage() {
                               ),
                             },
                           }
-                        : current
-                    )
-                  }
-                />
+                          : current
+                      )
+                    }
+                  />
+                </label>
               </Flex>
 
               <Heading size="3">Instance information</Heading>

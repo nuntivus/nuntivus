@@ -15,13 +15,14 @@ import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
+import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
 import { useDeliveriesQuery } from '../features/deliveries/use-deliveries'
 import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type {
   DeliveryListItem,
   DeliveryListQuery,
-  DeliveryStatus,
+  DeliveryStatusName,
   DestinationType,
 } from '../services/api/deliveries-api'
 import { useAppSelector } from '../store/hooks'
@@ -30,10 +31,6 @@ type SortBy = 'createdAt' | 'updatedAt'
 type SortDirection = 'asc' | 'desc'
 
 const destinationValues: DestinationType[] = ['Http', 'Kafka', 'Nats', 'RabbitMq', 'Sqs']
-
-function formatDeliveryStatus(status: DeliveryStatus) {
-  return typeof status === 'string' ? status : String(status)
-}
 
 function isFailedOrRetrying(item: DeliveryListItem) {
   const normalized = formatDeliveryStatus(item.status).toLowerCase()
@@ -50,7 +47,7 @@ export function DeliveriesPage() {
   const eventIdParam = searchParams.get('eventId') ?? ''
   const customerIdParam = searchParams.get('customerId') ?? ''
   const contractIdParam = searchParams.get('contractId') ?? ''
-  const statusParam = (searchParams.get('status') as DeliveryStatus | null) ?? undefined
+  const statusParam = (searchParams.get('status') as DeliveryStatusName | null) ?? undefined
   const destinationTypeParam =
     (searchParams.get('destinationType') as DestinationType | null) ?? undefined
   const createdFromParam = searchParams.get('createdFrom') ?? ''
@@ -294,21 +291,21 @@ export function DeliveriesPage() {
             emptyAction={
               hasActiveFilters
                 ? {
-                    label: 'Clear filters',
-                    onClick: () =>
-                      setSearchParams(
-                        new URLSearchParams({
-                          page: '1',
-                          pageSize: String(defaultPageSize),
-                        }),
-                      ),
-                  }
+                  label: 'Clear filters',
+                  onClick: () =>
+                    setSearchParams(
+                      new URLSearchParams({
+                        page: '1',
+                        pageSize: String(defaultPageSize),
+                      }),
+                    ),
+                }
                 : {
-                    label: 'Refresh',
-                    onClick: () => {
-                      void deliveriesQuery.refetch()
-                    },
-                  }
+                  label: 'Refresh',
+                  onClick: () => {
+                    void deliveriesQuery.refetch()
+                  },
+                }
             }
           >
             <>
@@ -339,14 +336,16 @@ export function DeliveriesPage() {
                   <Table.Body>
                     {deliveries.map((delivery) => {
                       const highlighted = isFailedOrRetrying(delivery)
+                      const displayStatus = formatDeliveryStatus(delivery.status)
+
                       return (
                         <Table.Row
                           key={delivery.id}
                           style={
                             highlighted
                               ? {
-                                  backgroundColor: 'var(--amber-a3)',
-                                }
+                                backgroundColor: 'var(--amber-a3)',
+                              }
                               : undefined
                           }
                         >
@@ -354,15 +353,15 @@ export function DeliveriesPage() {
                           <Table.Cell>
                             <Badge
                               color={
-                                delivery.status === 'Delivered'
+                                displayStatus === 'Delivered'
                                   ? 'green'
-                                  : delivery.status === 'Failed' || delivery.status === 'Dead'
+                                  : displayStatus === 'Failed' || displayStatus === 'Dead'
                                     ? 'red'
                                     : 'amber'
                               }
                               variant="soft"
                             >
-                              {formatDeliveryStatus(delivery.status)}
+                              {displayStatus}
                             </Badge>
                           </Table.Cell>
                           <Table.Cell>{delivery.customerId}</Table.Cell>

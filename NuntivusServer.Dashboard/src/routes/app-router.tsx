@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
-import { Route, Routes } from 'react-router-dom'
+import { createBrowserRouter, createRoutesFromElements, Outlet, Route, RouterProvider } from 'react-router-dom'
+import { RouterServices } from '../app/app-providers'
 import { AdminLayout } from '../layouts/admin-layout'
 import { RequireAuth } from './require-auth'
 import { RequirePermission } from './require-permission'
@@ -27,11 +28,19 @@ const SettingsPage = lazy(() => import('../pages/settings-page').then((module) =
 const UserDetailPage = lazy(() => import('../pages/user-detail-page').then((module) => ({ default: module.UserDetailPage })))
 const UsersPage = lazy(() => import('../pages/users-page').then((module) => ({ default: module.UsersPage })))
 
-export function AppRouter() {
+function AppShell() {
   return (
     <div className="app-shell">
       <Suspense fallback={null}>
-        <Routes>
+        <Outlet />
+      </Suspense>
+    </div>
+  )
+}
+
+const router = createBrowserRouter(createRoutesFromElements(
+  <Route element={<RouterServices />}>
+    <Route element={<AppShell />}>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<RequireAuth />}>
             <Route element={<AdminLayout />}>
@@ -75,8 +84,10 @@ export function AppRouter() {
             </Route>
           </Route>
           <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </Suspense>
-    </div>
-  )
+    </Route>
+  </Route>,
+))
+
+export function AppRouter() {
+  return <RouterProvider router={router} />
 }

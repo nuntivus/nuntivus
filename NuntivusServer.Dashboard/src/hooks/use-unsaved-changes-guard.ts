@@ -17,7 +17,9 @@ export function useUnsavedChangesGuard({
   confirmText = 'Leave page',
   cancelText = 'Stay',
 }: UnsavedGuardOptions) {
-  const blocker = useBlocker(when)
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    when && currentLocation.pathname !== nextLocation.pathname,
+  )
   const confirm = useConfirmDialog()
 
   useEffect(() => {

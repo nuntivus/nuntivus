@@ -2,7 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { Theme } from '@radix-ui/themes'
 import { useMemo } from 'react'
 import { Provider as ReduxProvider } from 'react-redux'
-import { BrowserRouter } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import type { PropsWithChildren } from 'react'
 import { AuthBootstrap } from './auth-bootstrap'
 import { AuthSessionListener } from './auth-session-listener'
@@ -44,19 +44,23 @@ export function AppProviders({ children }: PropsWithChildren) {
       <ReduxProvider store={store}>
         <ThemeHost>
           <AppContextProvider>
-            <BrowserRouter>
-              <NotificationsProvider>
-                <ConfirmDialogProvider>
-                  <AuthBootstrap />
-                  <AuthSessionListener />
-                  <GlobalStatus />
-                  {children}
-                </ConfirmDialogProvider>
-              </NotificationsProvider>
-            </BrowserRouter>
+            {children}
           </AppContextProvider>
         </ThemeHost>
       </ReduxProvider>
     </QueryClientProvider>
+  )
+}
+
+export function RouterServices() {
+  return (
+    <NotificationsProvider>
+      <ConfirmDialogProvider>
+        <AuthBootstrap />
+        <AuthSessionListener />
+        <GlobalStatus />
+        <Outlet />
+      </ConfirmDialogProvider>
+    </NotificationsProvider>
   )
 }

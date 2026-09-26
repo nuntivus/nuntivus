@@ -7,7 +7,7 @@ import {
   TextArea,
   TextField,
 } from '@radix-ui/themes'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
@@ -22,6 +22,7 @@ import {
   createDefaultSecretFieldState,
   createDefaultDestinationFormState,
   mapDestinationFormToConfig,
+  normalizeDestinationType,
   type DestinationFormState,
   validateDestinationFormState,
 } from '../features/contracts/destination-forms/types'
@@ -378,6 +379,7 @@ function ContractEditorForm({
   const [optionsDraft, setOptionsDraft] = useState(() => backendConfigToFormState(initial.options))
   const [rawEditing, setRawEditing] = useState<string[]>([])
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [savedContractId, setSavedContractId] = useState<string | null>(null)
 
   const eventTypes = useMemo(() => parseEventTypes(eventTypesInput), [eventTypesInput])
   const optionErrors = useMemo(() => validateAdvancedContractOptions(optionsDraft, eventTypes), [optionsDraft, eventTypes])
@@ -430,7 +432,13 @@ function ContractEditorForm({
     optionsDraft,
   ])
 
-  useUnsavedChangesGuard({ when: dirty || rawEditing.length > 0 })
+  useUnsavedChangesGuard({ when: !savedContractId && (dirty || rawEditing.length > 0) })
+
+  useEffect(() => {
+    if (savedContractId) {
+      navigate(`/contracts/${encodeURIComponent(savedContractId)}`)
+    }
+  }, [navigate, savedContractId])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -494,29 +502,11 @@ function ContractEditorForm({
       })
 
       notifications.success('Contract changes saved.', 'Save contract')
-      navigate(`/contracts/${encodeURIComponent(result.contract.id)}`)
+      setSavedContractId(result.contract.id)
     } catch (error) {
       setSubmitError(getServerValidation(error, 'Unable to update contract.').formError)
       notifications.error(getApiErrorMessage(error, 'Unable to update contract.'), 'Save contract')
     }
-  }
-
-  async function handleCancelNavigation() {
-    if (dirty) {
-      const confirmed = await confirm({
-        title: 'Unsaved changes',
-        description: 'You have unsaved changes. Leave this page?',
-        confirmText: 'Leave page',
-        cancelText: 'Stay',
-        confirmColor: 'amber',
-      })
-
-      if (!confirmed) {
-        return
-      }
-    }
-
-    navigate(`/contracts/${encodeURIComponent(id)}`)
   }
 
   return (
@@ -574,9 +564,7 @@ function ContractEditorForm({
             <Button
               type="button"
               variant="soft"
-              onClick={() => {
-                void handleCancelNavigation()
-              }}
+              onClick={() => navigate(`/contracts/${encodeURIComponent(id)}`)}
             >
               Cancel
             </Button>
@@ -638,8 +626,17 @@ export function ContractEditPage() {
   }
 
   const contract = detailQuery.data.contract
+  const destinationType = normalizeDestinationType(contract.destinationType)
+  if (!destinationType) {
+    return (
+      <Card>
+        <Text size="2" color="red">This contract has an unsupported destination type.</Text>
+      </Card>
+    )
+  }
+
   const destination = parseDestinationConfiguration(
-    contract.destinationType,
+    destinationType,
     contract.destinationConfiguration,
   )
 

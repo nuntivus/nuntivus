@@ -10,16 +10,17 @@ type HttpDestinationFormProps = {
 export function HttpDestinationForm({ value, onChange }: HttpDestinationFormProps) {
   return (
     <>
-      <Text size="2" color="gray">
+      <Text as="label" htmlFor="http-destination-url" size="2" color="gray">
         Destination URL
       </Text>
       <TextField.Root
+        id="http-destination-url"
         placeholder="https://example.com/webhook"
         value={value.url}
         onChange={(event) => onChange({ ...value, url: event.target.value })}
       />
 
-      <Text size="2" color="gray">
+      <Text id="http-authentication-label" size="2" color="gray">
         Authentication
       </Text>
       <Select.Root
@@ -31,7 +32,7 @@ export function HttpDestinationForm({ value, onChange }: HttpDestinationFormProp
           })
         }
       >
-        <Select.Trigger />
+        <Select.Trigger aria-labelledby="http-authentication-label" />
         <Select.Content>
           <Select.Item value="none">None</Select.Item>
           <Select.Item value="bearer">Bearer</Select.Item>

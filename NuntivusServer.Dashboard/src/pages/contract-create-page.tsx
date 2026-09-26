@@ -164,10 +164,11 @@ export function ContractCreatePage() {
 
             {step === 0 ? (
               <>
-                <Text size="2" color="gray">Customer</Text>
+                <Text id="contract-create-customer-label" size="2" color="gray">Customer</Text>
                 <Select.Root value={customerId} onValueChange={setCustomerId}>
                   <Select.Trigger
                     placeholder={customersQuery.isLoading ? 'Loading customers...' : 'Select customer'}
+                    aria-labelledby="contract-create-customer-label"
                     aria-invalid={basicsAttempted && !!customerError}
                     aria-describedby={basicsAttempted && customerError ? 'contract-create-customer-error' : undefined}
                   />
@@ -183,17 +184,19 @@ export function ContractCreatePage() {
                   <FieldErrorText id="contract-create-customer-error" message={customerError} />
                 ) : null}
 
-                <Text size="2" color="gray">Contract name (optional)</Text>
+                <Text as="label" htmlFor="contract-create-name" size="2" color="gray">Contract name (optional)</Text>
                 <TextField.Root
+                  id="contract-create-name"
                   placeholder="Optional friendly name"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                 />
 
-                <Text size="2" color="gray">Event type</Text>
+                <Text id="contract-create-event-type-label" size="2" color="gray">Event type</Text>
                 <Select.Root value={selectedEventType} onValueChange={setSelectedEventType}>
                   <Select.Trigger
                     placeholder={eventDefinitionsQuery.isLoading ? 'Loading event types...' : 'Select event type'}
+                    aria-labelledby="contract-create-event-type-label"
                     aria-invalid={basicsAttempted && !!eventTypeError}
                     aria-describedby={basicsAttempted && eventTypeError ? 'contract-create-event-type-error' : undefined}
                   />

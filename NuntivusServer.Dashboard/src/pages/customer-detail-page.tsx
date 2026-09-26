@@ -413,10 +413,11 @@ function CustomerInfoEditor({
           </Text>
           <Text weight="medium">{id}</Text>
 
-          <Text size="2" color="gray">
+          <Text as="label" htmlFor="customer-name" size="2" color="gray">
             Name
           </Text>
           <TextField.Root
+            id="customer-name"
             value={draftName}
             onChange={(event) => setDraftName(event.target.value)}
             disabled={!canWriteCustomers || pending}

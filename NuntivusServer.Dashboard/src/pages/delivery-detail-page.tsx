@@ -22,18 +22,15 @@ import {
   useRequeueDeliveryMutation,
   useRetryDeliveryMutation,
 } from '../features/deliveries/use-deliveries'
+import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { DeliveryStatus } from '../services/api/deliveries-api'
 import { useAppSelector } from '../store/hooks'
 
-function formatStatus(status: DeliveryStatus) {
-  return typeof status === 'string' ? status : String(status)
-}
-
 function statusColor(status: DeliveryStatus): 'gray' | 'green' | 'red' | 'amber' {
-  const normalized = formatStatus(status).toLowerCase()
+  const normalized = formatDeliveryStatus(status).toLowerCase()
   if (normalized === 'delivered') {
     return 'green'
   }
@@ -219,7 +216,7 @@ export function DeliveryDetailPage() {
 
           <Text size="2" color="gray">Status</Text>
           <Badge color={statusColor(delivery.status)} variant="soft">
-            {formatStatus(delivery.status)}
+            {formatDeliveryStatus(delivery.status)}
           </Badge>
 
           <Text size="2" color="gray">Event</Text>

@@ -1,13 +1,15 @@
 import { apiGet, apiPost, type ApiRequestOptions } from './api-client'
 import type { PagedResponse } from './paged-response'
 
-export type DeliveryStatus =
+export type DeliveryStatusName =
   | 'Pending'
   | 'InFlight'
   | 'Delivered'
   | 'Failed'
   | 'Dead'
   | (string & {})
+
+export type DeliveryStatus = DeliveryStatusName | number
 
 export type DestinationType = 'Http' | 'Kafka' | 'Nats' | 'RabbitMq' | 'Sqs'
 
@@ -47,7 +49,7 @@ export interface DeliveryListQuery {
   contractId?: string
   destinationType?: DestinationType
   failureCategory?: string
-  status?: DeliveryStatus
+  status?: DeliveryStatusName
   createdFrom?: string
   createdTo?: string
   sortBy?: 'createdAt' | 'updatedAt'

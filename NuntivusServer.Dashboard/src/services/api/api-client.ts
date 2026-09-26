@@ -10,6 +10,7 @@ type QueryValue = Primitive | Primitive[]
 export interface ApiRequestOptions {
   token?: string
   suppressUnauthorizedEvent?: boolean
+  suppressErrorStatuses?: number[]
   signal?: AbortSignal
 }
 
@@ -282,7 +283,10 @@ async function apiRequest<TResponse>(
       publishUnauthorized()
     }
 
-    if (response.status !== 401) {
+    if (
+      response.status !== 401 &&
+      !options?.suppressErrorStatuses?.includes(response.status)
+    ) {
       publishApiError(getApiErrorMessage(apiError, `Request failed (${response.status})`))
     }
 

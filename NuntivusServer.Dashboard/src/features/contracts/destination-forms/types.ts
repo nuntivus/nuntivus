@@ -6,6 +6,33 @@ import type {
 
 export type SecretMode = 'replace' | 'keep' | 'remove'
 
+export function normalizeDestinationType(value: unknown): DestinationType | null {
+  switch (value) {
+    case 1:
+    case 'Http':
+    case 'http':
+      return 'Http'
+    case 2:
+    case 'Kafka':
+    case 'kafka':
+      return 'Kafka'
+    case 3:
+    case 'Nats':
+    case 'nats':
+      return 'Nats'
+    case 4:
+    case 'RabbitMq':
+    case 'rabbitmq':
+      return 'RabbitMq'
+    case 5:
+    case 'Sqs':
+    case 'sqs':
+      return 'Sqs'
+    default:
+      return null
+  }
+}
+
 type SecretFieldState = {
   mode: SecretMode
   hasStoredValue: boolean
