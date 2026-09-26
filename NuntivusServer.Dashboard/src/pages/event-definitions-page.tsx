@@ -147,7 +147,7 @@ export function EventDefinitionsPage() {
                 form="event-definitions-create-form"
                 disabled={createMutation.isPending || !!eventTypeError || !!displayNameError}
               >
-                {createMutation.isPending ? 'Creating…' : 'Create definition'}
+                {createMutation.isPending ? 'Creatingâ€¦' : 'Create definition'}
               </Button>
             </>
           }
