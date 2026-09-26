@@ -4,7 +4,6 @@ import {
   Card,
   Flex,
   Heading,
-  Link,
   Select,
   Table,
   Text,
@@ -15,6 +14,7 @@ import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
+import { DetailAction, NavigableTableRow } from '../components/tables/table-actions'
 import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
 import { useDeliveriesQuery } from '../features/deliveries/use-deliveries'
 import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
@@ -144,9 +144,14 @@ export function DeliveriesPage() {
 
   return (
     <Flex direction="column" gap="4">
-      <Heading size="6">Deliveries</Heading>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Deliveries</h1>
+          <p className="page-subtitle">Track destination delivery status, retries, and processing history.</p>
+        </div>
+      </div>
 
-      <Card>
+      <Card className="operations-filter-card">
         <form onSubmit={handleSearchSubmit}>
           <Flex direction="column" gap="3">
             <Heading size="4">Filters</Heading>
@@ -229,7 +234,7 @@ export function DeliveriesPage() {
               />
             </Flex>
 
-            <Flex gap="2">
+            <Flex gap="2" wrap="wrap" className="filter-actions">
               <Button type="submit">Apply filters</Button>
               <Select.Root
                 value={String(pageSizeParam)}
@@ -339,8 +344,10 @@ export function DeliveriesPage() {
                       const displayStatus = formatDeliveryStatus(delivery.status)
 
                       return (
-                        <Table.Row
+                        <NavigableTableRow
                           key={delivery.id}
+                          to={`/deliveries/${encodeURIComponent(delivery.id)}`}
+                          label={`delivery ${delivery.id}`}
                           style={
                             highlighted
                               ? {
@@ -372,13 +379,14 @@ export function DeliveriesPage() {
                           <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>
                           <Table.Cell>{delivery.attemptCount}</Table.Cell>
                           <Table.Cell>
-                            <Link asChild size="1">
-                              <NavLink to={`/deliveries/${encodeURIComponent(delivery.id)}`}>
-                                Detail
-                              </NavLink>
-                            </Link>
+                            <div className="table-row-actions">
+                              <DetailAction
+                                to={`/deliveries/${encodeURIComponent(delivery.id)}`}
+                                label="Open delivery"
+                              />
+                            </div>
                           </Table.Cell>
-                        </Table.Row>
+                        </NavigableTableRow>
                       )
                     })}
                   </Table.Body>

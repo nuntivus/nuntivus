@@ -13,8 +13,10 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { JsonViewer } from '../components/json/json-viewer'
+import { EyeIcon } from '../components/icons/nav-icons'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
+import { TableIconButton } from '../components/tables/table-actions'
 import { useAuditLogsQuery } from '../features/audit-logs/use-audit-logs'
 import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
@@ -194,9 +196,14 @@ export function AuditLogsPage() {
 
   return (
     <Flex direction="column" gap="4">
-      <Heading size="6">Audit logs</Heading>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Audit logs</h1>
+          <p className="page-subtitle">Review administrative changes and trace platform operations.</p>
+        </div>
+      </div>
 
-      <Card>
+      <Card className="operations-filter-card">
         <form onSubmit={handleSearchSubmit}>
           <Flex direction="column" gap="3">
             <Heading size="4">Filters</Heading>
@@ -276,7 +283,7 @@ export function AuditLogsPage() {
               />
             </Flex>
 
-            <Flex gap="2" wrap="wrap">
+            <Flex gap="2" wrap="wrap" className="filter-actions">
               <Select.Root
                 value={sortDirectionParam}
                 onValueChange={(value) => updateParams({ sortDirection: value, page: '1' })}
@@ -378,13 +385,12 @@ export function AuditLogsPage() {
                           <Table.Cell title={item.deliveryId ?? undefined}>{toShort(item.deliveryId)}</Table.Cell>
                           <Table.Cell>{summarizeDetails(item)}</Table.Cell>
                           <Table.Cell>
-                            <Button
-                              size="1"
-                              variant="soft"
+                            <TableIconButton
+                              label={expanded ? 'Hide audit payload' : 'View audit payload'}
                               onClick={() => setExpandedId(expanded ? null : item.id)}
                             >
-                              {expanded ? 'Hide' : 'View'}
-                            </Button>
+                              <EyeIcon width={15} height={15} />
+                            </TableIconButton>
                           </Table.Cell>
                         </Table.Row>
                       )

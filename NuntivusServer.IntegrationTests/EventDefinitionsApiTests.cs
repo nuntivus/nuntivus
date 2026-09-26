@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Dapper;
 using NuntivusServer.Api.Common;
@@ -19,6 +20,7 @@ namespace NuntivusServer.IntegrationTests
         {
             _fixture = fixture;
             _client = fixture.CreateClient();
+            _client.DefaultRequestHeaders.Add("X-Test-Auth", "on");
         }
 
         public Task InitializeAsync() => _fixture.ResetAsync();
@@ -152,6 +154,24 @@ namespace NuntivusServer.IntegrationTests
                 "SELECT COUNT(*) FROM event_schema_versions WHERE event_type = @eventType AND version_number = @version",
                 new { eventType = "orders.created", version = 1 });
             Assert.Equal(1, count);
+        }
+
+        [Theory]
+        [InlineData("Backward")]
+        [InlineData("Forward")]
+        public async Task Create_schema_draft_accepts_string_compatibility_mode(string compatibilityMode)
+        {
+            await _client.PostAsJsonAsync("/v1/event-definitions",
+                new CreateEventDefinitionRequest("orders.created", "Order Created", null));
+
+            var resp = await _client.PostAsJsonAsync(
+                "/v1/event-definitions/orders.created/schemas",
+                new { version = 1, schema = "{}", compatibilityMode });
+
+            Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
+            var body = await resp.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(compatibilityMode, body.GetProperty("compatibilityMode").GetString());
+            Assert.Equal("Draft", body.GetProperty("state").GetString());
         }
 
         [Fact]

@@ -1,8 +1,11 @@
 using System.Threading.Tasks;
+using System.Security.Claims;
 using Dapper;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -48,11 +51,44 @@ namespace NuntivusServer.IntegrationTests
                     ["Database:PostgresConnectionString"] = ConnectionString
                 });
             });
+
+            builder.ConfigureServices(services =>
+            {
+                services.AddTransient<IStartupFilter, TestPrincipalStartupFilter>();
+            });
         }
 
         private async Task ApplyMigrationsAsync()
         {
             await MigrationTestHelper.ApplyAllAsync(ConnectionString);
+        }
+
+        private sealed class TestPrincipalStartupFilter : IStartupFilter
+        {
+            public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+            {
+                return app =>
+                {
+                    app.Use(async (context, nextMiddleware) =>
+                    {
+                        if (context.Request.Headers.TryGetValue("X-Test-Auth", out var value) && value == "on")
+                        {
+                            var identity = new ClaimsIdentity(
+                            [
+                                new Claim(ClaimTypes.NameIdentifier, "operator-it"),
+                                new Claim(ClaimTypes.Name, "operator-it"),
+                                new Claim(ClaimTypes.Role, "Operator"),
+                            ],
+                            "TestAuth");
+                            context.User = new ClaimsPrincipal(identity);
+                        }
+
+                        await nextMiddleware();
+                    });
+
+                    next(app);
+                };
+            }
         }
     }
 

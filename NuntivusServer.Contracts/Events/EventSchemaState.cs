@@ -1,5 +1,8 @@
+using System.Text.Json.Serialization;
+
 namespace NuntivusServer.Contracts.Events
 {
+    [JsonConverter(typeof(JsonStringEnumConverter))]
     public enum EventSchemaState
     {
         Draft = 1,

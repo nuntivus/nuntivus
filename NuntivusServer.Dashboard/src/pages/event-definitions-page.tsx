@@ -4,7 +4,6 @@ import {
   Dialog,
   Flex,
   Heading,
-  Link,
   Table,
   Text,
   TextArea,
@@ -17,6 +16,7 @@ import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback
 import { FormDialog } from '../components/dialogs/form-dialog'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
+import { DetailAction, NavigableTableRow } from '../components/tables/table-actions'
 import {
   useCreateEventDefinitionMutation,
   useEventDefinitionsQuery,
@@ -240,19 +240,24 @@ export function EventDefinitionsPage() {
                 </Table.Header>
                 <Table.Body>
                   {definitions.map((definition) => (
-                    <Table.Row key={definition.eventType}>
+                    <NavigableTableRow
+                      key={definition.eventType}
+                      to={`/event-definitions/${encodeURIComponent(definition.eventType)}`}
+                      label={`event definition ${definition.eventType}`}
+                    >
                       <Table.RowHeaderCell>{definition.eventType}</Table.RowHeaderCell>
                       <Table.Cell>{definition.displayName}</Table.Cell>
                       <Table.Cell>{definition.description ?? '-'}</Table.Cell>
                       <Table.Cell>{new Date(definition.createdAt).toLocaleString()}</Table.Cell>
                       <Table.Cell>
-                        <Link asChild size="1">
-                          <NavLink to={`/event-definitions/${encodeURIComponent(definition.eventType)}`}>
-                            Detail
-                          </NavLink>
-                        </Link>
+                        <div className="table-row-actions">
+                          <DetailAction
+                            to={`/event-definitions/${encodeURIComponent(definition.eventType)}`}
+                            label={`Open ${definition.eventType}`}
+                          />
+                        </div>
                       </Table.Cell>
-                    </Table.Row>
+                    </NavigableTableRow>
                   ))}
                 </Table.Body>
               </Table.Root>

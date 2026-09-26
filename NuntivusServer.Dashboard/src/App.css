@@ -195,8 +195,80 @@
   flex: 1;
   width: 100%;
   max-width: var(--content-max);
+  box-sizing: border-box;
   margin: 0 auto;
   padding: var(--space-5) var(--space-5) var(--space-6);
+}
+
+.dashboard-content .rt-Card {
+  border-radius: var(--r-md);
+  border-color: var(--border);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
+}
+
+.dashboard-content .rt-TableRoot {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.dashboard-content .rt-TableHeader {
+  background: var(--surface-2);
+}
+
+.dashboard-content .rt-TableColumnHeaderCell {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.dashboard-content .rt-TableBody .rt-TableRow {
+  transition: background 0.12s ease;
+}
+
+.dashboard-content .rt-TableBody .rt-TableRow:hover {
+  background: var(--hover-bg);
+}
+
+.navigable-table-row {
+  cursor: pointer;
+}
+
+.navigable-table-row:focus-visible {
+  outline: 2px solid var(--accent-solid);
+  outline-offset: -2px;
+}
+
+.table-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  min-width: max-content;
+}
+
+.dashboard-content .rt-TableCell,
+.dashboard-content .rt-TableRowHeaderCell {
+  vertical-align: middle;
+}
+
+.dashboard-content input[type='datetime-local'] {
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--panel-bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 13px;
+}
+
+.dashboard-content input[type='datetime-local']:focus-visible {
+  border-color: var(--accent-solid);
 }
 
 .responsive-table {
@@ -205,7 +277,7 @@
   -webkit-overflow-scrolling: touch;
 }
 
-.responsive-table > * {
+.responsive-table>* {
   min-width: 720px;
 }
 
@@ -239,6 +311,127 @@
   width: 12px;
   height: 3px;
   border-radius: 2px;
+}
+
+.dashboard-overview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.dashboard-monitor-controls {
+  display: flex;
+  align-items: end;
+  gap: var(--space-3);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--panel-bg);
+}
+
+.dashboard-live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--border);
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dashboard-live-status>span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.dashboard-control-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.dashboard-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.dashboard-metric {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dashboard-metric::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--border-strong);
+}
+
+.dashboard-metric-success::before {
+  background: var(--success);
+}
+
+.dashboard-metric-warning::before {
+  background: var(--warning);
+}
+
+.dashboard-metric-danger::before {
+  background: var(--error);
+}
+
+.dashboard-activity-panel {
+  min-width: 0;
+}
+
+.dashboard-activity-table>* {
+  min-width: 620px;
+}
+
+.dashboard-activity-table th {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.dashboard-activity-table td,
+.dashboard-activity-table th {
+  vertical-align: middle;
+}
+
+.table-action-column {
+  width: 58px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.table-nowrap {
+  white-space: nowrap;
+}
+
+.table-truncate,
+.table-error-text {
+  display: block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-error-text {
+  max-width: 190px;
+  color: var(--error);
 }
 
 .dashboard-footer {
@@ -400,6 +593,19 @@
   .responsive-panel-grid {
     grid-template-columns: 1fr;
   }
+
+  .dashboard-overview-header {
+    flex-direction: column;
+  }
+
+  .dashboard-monitor-controls {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .dashboard-metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
@@ -412,8 +618,29 @@
     display: none;
   }
 
-  .responsive-table > * {
+  .responsive-table>* {
     min-width: 600px;
+  }
+
+  .dashboard-monitor-controls {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-live-status {
+    width: 100%;
+    min-height: auto;
+    padding: 0 0 var(--space-2);
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .dashboard-control-field {
+    flex: 1 1 130px;
+  }
+
+  .dashboard-metric-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -424,7 +651,7 @@
   justify-content: space-between;
   gap: var(--space-4);
   flex-wrap: wrap;
-  margin-bottom: var(--space-5);
+  margin-bottom: 0;
 }
 
 .page-title {
@@ -545,6 +772,59 @@
   gap: var(--space-4);
 }
 
+.filter-card {
+  padding: 0;
+}
+
+.filter-card .filter-panel {
+  border: 0;
+  border-radius: inherit;
+}
+
+.operations-filter-card .rt-TextFieldRoot,
+.operations-filter-card .rt-SelectTrigger {
+  min-width: 180px;
+}
+
+.operations-filter-card {
+  padding: var(--space-4);
+}
+
+.operations-filter-card form>.rt-Flex>.rt-Heading {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.operations-filter-card form>.rt-Flex>.rt-Flex:not(.filter-actions) .rt-TextFieldRoot {
+  flex: 1 1 200px;
+}
+
+.operations-filter-card .filter-actions {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.data-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+
+  .operations-filter-card .rt-TextFieldRoot,
+  .operations-filter-card .rt-SelectTrigger {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .operations-filter-card form>.rt-Flex>.rt-Flex {
+    width: 100%;
+  }
+}
+
 .filter-panel-header {
   display: flex;
   align-items: center;
@@ -635,6 +915,7 @@
 }
 
 @media (max-width: 640px) {
+
   .filter-grid,
   .filter-daterange {
     grid-template-columns: 1fr;
@@ -670,4 +951,3 @@
 .form-dialog-body .field:last-of-type {
   margin-bottom: 0;
 }
-

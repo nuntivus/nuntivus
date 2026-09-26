@@ -5,7 +5,6 @@ import {
   Dialog,
   Flex,
   Heading,
-  Link,
   Select,
   Table,
   Text,
@@ -19,6 +18,8 @@ import { FormDialog } from '../components/dialogs/form-dialog'
 import { getServerValidation } from '../components/forms/form-validation'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
+import { PowerIcon } from '../components/icons/nav-icons'
+import { DetailAction, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
 import {
   useCreateCustomerMutation,
   useCustomersQuery,
@@ -478,23 +479,23 @@ export function CustomersPage() {
             emptyAction={
               hasActiveFilters
                 ? {
-                    label: 'Clear filters',
-                    onClick: () =>
-                      updateParams({
-                        search: null,
-                        enabled: null,
-                        sortBy: null,
-                        sortDirection: null,
-                        page: '1',
-                        pageSize: null,
-                      }),
-                  }
+                  label: 'Clear filters',
+                  onClick: () =>
+                    updateParams({
+                      search: null,
+                      enabled: null,
+                      sortBy: null,
+                      sortDirection: null,
+                      page: '1',
+                      pageSize: null,
+                    }),
+                }
                 : {
-                    label: 'Refresh',
-                    onClick: () => {
-                      void customersQuery.refetch()
-                    },
-                  }
+                  label: 'Refresh',
+                  onClick: () => {
+                    void customersQuery.refetch()
+                  },
+                }
             }
           >
             <>
@@ -540,7 +541,11 @@ export function CustomersPage() {
                       const pending = rowActionId === customer.id
 
                       return (
-                        <Table.Row key={customer.id}>
+                        <NavigableTableRow
+                          key={customer.id}
+                          to={`/customers/${encodeURIComponent(customer.id)}`}
+                          label={`customer ${customer.name}`}
+                        >
                           <Table.Cell>
                             <input
                               type="checkbox"
@@ -560,29 +565,21 @@ export function CustomersPage() {
                             {new Date(customer.updatedAt).toLocaleString()}
                           </Table.Cell>
                           <Table.Cell>
-                            <Flex gap="2" align="center">
-                              <Link asChild size="1">
-                                <NavLink to={`/customers/${encodeURIComponent(customer.id)}`}>
-                                  Detail
-                                </NavLink>
-                              </Link>
-                              <Button
-                                size="1"
-                                variant="soft"
+                            <div className="table-row-actions">
+                              <TableIconButton
+                                label={pending ? 'Saving customer' : customer.enabled ? 'Disable customer' : 'Enable customer'}
                                 disabled={!canWriteCustomers || pending}
                                 onClick={() =>
                                   handleToggleEnabled(customer.id, customer.enabled)
                                 }
+                                color={customer.enabled ? 'amber' : 'green'}
                               >
-                                {pending
-                                  ? 'Saving...'
-                                  : customer.enabled
-                                    ? 'Disable'
-                                    : 'Enable'}
-                              </Button>
-                            </Flex>
+                                <PowerIcon width={15} height={15} />
+                              </TableIconButton>
+                              <DetailAction to={`/customers/${encodeURIComponent(customer.id)}`} label={`Open ${customer.name}`} />
+                            </div>
                           </Table.Cell>
-                        </Table.Row>
+                        </NavigableTableRow>
                       )
                     })}
                   </Table.Body>

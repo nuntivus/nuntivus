@@ -136,3 +136,51 @@ export function ChevronRightIcon(props: IconProps) {
     </svg>
   )
 }
+
+export function PowerIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 2v10" />
+      <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
+    </svg>
+  )
+}
+
+export function TestEventIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M9 3h6" />
+      <path d="M10 3v5l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3" />
+      <path d="M8 14h8" />
+    </svg>
+  )
+}
+
+export function TrashIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 7h16" />
+      <path d="M9 7V4h6v3" />
+      <path d="m6 7 1 14h10l1-14" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  )
+}
+
+export function RetryIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M20 7v5h-5" />
+      <path d="M19 12a7 7 0 1 0-2 5" />
+    </svg>
+  )
+}
+
+export function EyeIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </svg>
+  )
+}

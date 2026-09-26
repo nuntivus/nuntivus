@@ -4,7 +4,6 @@ import {
   Card,
   Flex,
   Heading,
-  Link,
   Select,
   Table,
   Text,
@@ -13,9 +12,10 @@ import {
 import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
-import { SearchIcon } from '../components/icons/nav-icons'
+import { PowerIcon, SearchIcon, TestEventIcon } from '../components/icons/nav-icons'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
+import { DetailAction, NavigableTableRow, TableIconButton, TableIconLink } from '../components/tables/table-actions'
 import {
   useContractsQuery,
   useDisableContractMutation,
@@ -414,21 +414,21 @@ export function ContractsPage() {
             emptyAction={
               hasActiveFilters
                 ? {
-                    label: 'Clear filters',
-                    onClick: () =>
-                      setSearchParams(
-                        new URLSearchParams({
-                          page: '1',
-                          pageSize: String(defaultPageSize),
-                        }),
-                      ),
-                  }
+                  label: 'Clear filters',
+                  onClick: () =>
+                    setSearchParams(
+                      new URLSearchParams({
+                        page: '1',
+                        pageSize: String(defaultPageSize),
+                      }),
+                    ),
+                }
                 : {
-                    label: 'Refresh',
-                    onClick: () => {
-                      void contractsQuery.refetch()
-                    },
-                  }
+                  label: 'Refresh',
+                  onClick: () => {
+                    void contractsQuery.refetch()
+                  },
+                }
             }
           >
             <>
@@ -479,7 +479,11 @@ export function ContractsPage() {
                     const pending = rowActionId === contract.id
 
                     return (
-                      <Table.Row key={contract.id}>
+                      <NavigableTableRow
+                        key={contract.id}
+                        to={`/contracts/${encodeURIComponent(contract.id)}`}
+                        label={`contract ${contract.name ?? contract.id}`}
+                      >
                         <Table.Cell>
                           <input
                             type="checkbox"
@@ -499,34 +503,24 @@ export function ContractsPage() {
                         </Table.Cell>
                         <Table.Cell>{new Date(contract.updatedAt).toLocaleString()}</Table.Cell>
                         <Table.Cell>
-                          <Flex gap="2">
-                            <Link asChild size="1">
-                              <NavLink to={`/contracts/${encodeURIComponent(contract.id)}`}>
-                                Detail
-                              </NavLink>
-                            </Link>
-                            <Link asChild size="1">
-                              <NavLink to={`/test-events?contractId=${encodeURIComponent(contract.id)}`}>
-                                Test event
-                              </NavLink>
-                            </Link>
-                            <Button
-                              size="1"
-                              variant="soft"
+                          <div className="table-row-actions">
+                            <TableIconLink to={`/test-events?contractId=${encodeURIComponent(contract.id)}`} label="Send test event">
+                              <TestEventIcon width={15} height={15} />
+                            </TableIconLink>
+                            <TableIconButton
+                              label={pending ? 'Saving contract' : contract.enabled ? 'Disable contract' : 'Enable contract'}
                               disabled={!canWriteContracts || pending}
                               onClick={() =>
                                 handleToggleEnabled(contract.id, contract.enabled)
                               }
+                              color={contract.enabled ? 'amber' : 'green'}
                             >
-                              {pending
-                                ? 'Saving...'
-                                : contract.enabled
-                                  ? 'Disable'
-                                  : 'Enable'}
-                            </Button>
-                          </Flex>
+                              <PowerIcon width={15} height={15} />
+                            </TableIconButton>
+                            <DetailAction to={`/contracts/${encodeURIComponent(contract.id)}`} label={`Open ${contract.name ?? contract.id}`} />
+                          </div>
                         </Table.Cell>
-                      </Table.Row>
+                      </NavigableTableRow>
                     )
                   })}
                 </Table.Body>

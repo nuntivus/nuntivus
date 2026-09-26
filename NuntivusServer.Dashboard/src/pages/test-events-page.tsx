@@ -1,4 +1,4 @@
-import { Button, Card, Flex, Heading, Select, Text, TextField } from '@radix-ui/themes'
+import { Button, Card, Flex, Select, Text, TextField } from '@radix-ui/themes'
 import { useState, type FormEvent } from 'react'
 import { NavLink, useSearchParams } from 'react-router-dom'
 import { ContractTestEventForm } from '../features/contracts/contract-test-event-form'
@@ -10,7 +10,7 @@ export function TestEventsPage() {
   const contractId = params.get('contractId') ?? ''
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
-  const contractsQuery = useContractsQuery({ page: 1, pageSize: 100, search, sortBy: 'name', sortDirection: 'asc' })
+  const contractsQuery = useContractsQuery({ page: 1, pageSize: 100, search, sortBy: 'updatedAt', sortDirection: 'desc' })
   const detailQuery = useContractDetailQuery(contractId || undefined)
   const selected = detailQuery.data?.contract
   const contracts = contractsQuery.data?.items ?? []
@@ -23,8 +23,13 @@ export function TestEventsPage() {
 
   return (
     <Flex direction="column" gap="4">
-      <Heading size="6">Test events</Heading>
-      <Card>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Test events</h1>
+          <p className="page-subtitle">Send a controlled event to one contract destination.</p>
+        </div>
+      </div>
+      <Card className="operations-filter-card">
         <Flex direction="column" gap="3">
           <Text size="2" color="gray">
             Select a contract to preview a test event or send it only to that contract’s destination.

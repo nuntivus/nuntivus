@@ -5,7 +5,6 @@ import {
   Dialog,
   Flex,
   Heading,
-  Link,
   Select,
   Table,
   Text,
@@ -17,6 +16,8 @@ import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
 import { FormDialog } from '../components/dialogs/form-dialog'
 import { ListFeedback } from '../components/lists/list-feedback'
+import { TrashIcon } from '../components/icons/nav-icons'
+import { DetailAction, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
 import {
   useAdminRolesQuery,
   useAdminUsersQuery,
@@ -462,7 +463,11 @@ export function UsersPage() {
 
                 <Table.Body>
                   {filteredUsers.map((user) => (
-                    <Table.Row key={user.subject}>
+                    <NavigableTableRow
+                      key={user.subject}
+                      to={`/users/${encodeURIComponent(user.subject)}`}
+                      label={`user ${user.displayName ?? user.subject}`}
+                    >
                       <Table.Cell>
                         <input
                           type="checkbox"
@@ -483,26 +488,21 @@ export function UsersPage() {
                         </Flex>
                       </Table.Cell>
                       <Table.Cell>
-                        <Flex gap="2">
-                          <Link asChild>
-                            <NavLink to={`/users/${encodeURIComponent(user.subject)}`}>
-                              View detail
-                            </NavLink>
-                          </Link>
-                          <Button
-                            size="1"
+                        <div className="table-row-actions">
+                          <TableIconButton
+                            label={rowActionSubject === user.subject ? 'Deleting user' : 'Delete user'}
                             color="red"
-                            variant="soft"
                             disabled={!canManageRoles || rowActionSubject === user.subject}
                             onClick={() => {
                               void handleDelete(user.subject)
                             }}
                           >
-                            {rowActionSubject === user.subject ? 'Deleting...' : 'Delete'}
-                          </Button>
-                        </Flex>
+                            <TrashIcon width={15} height={15} />
+                          </TableIconButton>
+                          <DetailAction to={`/users/${encodeURIComponent(user.subject)}`} label={`Open ${user.displayName ?? user.subject}`} />
+                        </div>
                       </Table.Cell>
-                    </Table.Row>
+                    </NavigableTableRow>
                   ))}
                 </Table.Body>
               </Table.Root>

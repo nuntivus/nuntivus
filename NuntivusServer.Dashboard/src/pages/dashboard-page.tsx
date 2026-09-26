@@ -1,5 +1,7 @@
-import { Card, Flex, Heading, Select, Separator, Text } from '@radix-ui/themes'
+import { Badge, Card, Flex, Heading, Link, Select, Table, Text } from '@radix-ui/themes'
 import { useState } from 'react'
+import { NavLink } from 'react-router-dom'
+import { DetailAction, NavigableTableRow } from '../components/tables/table-actions'
 import { DashboardTimeChart } from '../components/observability/dashboard-time-chart'
 import {
   useDashboardOverviewQuery,
@@ -30,9 +32,9 @@ export function DashboardPage() {
 
   const trackedDeliveriesTotal =
     successfulDeliveries !== undefined &&
-    failedDeliveries !== undefined &&
-    deadDeliveries !== undefined &&
-    pendingDeliveries !== undefined
+      failedDeliveries !== undefined &&
+      deadDeliveries !== undefined &&
+      pendingDeliveries !== undefined
       ? successfulDeliveries + failedDeliveries + deadDeliveries + pendingDeliveries
       : undefined
 
@@ -49,37 +51,50 @@ export function DashboardPage() {
       : undefined
 
   return (
-    <Flex direction="column" gap="4">
-      <Flex justify="between" align="center" wrap="wrap" gap="3">
-        <Heading size="6">Overview</Heading>
-        <Flex align="center" wrap="wrap" gap="3">
-          <Text size="2" as="label" htmlFor="dashboard-range">Graph window</Text>
-          <Select.Root value={String(rangeSeconds)} onValueChange={(value) => setRangeSeconds(Number(value))}>
-            <Select.Trigger id="dashboard-range" aria-label="Graph window" />
-            <Select.Content>
-              <Select.Item value="15">15 seconds</Select.Item>
-              <Select.Item value="30">30 seconds</Select.Item>
-              <Select.Item value="60">1 minute</Select.Item>
-              <Select.Item value="3600">1 hour</Select.Item>
-            </Select.Content>
-          </Select.Root>
-          <Text size="2" as="label" htmlFor="dashboard-refresh">Refresh every</Text>
-          <Select.Root value={String(refreshInterval)} onValueChange={(value) => setRefreshInterval(Number(value))}>
-            <Select.Trigger id="dashboard-refresh" aria-label="Refresh interval" />
-            <Select.Content>
-              <Select.Item value="15000">15 seconds</Select.Item>
-              <Select.Item value="30000">30 seconds</Select.Item>
-              <Select.Item value="60000">1 minute</Select.Item>
-              <Select.Item value="3600000">1 hour</Select.Item>
-            </Select.Content>
-          </Select.Root>
-        </Flex>
-      </Flex>
+    <Flex direction="column" gap="4" className="dashboard-overview">
+      <div className="dashboard-overview-header">
+        <div>
+          <Heading size="6">Overview</Heading>
+          <Text size="2" color="gray">
+            Monitor delivery health, throughput, and recent platform activity.
+          </Text>
+        </div>
+        <div className="dashboard-monitor-controls" aria-label="Dashboard monitoring controls">
+          <span className="dashboard-live-status">
+            <span aria-hidden="true" /> Live
+          </span>
+          <label className="dashboard-control-field" htmlFor="dashboard-range">
+            <span>Window</span>
+            <Select.Root value={String(rangeSeconds)} onValueChange={(value) => setRangeSeconds(Number(value))}>
+              <Select.Trigger id="dashboard-range" aria-label="Graph window" />
+              <Select.Content>
+                <Select.Item value="15">15 seconds</Select.Item>
+                <Select.Item value="30">30 seconds</Select.Item>
+                <Select.Item value="60">1 minute</Select.Item>
+                <Select.Item value="3600">1 hour</Select.Item>
+              </Select.Content>
+            </Select.Root>
+          </label>
+          <label className="dashboard-control-field" htmlFor="dashboard-refresh">
+            <span>Refresh</span>
+            <Select.Root value={String(refreshInterval)} onValueChange={(value) => setRefreshInterval(Number(value))}>
+              <Select.Trigger id="dashboard-refresh" aria-label="Refresh interval" />
+              <Select.Content>
+                <Select.Item value="15000">15 seconds</Select.Item>
+                <Select.Item value="30000">30 seconds</Select.Item>
+                <Select.Item value="60000">1 minute</Select.Item>
+                <Select.Item value="3600000">1 hour</Select.Item>
+              </Select.Content>
+            </Select.Root>
+          </label>
+        </div>
+      </div>
 
-      <Flex gap="3" wrap="wrap">
+      <div className="dashboard-metric-grid">
         <MetricCard
           title="Successful deliveries"
           value={successfulQuery.data?.toString()}
+          tone="success"
           loading={successfulQuery.isLoading}
           error={successfulQuery.isError
             ? getApiErrorMessage(successfulQuery.error, 'Unable to load successful deliveries.')
@@ -89,6 +104,7 @@ export function DashboardPage() {
         <MetricCard
           title="Failed deliveries"
           value={overview?.totalFailedDeliveries.toString()}
+          tone="warning"
           loading={overviewQuery.isLoading}
           error={overviewQuery.isError
             ? getApiErrorMessage(overviewQuery.error, 'Unable to load failed deliveries.')
@@ -98,6 +114,7 @@ export function DashboardPage() {
         <MetricCard
           title="Dead deliveries"
           value={overview?.totalDeadDeliveries.toString()}
+          tone="danger"
           loading={overviewQuery.isLoading}
           error={overviewQuery.isError
             ? getApiErrorMessage(overviewQuery.error, 'Unable to load dead deliveries.')
@@ -107,6 +124,7 @@ export function DashboardPage() {
         <MetricCard
           title="Delivery success rate"
           value={formatRatePercentage(successfulDeliveries, trackedDeliveriesTotal)}
+          tone="success"
           loading={ratesLoading}
           error={ratesError}
         />
@@ -114,10 +132,11 @@ export function DashboardPage() {
         <MetricCard
           title="Delivery failure rate"
           value={formatRatePercentage(failedOrDeadDeliveries, trackedDeliveriesTotal)}
+          tone="danger"
           loading={ratesLoading}
           error={ratesError}
         />
-      </Flex>
+      </div>
 
       <div className="responsive-panel-grid">
         <DashboardTimeChart
@@ -148,10 +167,17 @@ export function DashboardPage() {
       </div>
 
       <div className="responsive-panel-grid">
-        <Card style={{ flex: '1 1 420px' }}>
+        <Card className="dashboard-activity-panel">
           <Flex direction="column" gap="3">
-            <Heading size="4">Recent events</Heading>
-            <Separator size="4" />
+            <Flex justify="between" align="center" gap="3">
+              <div>
+                <Heading size="4">Recent events</Heading>
+                <Text size="1" color="gray">Latest events accepted by the platform</Text>
+              </div>
+              <Link asChild size="1">
+                <NavLink to="/events">View all</NavLink>
+              </Link>
+            </Flex>
 
             {recentEventsQuery.isLoading ? (
               <Text size="2" color="gray">
@@ -166,31 +192,47 @@ export function DashboardPage() {
                 No events yet.
               </Text>
             ) : (
-              <Flex direction="column" gap="2">
-                {recentEvents.map((item) => (
-                  <Card key={item.id} variant="surface" size="1">
-                    <Flex direction="column" gap="1">
-                      <Text size="2" weight="medium">
-                        {item.type}
-                      </Text>
-                      <Text size="1" color="gray">
-                        Source: {item.source}
-                      </Text>
-                      <Text size="1" color="gray">
-                        Received: {new Date(item.receivedAt).toLocaleString()}
-                      </Text>
-                    </Flex>
-                  </Card>
-                ))}
-              </Flex>
+              <div className="responsive-table dashboard-activity-table">
+                <Table.Root size="1" aria-label="Recent events">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeaderCell>Event</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Source</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Received</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell className="table-action-column">Action</Table.ColumnHeaderCell>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {recentEvents.map((item) => (
+                      <NavigableTableRow key={item.id} to={`/events/${encodeURIComponent(item.id)}`} label={`event ${item.type}`}>
+                        <Table.RowHeaderCell><Text weight="medium" size="2">{item.type}</Text></Table.RowHeaderCell>
+                        <Table.Cell><span className="table-truncate" title={item.source}>{item.source}</span></Table.Cell>
+                        <Table.Cell className="table-nowrap">{formatTimestamp(item.receivedAt)}</Table.Cell>
+                        <Table.Cell className="table-action-column">
+                          <div className="table-row-actions">
+                            <DetailAction to={`/events/${encodeURIComponent(item.id)}`} label={`Open event ${item.type}`} />
+                          </div>
+                        </Table.Cell>
+                      </NavigableTableRow>
+                    ))}
+                  </Table.Body>
+                </Table.Root>
+              </div>
             )}
           </Flex>
         </Card>
 
-        <Card style={{ flex: '1 1 420px' }}>
+        <Card className="dashboard-activity-panel">
           <Flex direction="column" gap="3">
-            <Heading size="4">Recent failures</Heading>
-            <Separator size="4" />
+            <Flex justify="between" align="center" gap="3">
+              <div>
+                <Heading size="4">Recent failures</Heading>
+                <Text size="1" color="gray">Deliveries that need operator attention</Text>
+              </div>
+              <Link asChild size="1">
+                <NavLink to="/deliveries/failures">View all</NavLink>
+              </Link>
+            </Flex>
 
             {recentFailuresQuery.isLoading ? (
               <Text size="2" color="gray">
@@ -208,26 +250,34 @@ export function DashboardPage() {
                 No failures found.
               </Text>
             ) : (
-              <Flex direction="column" gap="2">
-                {recentFailures.map((item) => (
-                  <Card key={item.deliveryId} variant="surface" size="1">
-                    <Flex direction="column" gap="1">
-                      <Text size="2" weight="medium">
-                        {item.eventType}
-                      </Text>
-                      <Text size="1" color="gray">
-                        Customer: {item.customerId}
-                      </Text>
-                      <Text size="1" color="gray">
-                        Attempts: {item.attemptCount}
-                      </Text>
-                      <Text size="1" color="gray">
-                        Error: {item.lastError ?? 'n/a'}
-                      </Text>
-                    </Flex>
-                  </Card>
-                ))}
-              </Flex>
+              <div className="responsive-table dashboard-activity-table">
+                <Table.Root size="1" aria-label="Recent delivery failures">
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.ColumnHeaderCell>Event</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Customer</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Attempts</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Error</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell className="table-action-column">Action</Table.ColumnHeaderCell>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {recentFailures.map((item) => (
+                      <NavigableTableRow key={item.deliveryId} to={`/deliveries/${encodeURIComponent(item.deliveryId)}`} label={`delivery ${item.deliveryId}`}>
+                        <Table.RowHeaderCell><Badge color="red" variant="soft">{item.eventType}</Badge></Table.RowHeaderCell>
+                        <Table.Cell><span className="table-truncate" title={item.customerId}>{item.customerId}</span></Table.Cell>
+                        <Table.Cell>{item.attemptCount}</Table.Cell>
+                        <Table.Cell><span className="table-error-text" title={item.lastError ?? 'No error detail'}>{item.lastError ?? 'No error detail'}</span></Table.Cell>
+                        <Table.Cell className="table-action-column">
+                          <div className="table-row-actions">
+                            <DetailAction to={`/deliveries/${encodeURIComponent(item.deliveryId)}`} label="Open delivery" />
+                          </div>
+                        </Table.Cell>
+                      </NavigableTableRow>
+                    ))}
+                  </Table.Body>
+                </Table.Root>
+              </div>
             )}
           </Flex>
         </Card>
@@ -244,12 +294,22 @@ function formatRatePercentage(numerator?: number, denominator?: number) {
   return `${((numerator / denominator) * 100).toFixed(1)}%`
 }
 
+function formatTimestamp(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
 interface MetricCardProps {
   title: string
   value?: string
   loading?: boolean
   error?: string
   unavailableMessage?: string
+  tone?: 'neutral' | 'success' | 'warning' | 'danger'
 }
 
 function MetricCard({
@@ -258,9 +318,10 @@ function MetricCard({
   loading,
   error,
   unavailableMessage,
+  tone = 'neutral',
 }: MetricCardProps) {
   return (
-    <Card style={{ flex: '1 1 220px', minWidth: 220 }}>
+    <Card className={`dashboard-metric dashboard-metric-${tone}`}>
       <Flex direction="column" gap="2">
         <Text size="2" color="gray">
           {title}

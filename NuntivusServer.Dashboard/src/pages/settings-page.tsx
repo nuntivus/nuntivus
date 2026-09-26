@@ -97,7 +97,12 @@ export function SettingsPage() {
 
   return (
     <Flex direction="column" gap="4">
-      <Heading size="6">Settings</Heading>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Settings</h1>
+          <p className="page-subtitle">Manage operator preferences and server-wide delivery defaults.</p>
+        </div>
+      </div>
 
       <Card>
         <Flex direction="column" gap="2">

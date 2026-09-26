@@ -4,7 +4,6 @@ import {
   Card,
   Flex,
   Heading,
-  Link,
   Select,
   Table,
   Text,
@@ -15,6 +14,8 @@ import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
+import { RetryIcon } from '../components/icons/nav-icons'
+import { DetailAction, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
 import {
   useFailedDeliveriesQuery,
   useRetryDeliveryMutation,
@@ -165,9 +166,14 @@ export function FailedDeliveriesPage() {
 
   return (
     <Flex direction="column" gap="4">
-      <Heading size="6">Failed & dead deliveries</Heading>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Failed &amp; dead deliveries</h1>
+          <p className="page-subtitle">Investigate delivery errors and retry recoverable failures.</p>
+        </div>
+      </div>
 
-      <Card>
+      <Card className="operations-filter-card">
         <form onSubmit={handleSearchSubmit}>
           <Flex direction="column" gap="3">
             <Heading size="4">Filters</Heading>
@@ -216,7 +222,7 @@ export function FailedDeliveriesPage() {
               />
             </Flex>
 
-            <Flex gap="2">
+            <Flex gap="2" wrap="wrap" className="filter-actions">
               <Button type="submit">Apply filters</Button>
               <Button
                 type="button"
@@ -284,7 +290,11 @@ export function FailedDeliveriesPage() {
                     {deliveries.map((delivery) => {
                       const retrying = activeRetryMutation.isPending && confirmDeliveryId === delivery.id
                       return (
-                        <Table.Row key={delivery.id}>
+                        <NavigableTableRow
+                          key={delivery.id}
+                          to={`/deliveries/${encodeURIComponent(delivery.id)}`}
+                          label={`delivery ${delivery.id}`}
+                        >
                           <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
                           <Table.Cell>
                             <Badge color={delivery.status === 'Dead' ? 'red' : 'amber'} variant="soft">
@@ -297,24 +307,21 @@ export function FailedDeliveriesPage() {
                           <Table.Cell>{delivery.latestFailure?.error ?? delivery.lastError ?? '-'}</Table.Cell>
                           <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>
                           <Table.Cell>
-                            <Flex gap="2">
-                              <Link asChild size="1">
-                                <NavLink to={`/deliveries/${encodeURIComponent(delivery.id)}`}>
-                                  Detail
-                                </NavLink>
-                              </Link>
-                              <Button
-                                size="1"
+                            <div className="table-row-actions">
+                              <TableIconButton
+                                label={retrying ? 'Retrying delivery' : 'Retry delivery'}
                                 disabled={!canOperateDeliveries || retrying}
                                 onClick={() => {
                                   void handleRetry(delivery.id)
                                 }}
+                                color="amber"
                               >
-                                {retrying ? 'Retrying...' : 'Retry'}
-                              </Button>
-                            </Flex>
+                                <RetryIcon width={15} height={15} />
+                              </TableIconButton>
+                              <DetailAction to={`/deliveries/${encodeURIComponent(delivery.id)}`} label="Open delivery" />
+                            </div>
                           </Table.Cell>
-                        </Table.Row>
+                        </NavigableTableRow>
                       )
                     })}
                   </Table.Body>

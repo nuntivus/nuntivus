@@ -4,7 +4,6 @@ import {
   Card,
   Flex,
   Heading,
-  Link,
   Select,
   Table,
   Text,
@@ -16,6 +15,7 @@ import { hasPermission } from '../auth/permissions'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { SearchIcon } from '../components/icons/nav-icons'
 import { ListPagination } from '../components/lists/list-pagination'
+import { DetailAction, NavigableTableRow } from '../components/tables/table-actions'
 import { useEventsQuery } from '../features/events/use-events'
 import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
@@ -183,17 +183,22 @@ export function EventsPage() {
     receivedToParam.trim().length > 0
   const filteredById = idParam.trim()
     ? events.filter((item) =>
-        item.id.toLowerCase().includes(idParam.trim().toLowerCase()),
-      )
+      item.id.toLowerCase().includes(idParam.trim().toLowerCase()),
+    )
     : events
 
   const paging = eventsQuery.data
 
   return (
     <Flex direction="column" gap="4">
-      <Heading size="6">Events</Heading>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Events</h1>
+          <p className="page-subtitle">Inspect accepted events, delivery outcomes, and source activity.</p>
+        </div>
+      </div>
 
-      <Card>
+      <Card className="filter-card">
         <form onSubmit={handleSearchSubmit}>
           <div className="filter-panel">
             <div className="filter-panel-header">
@@ -376,21 +381,21 @@ export function EventsPage() {
             emptyAction={
               hasActiveFilters
                 ? {
-                    label: 'Clear filters',
-                    onClick: () =>
-                      setSearchParams(
-                        new URLSearchParams({
-                          page: '1',
-                          pageSize: String(defaultPageSize),
-                        }),
-                      ),
-                  }
+                  label: 'Clear filters',
+                  onClick: () =>
+                    setSearchParams(
+                      new URLSearchParams({
+                        page: '1',
+                        pageSize: String(defaultPageSize),
+                      }),
+                    ),
+                }
                 : {
-                    label: 'Refresh',
-                    onClick: () => {
-                      void eventsQuery.refetch()
-                    },
-                  }
+                  label: 'Refresh',
+                  onClick: () => {
+                    void eventsQuery.refetch()
+                  },
+                }
             }
           >
             <>
@@ -428,7 +433,11 @@ export function EventsPage() {
                       const summary = summarizeDeliveries(item.deliveries)
 
                       return (
-                        <Table.Row key={item.id}>
+                        <NavigableTableRow
+                          key={item.id}
+                          to={`/events/${encodeURIComponent(item.id)}`}
+                          label={`event ${item.type}`}
+                        >
                           <Table.RowHeaderCell>{item.id}</Table.RowHeaderCell>
                           <Table.Cell>{item.type}</Table.Cell>
                           <Table.Cell>{item.source}</Table.Cell>
@@ -443,13 +452,14 @@ export function EventsPage() {
                             </Flex>
                           </Table.Cell>
                           <Table.Cell>
-                            <Link asChild size="1">
-                              <NavLink to={`/events/${encodeURIComponent(item.id)}`}>
-                                Detail
-                              </NavLink>
-                            </Link>
+                            <div className="table-row-actions">
+                              <DetailAction
+                                to={`/events/${encodeURIComponent(item.id)}`}
+                                label={`Open event ${item.type}`}
+                              />
+                            </div>
                           </Table.Cell>
-                        </Table.Row>
+                        </NavigableTableRow>
                       )
                     })}
                   </Table.Body>
