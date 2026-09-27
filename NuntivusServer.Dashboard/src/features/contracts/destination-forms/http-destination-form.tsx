@@ -10,35 +10,22 @@ type HttpDestinationFormProps = {
 export function HttpDestinationForm({ value, onChange }: HttpDestinationFormProps) {
   return (
     <>
-      <Text as="label" htmlFor="http-destination-url" size="2" color="gray">
-        Destination URL
-      </Text>
-      <TextField.Root
-        id="http-destination-url"
-        placeholder="https://example.com/webhook"
-        value={value.url}
-        onChange={(event) => onChange({ ...value, url: event.target.value })}
-      />
+      <div className="destination-form-field">
+        <Text as="label" htmlFor="http-destination-url" size="2" color="gray">Destination URL</Text>
+        <TextField.Root id="http-destination-url" placeholder="https://example.com/webhook" value={value.url} onChange={(event) => onChange({ ...value, url: event.target.value })} />
+      </div>
 
-      <Text id="http-authentication-label" size="2" color="gray">
-        Authentication
-      </Text>
-      <Select.Root
-        value={value.authenticationType}
-        onValueChange={(next) =>
-          onChange({
-            ...value,
-            authenticationType: next as 'none' | 'bearer' | 'hmac',
-          })
-        }
-      >
-        <Select.Trigger aria-labelledby="http-authentication-label" />
-        <Select.Content>
-          <Select.Item value="none">None</Select.Item>
-          <Select.Item value="bearer">Bearer</Select.Item>
-          <Select.Item value="hmac">HMAC</Select.Item>
-        </Select.Content>
-      </Select.Root>
+      <div className="destination-form-field">
+        <Text id="http-authentication-label" size="2" color="gray">Authentication</Text>
+        <Select.Root value={value.authenticationType} onValueChange={(next) => onChange({ ...value, authenticationType: next as 'none' | 'bearer' | 'hmac' })}>
+          <Select.Trigger aria-labelledby="http-authentication-label" />
+          <Select.Content>
+            <Select.Item value="none">None</Select.Item>
+            <Select.Item value="bearer">Bearer</Select.Item>
+            <Select.Item value="hmac">HMAC</Select.Item>
+          </Select.Content>
+        </Select.Root>
+      </div>
 
       {value.authenticationType !== 'none' ? (
         <SecretField

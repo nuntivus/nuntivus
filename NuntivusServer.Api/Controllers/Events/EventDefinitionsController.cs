@@ -62,13 +62,14 @@ namespace NuntivusServer.Api.Controllers.Events
 
         [HttpPut("{eventType}")]
         [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
-        public async Task<IActionResult> UpdateDescription(
+        public async Task<IActionResult> Update(
             string eventType,
-            [FromBody] UpdateEventDefinitionDescriptionRequest request,
+            [FromBody] UpdateEventDefinitionRequest request,
             CancellationToken cancellationToken)
         {
-            var result = await _definitions.UpdateDescriptionAsync(
+            var result = await _definitions.UpdateAsync(
                 eventType,
+                request.DisplayName,
                 request?.Description,
                 cancellationToken);
 

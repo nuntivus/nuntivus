@@ -13,7 +13,10 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { DestinationHealthSummary } from '../components/observability/destination-health-summary'
+import { CalendarIcon, CheckCircleIcon, ContractsIcon, CustomersIcon, DeliveriesIcon, FailedDeliveriesIcon } from '../components/icons/nav-icons'
+import { DetailPageHeader } from '../components/states/detail-page-header'
 import { DetailLoadingState } from '../components/states/detail-loading-state'
+import { DetailMetric, DetailSectionTitle } from '../components/states/detail-visuals'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
 import { useCustomerDestinationHealthQuery } from '../features/destination-health/use-destination-health'
 import {
@@ -129,77 +132,90 @@ export function CustomerDetailPage() {
     enableMutation.isPending || disableMutation.isPending || updateMutation.isPending
 
   return (
-    <Flex direction="column" gap="4">
-      <Flex align="center" justify="between" wrap="wrap" gap="3">
-        <Heading size="6">Customer: {customer.id}</Heading>
-        <Flex gap="2" wrap="wrap">
-          <Button asChild variant="soft">
-            <NavLink to="/customers">Back to list</NavLink>
-          </Button>
-          <Button
-            variant="soft"
-            onClick={() => navigate(`/deliveries?customerId=${encodeURIComponent(customer.id)}`)}
-            disabled={!canReadDeliveries}
-          >
-            View deliveries
-          </Button>
-        </Flex>
-      </Flex>
-
-      <CustomerInfoEditor
-        key={`${customer.id}:${customer.updatedAt}`}
-        id={customer.id}
-        name={customer.name}
-        enabled={customer.enabled}
-        canWriteCustomers={canWriteCustomers}
-        mutationError={
-          getApiErrorMessage(updateMutation.error, '') ||
-          getApiErrorMessage(enableMutation.error, '') ||
-          getApiErrorMessage(disableMutation.error, '')
-        }
-        pending={togglePending}
-        onSave={async (name) => {
-          try {
-            await updateMutation.mutateAsync({ name })
-            notifications.success('Customer saved.', 'Customer detail')
-          } catch (error) {
-            notifications.error(getApiErrorMessage(error, 'Unable to save customer.'), 'Customer detail')
-          }
-        }}
-        onEnable={async () => {
-          try {
-            await enableMutation.mutateAsync(customer.id)
-            notifications.success('Customer enabled.', 'Customer detail')
-          } catch (error) {
-            notifications.error(getApiErrorMessage(error, 'Unable to enable customer.'), 'Customer detail')
-          }
-        }}
-        onDisable={async () => {
-          const confirmed = await confirm({
-            title: 'Disable customer',
-            description:
-              'Disable this customer? New deliveries for this customer may be blocked until it is enabled again.',
-            confirmText: 'Disable customer',
-            cancelText: 'Cancel',
-            confirmColor: 'red',
-          })
-
-          if (!confirmed) {
-            return
-          }
-
-          try {
-            await disableMutation.mutateAsync(customer.id)
-            notifications.success('Customer disabled.', 'Customer detail')
-          } catch (error) {
-            notifications.error(getApiErrorMessage(error, 'Unable to disable customer.'), 'Customer detail')
-          }
-        }}
+    <Flex direction="column" gap="4" className="detail-page">
+      <DetailPageHeader
+        title={customer.name || customer.id}
+        description="Customer profile, contracts, destination health, and delivery activity."
+        icon={CustomersIcon}
+        actions={(
+          <>
+            <Button asChild variant="soft">
+              <NavLink to="/customers">Back to list</NavLink>
+            </Button>
+            <Button
+              variant="soft"
+              onClick={() => navigate(`/deliveries?customerId=${encodeURIComponent(customer.id)}`)}
+              disabled={!canReadDeliveries}
+            >
+              View deliveries
+            </Button>
+          </>
+        )}
       />
 
-      <Card>
+      <div className="visual-detail-metric-grid">
+        <DetailMetric icon={CustomersIcon} label="Customer ID" value={customer.id} supporting="Unique customer identifier" />
+        <DetailMetric icon={CheckCircleIcon} label="Status" value={<Badge color={customer.enabled ? 'green' : 'gray'} variant="soft">{customer.enabled ? 'Enabled' : 'Disabled'}</Badge>} supporting={customer.enabled ? 'Customer can receive events' : 'Customer is inactive'} tone={customer.enabled ? 'success' : 'warning'} />
+        <DetailMetric icon={ContractsIcon} label="Contracts" value={contractsQuery.data?.items.length ?? '-'} supporting="Configured delivery contracts" tone="violet" />
+        <DetailMetric icon={CalendarIcon} label="Created" value={new Date(customer.createdAt).toLocaleDateString()} supporting={`Updated ${new Date(customer.updatedAt).toLocaleDateString()}`} />
+      </div>
+
+      <div className="detail-panel detail-panel-wide customer-detail-wide-panel">
+        <CustomerInfoEditor
+          key={`${customer.id}:${customer.updatedAt}`}
+          id={customer.id}
+          name={customer.name}
+          enabled={customer.enabled}
+          canWriteCustomers={canWriteCustomers}
+          mutationError={
+            getApiErrorMessage(updateMutation.error, '') ||
+            getApiErrorMessage(enableMutation.error, '') ||
+            getApiErrorMessage(disableMutation.error, '')
+          }
+          pending={togglePending}
+          onSave={async (name) => {
+            try {
+              await updateMutation.mutateAsync({ name })
+              notifications.success('Customer saved.', 'Customer detail')
+            } catch (error) {
+              notifications.error(getApiErrorMessage(error, 'Unable to save customer.'), 'Customer detail')
+            }
+          }}
+          onEnable={async () => {
+            try {
+              await enableMutation.mutateAsync(customer.id)
+              notifications.success('Customer enabled.', 'Customer detail')
+            } catch (error) {
+              notifications.error(getApiErrorMessage(error, 'Unable to enable customer.'), 'Customer detail')
+            }
+          }}
+          onDisable={async () => {
+            const confirmed = await confirm({
+              title: 'Disable customer',
+              description:
+                'Disable this customer? New deliveries for this customer may be blocked until it is enabled again.',
+              confirmText: 'Disable customer',
+              cancelText: 'Cancel',
+              confirmColor: 'red',
+            })
+
+            if (!confirmed) {
+              return
+            }
+
+            try {
+              await disableMutation.mutateAsync(customer.id)
+              notifications.success('Customer disabled.', 'Customer detail')
+            } catch (error) {
+              notifications.error(getApiErrorMessage(error, 'Unable to disable customer.'), 'Customer detail')
+            }
+          }}
+        />
+      </div>
+
+      <Card className="detail-panel detail-panel-wide customer-detail-wide-panel">
         <Flex direction="column" gap="3">
-          <Heading size="4">Customer contracts</Heading>
+          <DetailSectionTitle icon={ContractsIcon}>Customer contracts</DetailSectionTitle>
           {!canReadContracts ? (
             <Text size="2" color="gray">
               Contracts are not available for your role.
@@ -213,62 +229,66 @@ export function CustomerDetailPage() {
           ) : (contractsQuery.data?.items ?? []).length === 0 ? (
             <Text size="2" color="gray">No contracts found for this customer.</Text>
           ) : (
-            <Table.Root>
-              <Table.Header>
-                <Table.Row>
-                  <Table.ColumnHeaderCell>ID</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>Enabled</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>Event types</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>Related</Table.ColumnHeaderCell>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {(contractsQuery.data?.items ?? []).map((contract) => (
-                  <Table.Row key={contract.id}>
-                    <Table.RowHeaderCell>{contract.id}</Table.RowHeaderCell>
-                    <Table.Cell>{contract.name ?? '-'}</Table.Cell>
-                    <Table.Cell>
-                      <Badge color={contract.enabled ? 'green' : 'gray'}>
-                        {contract.enabled ? 'Enabled' : 'Disabled'}
-                      </Badge>
-                    </Table.Cell>
-                    <Table.Cell>{contract.eventTypes.join(', ') || '-'}</Table.Cell>
-                    <Table.Cell>
-                      <Button
-                        size="1"
-                        variant="ghost"
-                        onClick={() =>
-                          navigate(
-                            `/deliveries?customerId=${encodeURIComponent(customer.id)}&contractId=${encodeURIComponent(contract.id)}`,
-                          )
-                        }
-                        disabled={!canReadDeliveries}
-                      >
-                        Deliveries
-                      </Button>
-                    </Table.Cell>
+            <div className="responsive-table">
+              <Table.Root>
+                <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeaderCell>ID</Table.ColumnHeaderCell>
+                    <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
+                    <Table.ColumnHeaderCell>Enabled</Table.ColumnHeaderCell>
+                    <Table.ColumnHeaderCell>Event types</Table.ColumnHeaderCell>
+                    <Table.ColumnHeaderCell>Related</Table.ColumnHeaderCell>
                   </Table.Row>
-                ))}
-              </Table.Body>
-            </Table.Root>
+                </Table.Header>
+                <Table.Body>
+                  {(contractsQuery.data?.items ?? []).map((contract) => (
+                    <Table.Row key={contract.id}>
+                      <Table.RowHeaderCell>{contract.id}</Table.RowHeaderCell>
+                      <Table.Cell>{contract.name ?? '-'}</Table.Cell>
+                      <Table.Cell>
+                        <Badge color={contract.enabled ? 'green' : 'gray'}>
+                          {contract.enabled ? 'Enabled' : 'Disabled'}
+                        </Badge>
+                      </Table.Cell>
+                      <Table.Cell>{contract.eventTypes.join(', ') || '-'}</Table.Cell>
+                      <Table.Cell>
+                        <Button
+                          size="1"
+                          variant="ghost"
+                          onClick={() =>
+                            navigate(
+                              `/deliveries?customerId=${encodeURIComponent(customer.id)}&contractId=${encodeURIComponent(contract.id)}`,
+                            )
+                          }
+                          disabled={!canReadDeliveries}
+                        >
+                          Deliveries
+                        </Button>
+                      </Table.Cell>
+                    </Table.Row>
+                  ))}
+                </Table.Body>
+              </Table.Root>
+            </div>
           )}
         </Flex>
       </Card>
 
-      <DestinationHealthSummary
-        title="Destination health"
-        customerId={customer.id}
-        items={destinationHealthQuery.data ?? []}
-        isLoading={destinationHealthQuery.isLoading}
-        isError={destinationHealthQuery.isError}
-        error={destinationHealthQuery.error}
-        canReadFailures={canReadFailures}
-      />
+      <div className="detail-panel detail-panel-wide customer-detail-wide-panel">
+        <DestinationHealthSummary
+          title="Destination health"
+          customerId={customer.id}
+          items={destinationHealthQuery.data ?? []}
+          isLoading={destinationHealthQuery.isLoading}
+          isError={destinationHealthQuery.isError}
+          error={destinationHealthQuery.error}
+          canReadFailures={canReadFailures}
+        />
+      </div>
 
-      <Card>
+      <Card className="detail-panel detail-panel-wide">
         <Flex direction="column" gap="3">
-          <Heading size="4">Customer deliveries</Heading>
+          <DetailSectionTitle icon={DeliveriesIcon}>Customer deliveries</DetailSectionTitle>
           {!canReadDeliveries ? (
             <Text size="2" color="gray">
               Deliveries are not available for your role.
@@ -308,9 +328,9 @@ export function CustomerDetailPage() {
         </Flex>
       </Card>
 
-      <Card>
+      <Card className="detail-panel detail-panel-wide">
         <Flex direction="column" gap="3">
-          <Heading size="4">Recent failures</Heading>
+          <DetailSectionTitle icon={FailedDeliveriesIcon}>Recent failures</DetailSectionTitle>
           {!canReadFailures ? (
             <Text size="2" color="gray">
               Recent failures are not available for your role.
@@ -406,7 +426,7 @@ function CustomerInfoEditor({
     <Card>
       <form onSubmit={handleSubmit}>
         <Flex direction="column" gap="3">
-          <Heading size="4">Customer information</Heading>
+          <DetailSectionTitle icon={CustomersIcon}>Customer information</DetailSectionTitle>
 
           <Text size="2" color="gray">
             Customer ID

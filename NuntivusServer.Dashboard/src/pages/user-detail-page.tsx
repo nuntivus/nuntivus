@@ -12,6 +12,9 @@ import { useState } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { CalendarIcon, CheckCircleIcon, SettingsIcon, UsersIcon } from '../components/icons/nav-icons'
+import { DetailPageHeader } from '../components/states/detail-page-header'
+import { DetailMetric, DetailSectionTitle } from '../components/states/detail-visuals'
 import {
   useAdminRolesQuery,
   useAdminUserQuery,
@@ -105,50 +108,68 @@ export function UserDetailPage() {
     getApiErrorMessage(deleteMutation.error, '')
 
   return (
-    <Flex direction="column" gap="4">
-      <Heading size="6">User detail</Heading>
-
-      <UserDetailEditor
-        key={`${user.subject}:${user.updatedAt}`}
-        subject={subject}
-        displayName={user.displayName}
-        roles={user.roles}
-        canManageRoles={canManageRoles}
-        availableRoles={rolesQuery.data ?? []}
-        loadingRoles={rolesQuery.isLoading}
-        savePending={replaceRolesMutation.isPending}
-        deletePending={deleteMutation.isPending}
-        mutationError={mutationError}
-        onSave={async (payload) => {
-          try {
-            await replaceRolesMutation.mutateAsync(payload)
-            notifications.success('User roles saved.', 'User detail')
-          } catch (error) {
-            notifications.error(getApiErrorMessage(error, 'Unable to save user roles.'), 'User detail')
-          }
-        }}
-        onDelete={async () => {
-          const confirmed = await confirm({
-            title: 'Delete user',
-            description: `Delete user "${subject}"? This permanently removes assigned roles and access until re-created.`,
-            confirmText: 'Delete',
-            cancelText: 'Cancel',
-            confirmColor: 'red',
-          })
-
-          if (!confirmed) {
-            return
-          }
-
-          try {
-            await deleteMutation.mutateAsync(subject)
-            notifications.success('User deleted.', 'User detail')
-            navigate('/users')
-          } catch (error) {
-            notifications.error(getApiErrorMessage(error, 'Unable to delete user.'), 'User detail')
-          }
-        }}
+    <Flex direction="column" gap="4" className="detail-page">
+      <DetailPageHeader
+        title={user.displayName || subject}
+        description="Identity profile, role assignments, and account access."
+        icon={UsersIcon}
+        actions={(
+          <Button asChild variant="soft">
+            <NavLink to="/users">Back to list</NavLink>
+          </Button>
+        )}
       />
+
+      <div className="visual-detail-metric-grid">
+        <DetailMetric icon={UsersIcon} label="Subject" value={user.subject} supporting="Identity provider subject" />
+        <DetailMetric icon={CheckCircleIcon} label="Assigned roles" value={user.roles.length} supporting={user.roles.join(', ') || 'No roles assigned'} tone="success" />
+        <DetailMetric icon={SettingsIcon} label="Access" value={canManageRoles ? 'Manageable' : 'Read only'} supporting="Current operator permissions" tone="violet" />
+        <DetailMetric icon={CalendarIcon} label="Updated" value={new Date(user.updatedAt).toLocaleString()} supporting={`Created ${new Date(user.createdAt).toLocaleDateString()}`} />
+      </div>
+
+      <div className="detail-panel detail-panel-wide">
+        <UserDetailEditor
+          key={`${user.subject}:${user.updatedAt}`}
+          subject={subject}
+          displayName={user.displayName}
+          roles={user.roles}
+          canManageRoles={canManageRoles}
+          availableRoles={rolesQuery.data ?? []}
+          loadingRoles={rolesQuery.isLoading}
+          savePending={replaceRolesMutation.isPending}
+          deletePending={deleteMutation.isPending}
+          mutationError={mutationError}
+          onSave={async (payload) => {
+            try {
+              await replaceRolesMutation.mutateAsync(payload)
+              notifications.success('User roles saved.', 'User detail')
+            } catch (error) {
+              notifications.error(getApiErrorMessage(error, 'Unable to save user roles.'), 'User detail')
+            }
+          }}
+          onDelete={async () => {
+            const confirmed = await confirm({
+              title: 'Delete user',
+              description: `Delete user "${subject}"? This permanently removes assigned roles and access until re-created.`,
+              confirmText: 'Delete',
+              cancelText: 'Cancel',
+              confirmColor: 'red',
+            })
+
+            if (!confirmed) {
+              return
+            }
+
+            try {
+              await deleteMutation.mutateAsync(subject)
+              notifications.success('User deleted.', 'User detail')
+              navigate('/users')
+            } catch (error) {
+              notifications.error(getApiErrorMessage(error, 'Unable to delete user.'), 'User detail')
+            }
+          }}
+        />
+      </div>
     </Flex>
   )
 }
@@ -197,6 +218,7 @@ function UserDetailEditor({
   return (
     <Card>
       <Flex direction="column" gap="3">
+        <DetailSectionTitle icon={UsersIcon}>User information</DetailSectionTitle>
         <Text size="2" color="gray">
           Subject
         </Text>

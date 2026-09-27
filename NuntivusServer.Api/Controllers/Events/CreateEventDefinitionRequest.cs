@@ -5,6 +5,7 @@ namespace NuntivusServer.Api.Controllers.Events
         string DisplayName,
         string? Description);
 
-    public sealed record UpdateEventDefinitionDescriptionRequest(
+    public sealed record UpdateEventDefinitionRequest(
+        string DisplayName,
         string? Description);
 }

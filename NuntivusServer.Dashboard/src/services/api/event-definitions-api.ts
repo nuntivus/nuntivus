@@ -33,7 +33,8 @@ export interface CreateEventDefinitionRequest {
   description?: string | null
 }
 
-export interface UpdateEventDefinitionDescriptionRequest {
+export interface UpdateEventDefinitionRequest {
+  displayName: string
   description?: string | null
 }
 
@@ -76,11 +77,12 @@ export async function createEventDefinition(request: CreateEventDefinitionReques
   })
 }
 
-export async function updateEventDefinitionDescription(
+export async function updateEventDefinition(
   eventType: string,
-  request: UpdateEventDefinitionDescriptionRequest,
+  request: UpdateEventDefinitionRequest,
 ) {
   return apiPut<EventDefinition>(`/v1/event-definitions/${encodeURIComponent(eventType)}`, {
+    displayName: request.displayName,
     description: request.description ?? null,
   })
 }

@@ -184,3 +184,65 @@ export function EyeIcon(props: IconProps) {
     </svg>
   )
 }
+
+export function CopyIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="8" y="8" width="11" height="11" rx="2" />
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </svg>
+  )
+}
+
+export function PencilIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m4 20 4.2-1 10.6-10.6a2.1 2.1 0 0 0-3-3L5.2 16Z" />
+      <path d="m14.5 6.7 2.8 2.8M4 20l1.2-4" />
+    </svg>
+  )
+}
+
+export function CalendarIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M16 3v4M8 3v4M3 10h18" />
+    </svg>
+  )
+}
+
+export function ClockIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  )
+}
+
+export function CodeIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14" />
+    </svg>
+  )
+}
+
+export function CheckCircleIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8 12 2.5 2.5L16 9" />
+    </svg>
+  )
+}
+
+export function AlertIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 3 2.8 20h18.4z" />
+      <path d="M12 9v4M12 17h.01" />
+    </svg>
+  )
+}

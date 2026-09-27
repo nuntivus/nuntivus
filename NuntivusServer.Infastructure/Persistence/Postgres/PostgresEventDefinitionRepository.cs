@@ -149,8 +149,9 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
             }
         }
 
-        public async Task<Result<int>> UpdateDescriptionAsync(
+        public async Task<Result<int>> UpdateAsync(
             string eventType,
+            string displayName,
             string? description,
             IUnitOfWork uow,
             CancellationToken cancellationToken)
@@ -162,7 +163,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
 
                 const string sql = """
                     UPDATE event_definitions
-                    SET description = @Description
+                    SET display_name = @DisplayName,
+                        description = @Description
                     WHERE event_type = @EventType;
                     """;
 
@@ -174,6 +176,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     new
                     {
                         EventType = eventType,
+                        DisplayName = displayName,
                         Description = description,
                     },
                     transaction,

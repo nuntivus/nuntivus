@@ -10,11 +10,11 @@ import {
   listContractsRelatedToEventType,
   listEventDefinitions,
   listSchemaVersions,
-  updateEventDefinitionDescription,
+  updateEventDefinition,
   type CreateEventDefinitionRequest,
   type CreateSchemaVersionRequest,
   type EventDefinitionListQuery,
-  type UpdateEventDefinitionDescriptionRequest,
+  type UpdateEventDefinitionRequest,
 } from '../../services/api/event-definitions-api'
 
 export function useEventDefinitionsQuery(query: EventDefinitionListQuery) {
@@ -70,12 +70,12 @@ export function useCreateEventDefinitionMutation() {
   })
 }
 
-export function useUpdateEventDefinitionDescriptionMutation(eventType: string) {
+export function useUpdateEventDefinitionMutation(eventType: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (request: UpdateEventDefinitionDescriptionRequest) =>
-      updateEventDefinitionDescription(eventType, request),
+    mutationFn: (request: UpdateEventDefinitionRequest) =>
+      updateEventDefinition(eventType, request),
     onSuccess: async () => {
       await invalidateQueryKeys(queryClient, [
         ['event-definitions'],

@@ -13,7 +13,7 @@ export function DestinationTypeSelector({
   onChange,
 }: DestinationTypeSelectorProps) {
   return (
-    <>
+    <div className="destination-form-field">
       <Text id="destination-type-label" size="2" color="gray">
         Destination type
       </Text>
@@ -30,6 +30,6 @@ export function DestinationTypeSelector({
           ))}
         </Select.Content>
       </Select.Root>
-    </>
+    </div>
   )
 }

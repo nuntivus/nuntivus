@@ -4,13 +4,27 @@ import {
   Card,
   Flex,
   Heading,
+  IconButton,
   Link,
   Table,
   Text,
 } from '@radix-ui/themes'
+import { useState, type ComponentType, type ReactNode, type SVGProps } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { DestinationHealthSummary } from '../components/observability/destination-health-summary'
+import {
+  CalendarIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  CodeIcon,
+  ContractsIcon,
+  CopyIcon,
+  CustomersIcon,
+  DeliveriesIcon,
+  EventsIcon,
+  SettingsIcon,
+} from '../components/icons/nav-icons'
 import { DetailLoadingState } from '../components/states/detail-loading-state'
 import {
   useContractDeliveriesQuery,
@@ -41,33 +55,70 @@ function formatDeliveryStatus(status: number | string) {
   return map[status] ?? String(status)
 }
 
-function summarizeAuthentication(configurationText: string) {
+function authenticationDetails(configurationText: string) {
   try {
     const parsed = JSON.parse(configurationText) as {
-      authentication?: {
-        type?: string
-        credential?: { kind?: string; value?: string; version?: number }
-      }
+      authentication?: { type?: string; credential?: { kind?: string; version?: number } }
     }
-
-    const authType = parsed.authentication?.type?.trim() || 'none'
+    const type = parsed.authentication?.type?.trim() || 'none'
     const credential = parsed.authentication?.credential
-
-    if (!credential) {
-      return `type=${authType}`
+    return {
+      type,
+      details: credential
+        ? `${credential.kind === 'ref' ? 'Referenced' : 'Protected'} credential${credential.version ? ` v${credential.version}` : ''}`
+        : 'No authentication configured',
     }
-
-    const kind = credential.kind?.trim() || 'unknown'
-    const versionText = credential.version ? `, version=${credential.version}` : ''
-
-    if (kind === 'ref') {
-      return `type=${authType}, credential=reference${versionText}`
-    }
-
-    return `type=${authType}, credential=protected${versionText}`
   } catch {
-    return 'unavailable'
+    return { type: 'Unavailable', details: 'Configuration could not be parsed' }
   }
+}
+
+type ContractIcon = ComponentType<SVGProps<SVGSVGElement>>
+
+function ContractMetric({ icon: Icon, label, value, supporting, tone = 'accent', action }: {
+  icon: ContractIcon
+  label: string
+  value: ReactNode
+  supporting: string
+  tone?: 'accent' | 'danger' | 'success' | 'violet'
+  action?: ReactNode
+}) {
+  return (
+    <Card className={`contract-metric contract-tone-${tone}`}>
+      <span className="contract-metric-icon"><Icon /></span>
+      <div className="contract-metric-content">
+        <Text size="1" color="gray">{label}</Text>
+        <div className="contract-metric-value">{value}</div>
+        <Text size="1" color="gray">{supporting}</Text>
+      </div>
+      {action}
+    </Card>
+  )
+}
+
+function ContractSectionTitle({ icon: Icon, children }: { icon: ContractIcon; children: ReactNode }) {
+  return (
+    <Flex align="center" gap="2" className="contract-section-title">
+      <Icon />
+      <Heading size="4">{children}</Heading>
+    </Flex>
+  )
+}
+
+function ContractInfoRow({ icon: Icon, label, children, action }: {
+  icon: ContractIcon
+  label: string
+  children: ReactNode
+  action?: ReactNode
+}) {
+  return (
+    <div className="contract-info-row">
+      <Icon />
+      <Text size="2" color="gray" weight="medium">{label}</Text>
+      <div className="contract-info-value">{children}</div>
+      {action}
+    </div>
+  )
 }
 
 export function ContractDetailPage() {
@@ -89,6 +140,7 @@ export function ContractDetailPage() {
 
   const enableMutation = useEnableContractMutation()
   const disableMutation = useDisableContractMutation()
+  const [copiedField, setCopiedField] = useState<string | null>(null)
 
   if (!canReadContracts) {
     return (
@@ -141,13 +193,59 @@ export function ContractDetailPage() {
 
   const contract = detailQuery.data.contract
   const pending = enableMutation.isPending || disableMutation.isPending
-  const authSummary = summarizeAuthentication(contract.destinationConfiguration)
+  const authentication = authenticationDetails(contract.destinationConfiguration)
+  const deliveries = deliveriesQuery.data?.items ?? []
+
+  async function copyValue(value: string, label: string) {
+    await navigator.clipboard.writeText(value)
+    setCopiedField(label)
+    window.setTimeout(() => setCopiedField((current) => current === label ? null : current), 1500)
+  }
+
+  async function enableContract() {
+    try {
+      await enableMutation.mutateAsync(contract.id)
+      notifications.success('Contract enabled.', 'Contract detail')
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to enable contract.'), 'Contract detail')
+    }
+  }
+
+  async function disableContract() {
+    const confirmed = await confirm({
+      title: 'Disable contract',
+      description: 'Disable this contract? Event matching can stop for this contract until it is enabled again.',
+      confirmText: 'Disable contract',
+      cancelText: 'Cancel',
+      confirmColor: 'red',
+    })
+
+    if (!confirmed) return
+
+    try {
+      await disableMutation.mutateAsync(contract.id)
+      notifications.success('Contract disabled.', 'Contract detail')
+    } catch (error) {
+      notifications.error(getApiErrorMessage(error, 'Unable to disable contract.'), 'Contract detail')
+    }
+  }
 
   return (
-    <Flex direction="column" gap="4">
-      <Flex align="center" justify="between" wrap="wrap" gap="3">
-        <Heading size="6">Contract: {contract.name ?? contract.id}</Heading>
-        <Flex gap="2">
+    <Flex direction="column" gap="4" className="contract-detail-page">
+      <Flex align="center" justify="between" wrap="wrap" gap="3" className="contract-detail-header">
+        <Flex align="center" gap="3">
+          <span className="contract-header-icon"><ContractsIcon /></span>
+          <div>
+            <Flex align="center" gap="2" wrap="wrap">
+              <Heading size="6">Contract: {contract.name ?? contract.id}</Heading>
+              <Badge color={contract.enabled ? 'green' : 'gray'} variant="soft">
+                {contract.enabled ? 'Enabled' : 'Disabled'}
+              </Badge>
+            </Flex>
+            <Text size="2" color="gray">Contract configuration and settings for event delivery.</Text>
+          </div>
+        </Flex>
+        <Flex gap="2" wrap="wrap">
           <Button asChild variant="soft">
             <NavLink to="/contracts">Back to list</NavLink>
           </Button>
@@ -157,7 +255,7 @@ export function ContractDetailPage() {
             </NavLink>
           </Button>
           <Button
-            variant="soft"
+            variant="solid"
             onClick={() => navigate(`/contracts/${encodeURIComponent(contract.id)}/edit`)}
             disabled={!canWriteContracts}
           >
@@ -166,129 +264,91 @@ export function ContractDetailPage() {
         </Flex>
       </Flex>
 
-      <Card>
-        <Flex direction="column" gap="3">
-          <Heading size="4">Contract overview</Heading>
+      <div className="contract-metric-grid">
+        <ContractMetric
+          icon={CustomersIcon}
+          label="Customer"
+          value={<Link asChild><NavLink to={`/customers/${encodeURIComponent(contract.customerId)}`}>{contract.customerId}</NavLink></Link>}
+          supporting="Contract owner"
+          action={<IconButton size="1" variant="ghost" aria-label="Open customer" onClick={() => navigate(`/customers/${encodeURIComponent(contract.customerId)}`)}><CustomersIcon /></IconButton>}
+        />
+        <ContractMetric icon={EventsIcon} label="Event types" value={contract.eventTypes.join(', ') || '-'} supporting={`${contract.eventTypes.length} event type${contract.eventTypes.length === 1 ? '' : 's'} configured`} tone="danger" />
+        <ContractMetric icon={DeliveriesIcon} label="Destination" value={contract.destinationType} supporting="Destination type" tone="success" />
+        <ContractMetric icon={SettingsIcon} label="Authentication" value={authentication.type === 'none' ? 'None' : authentication.type} supporting={authentication.details} tone="violet" />
+      </div>
 
-          <Text size="2" color="gray">
-            Customer
-          </Text>
-          <Link asChild>
-            <NavLink to={`/customers/${encodeURIComponent(contract.customerId)}`}>
-              {contract.customerId}
-            </NavLink>
-          </Link>
+      <div className="contract-primary-grid">
+        <Card className="contract-details-card">
+          <ContractSectionTitle icon={CodeIcon}>Contract details</ContractSectionTitle>
+          <div className="contract-info-list">
+            <ContractInfoRow icon={ContractsIcon} label="Contract ID" action={<IconButton size="1" variant="ghost" color="gray" aria-label="Copy contract ID" onClick={() => void copyValue(contract.id, 'Contract ID')}><CopyIcon /></IconButton>}>{contract.id}</ContractInfoRow>
+            <ContractInfoRow icon={CustomersIcon} label="Customer" action={<IconButton size="1" variant="ghost" color="gray" aria-label="Copy customer ID" onClick={() => void copyValue(contract.customerId, 'Customer ID')}><CopyIcon /></IconButton>}><Link asChild><NavLink to={`/customers/${encodeURIComponent(contract.customerId)}`}>{contract.customerId}</NavLink></Link></ContractInfoRow>
+            <ContractInfoRow icon={EventsIcon} label="Event types"><Flex gap="1" wrap="wrap">{contract.eventTypes.map((eventType) => <Badge key={eventType} variant="soft">{eventType}</Badge>)}</Flex></ContractInfoRow>
+            <ContractInfoRow icon={DeliveriesIcon} label="Destination">{contract.destinationType}</ContractInfoRow>
+            <ContractInfoRow icon={CheckCircleIcon} label="Enabled state"><div><Badge color={contract.enabled ? 'green' : 'gray'} variant="soft">{contract.enabled ? 'Enabled' : 'Disabled'}</Badge><Text as="p" size="1" color="gray">This contract is currently {contract.enabled ? 'active and can receive events' : 'inactive'}.</Text></div></ContractInfoRow>
+            <ContractInfoRow icon={CalendarIcon} label="Created at"><div>{new Date(contract.createdAt).toLocaleString()}<Text as="p" size="1" color="gray">Last updated {new Date(contract.updatedAt).toLocaleString()}</Text></div></ContractInfoRow>
+          </div>
+        </Card>
 
-          <Text size="2" color="gray">
-            Event types
-          </Text>
-          <Text>{contract.eventTypes.join(', ') || '-'}</Text>
+        <div className="contract-side-stack">
+          <Card className="contract-action-card">
+            <ContractSectionTitle icon={SettingsIcon}>Contract actions</ContractSectionTitle>
+            <div className={`contract-state-callout ${contract.enabled ? 'enabled' : 'disabled'}`}>
+              <CheckCircleIcon />
+              <div><Text size="2" weight="bold">Contract is {contract.enabled ? 'enabled' : 'disabled'}</Text><Text size="1">This contract {contract.enabled ? 'can receive and process events' : 'will not receive new events'}.</Text></div>
+            </div>
+            {enableMutation.isError || disableMutation.isError ? <Text size="2" color="red">{getApiErrorMessage(enableMutation.error || disableMutation.error, 'Unable to update contract state.')}</Text> : null}
+            <Flex gap="2" wrap="wrap">
+              <Button type="button" variant="soft" disabled={!canWriteContracts || pending || contract.enabled} onClick={() => void enableContract()}>Enable</Button>
+              <Button type="button" color="red" variant="soft" disabled={!canWriteContracts || pending || !contract.enabled} onClick={() => void disableContract()}>Disable</Button>
+            </Flex>
+          </Card>
 
-          <Text size="2" color="gray">
-            Destination
-          </Text>
-          <Text>{contract.destinationType}</Text>
+          <Card className="contract-auth-card">
+            <ContractSectionTitle icon={SettingsIcon}>Authentication summary</ContractSectionTitle>
+            <ContractInfoRow icon={SettingsIcon} label="Authentication type"><Badge color="gray" variant="soft">{authentication.type}</Badge></ContractInfoRow>
+            <ContractInfoRow icon={CodeIcon} label="Details">{authentication.details}</ContractInfoRow>
+          </Card>
+        </div>
+      </div>
 
-          <Text size="2" color="gray">
-            Authentication summary
-          </Text>
-          <Text>{authSummary}</Text>
-
-          <Text size="2" color="gray">
-            Enabled state
-          </Text>
-          <Badge color={contract.enabled ? 'green' : 'gray'}>
-            {contract.enabled ? 'Enabled' : 'Disabled'}
-          </Badge>
-
-          {enableMutation.isError || disableMutation.isError ? (
-            <Text size="2" color="red">
-              {getApiErrorMessage(enableMutation.error || disableMutation.error, 'Unable to update contract state.')}
-            </Text>
-          ) : null}
-
-          <Flex gap="2">
-            <Button
-              type="button"
-              variant="soft"
-              disabled={!canWriteContracts || pending || contract.enabled}
-              onClick={async () => {
-                try {
-                  await enableMutation.mutateAsync(contract.id)
-                  notifications.success('Contract enabled.', 'Contract detail')
-                } catch (error) {
-                  notifications.error(getApiErrorMessage(error, 'Unable to enable contract.'), 'Contract detail')
-                }
-              }}
-            >
-              Enable
-            </Button>
-            <Button
-              type="button"
-              color="red"
-              variant="soft"
-              disabled={!canWriteContracts || pending || !contract.enabled}
-              onClick={async () => {
-                const confirmed = await confirm({
-                  title: 'Disable contract',
-                  description:
-                    'Disable this contract? Event matching can stop for this contract until it is enabled again.',
-                  confirmText: 'Disable contract',
-                  cancelText: 'Cancel',
-                  confirmColor: 'red',
-                })
-
-                if (!confirmed) {
-                  return
-                }
-
-                try {
-                  await disableMutation.mutateAsync(contract.id)
-                  notifications.success('Contract disabled.', 'Contract detail')
-                } catch (error) {
-                  notifications.error(getApiErrorMessage(error, 'Unable to disable contract.'), 'Contract detail')
-                }
-              }}
-            >
-              Disable
-            </Button>
-          </Flex>
-        </Flex>
-      </Card>
-
-      <Card>
-        <Flex direction="column" gap="3">
-          <Heading size="4">Advanced contract settings</Heading>
+      <div className="contract-secondary-grid">
+        <Card className="contract-settings-card">
+          <ContractSectionTitle icon={SettingsIcon}>Advanced contract settings</ContractSectionTitle>
           {([
             ['Schema targets', contract.schemaTargets],
             ['Filters', contract.filter],
             ['Payload transformation', contract.transformation],
             ['Rate limit', contract.rateLimit],
             ['Ordering', contract.ordering],
-          ] as const).map(([label, value]) => (
-            <Flex direction="column" gap="1" key={label}>
+          ] as const).map(([label, value], index) => (
+            <div className="contract-setting-row" key={label}>
+              <span className={`contract-setting-icon contract-setting-${index}`}><SettingsIcon /></span>
               <Text size="2" weight="medium">{label}</Text>
-              <Text size="2" color="gray" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                {value == null || (Array.isArray(value) && !value.length)
-                  ? 'Not configured'
-                  : JSON.stringify(value, null, 2)}
-              </Text>
-            </Flex>
+              <div><Text size="2">{value == null || (Array.isArray(value) && !value.length) ? 'Not configured' : 'Configured'}</Text><Text as="p" size="1" color="gray">{value == null || (Array.isArray(value) && !value.length) ? `No ${label.toLowerCase()} defined for this contract.` : JSON.stringify(value)}</Text></div>
+              <Button size="1" variant="soft" onClick={() => navigate(`/contracts/${encodeURIComponent(contract.id)}/edit`)} disabled={!canWriteContracts}>Configure</Button>
+            </div>
           ))}
-        </Flex>
-      </Card>
+        </Card>
 
-      <DestinationHealthSummary
-        title="Destination health"
-        contractId={contract.id}
-        items={destinationHealthQuery.data ? [destinationHealthQuery.data] : []}
-        isLoading={destinationHealthQuery.isLoading}
-        isError={destinationHealthQuery.isError}
-        error={destinationHealthQuery.error}
-        canReadFailures={canReadFailures}
-      />
+        <Card className="contract-activity-card">
+          <Flex align="center" justify="between" className="contract-section-title">
+            <Flex align="center" gap="2"><ClockIcon /><Heading size="4">Recent activity</Heading></Flex>
+            <Button size="1" variant="ghost" onClick={() => navigate(`/deliveries?contractId=${encodeURIComponent(contract.id)}`)} disabled={!canReadDeliveries}>View all</Button>
+          </Flex>
+          {!canReadDeliveries ? <Text size="2" color="gray">Activity is not available for your role.</Text> : deliveriesQuery.isLoading ? <Text size="2" color="gray">Loading activity...</Text> : deliveriesQuery.isError ? <Text size="2" color="red">{getApiErrorMessage(deliveriesQuery.error, 'Unable to load activity.')}</Text> : deliveries.length === 0 ? (
+            <div className="contract-empty-activity"><span><ContractsIcon /></span><Text size="2" weight="bold">No recent events</Text><Text size="1" color="gray">There are no recent events for this contract yet.</Text><Button asChild size="1" variant="soft"><NavLink to={`/test-events?contractId=${encodeURIComponent(contract.id)}`}>Send test event</NavLink></Button></div>
+          ) : (
+            <div className="contract-activity-list">{deliveries.slice(0, 4).map((delivery) => <NavLink key={delivery.id} to={`/deliveries/${encodeURIComponent(delivery.id)}`} className="contract-activity-row"><span className={formatDeliveryStatus(delivery.status).toLowerCase()}><DeliveriesIcon /></span><div><Text size="2" weight="medium">{delivery.eventType}</Text><Text as="p" size="1" color="gray">{delivery.id}</Text></div><Badge color={formatDeliveryStatus(delivery.status).toLowerCase() === 'delivered' ? 'green' : 'red'} variant="soft">{formatDeliveryStatus(delivery.status)}</Badge></NavLink>)}</div>
+          )}
+        </Card>
+      </div>
 
-      <Card>
+      {copiedField ? <Text size="1" color="gray" className="delivery-copy-feedback">{copiedField} copied</Text> : null}
+
+      <div className="contract-wide-panel"><DestinationHealthSummary title="Destination health" contractId={contract.id} items={destinationHealthQuery.data ? [destinationHealthQuery.data] : []} isLoading={destinationHealthQuery.isLoading} isError={destinationHealthQuery.isError} error={destinationHealthQuery.error} canReadFailures={canReadFailures} /></div>
+
+      <Card className="contract-wide-panel">
         <Flex direction="column" gap="3">
           <Heading size="4">Recent deliveries</Heading>
           {!canReadDeliveries ? (
@@ -328,7 +388,7 @@ export function ContractDetailPage() {
         </Flex>
       </Card>
 
-      <Card>
+      <Card className="contract-wide-panel">
         <Flex direction="column" gap="3">
           <Heading size="4">Recent failures</Heading>
           {!canReadFailures ? (

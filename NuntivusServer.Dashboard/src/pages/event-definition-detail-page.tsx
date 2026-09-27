@@ -15,6 +15,9 @@ import { useState, type FormEvent } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { CalendarIcon, CheckCircleIcon, ClockIcon, CodeIcon, ContractsIcon, CopyIcon, EventDefinitionsIcon, EventsIcon, PencilIcon } from '../components/icons/nav-icons'
+import { DetailPageHeader } from '../components/states/detail-page-header'
+import { DetailMetric, DetailSectionTitle } from '../components/states/detail-visuals'
 import {
   useActivateSchemaVersionMutation,
   useCreateSchemaDraftMutation,
@@ -23,7 +26,7 @@ import {
   useEventSchemaVersionQuery,
   useEventSchemaVersionsQuery,
   useRelatedContractsQuery,
-  useUpdateEventDefinitionDescriptionMutation,
+  useUpdateEventDefinitionMutation,
 } from '../features/event-definitions/use-event-definitions'
 import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
@@ -42,6 +45,17 @@ function mapSchemaStateColor(state: string): 'gray' | 'green' | 'amber' {
   return 'gray'
 }
 
+function formatTimelineDate(value: string) {
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(value))
+}
+
 export function EventDefinitionDetailPage() {
   const { eventType } = useParams()
   const notifications = useNotifications()
@@ -55,17 +69,20 @@ export function EventDefinitionDetailPage() {
   const schemasQuery = useEventSchemaVersionsQuery(eventType)
   const relatedContractsQuery = useRelatedContractsQuery(canReadContracts ? eventType : undefined)
 
-  const descriptionMutation = useUpdateEventDefinitionDescriptionMutation(eventType ?? '')
+  const updateMutation = useUpdateEventDefinitionMutation(eventType ?? '')
   const createSchemaMutation = useCreateSchemaDraftMutation(eventType ?? '')
   const activateSchemaMutation = useActivateSchemaVersionMutation(eventType ?? '')
   const deprecateSchemaMutation = useDeprecateSchemaVersionMutation(eventType ?? '')
 
   const [descriptionInput, setDescriptionInput] = useState('')
+  const [displayNameInput, setDisplayNameInput] = useState('')
   const [schemaVersionInput, setSchemaVersionInput] = useState('')
   const [schemaJsonInput, setSchemaJsonInput] = useState('')
   const [compatibilityMode, setCompatibilityMode] = useState<'Backward' | 'Forward'>('Backward')
   const [selectedSchemaVersion, setSelectedSchemaVersion] = useState<number | undefined>(undefined)
   const [schemaDraftError, setSchemaDraftError] = useState<string | null>(null)
+  const [copiedDefinitionField, setCopiedDefinitionField] = useState<string | null>(null)
+  const [editingDefinitionField, setEditingDefinitionField] = useState<'displayName' | 'description' | null>(null)
 
   const selectedSchemaQuery = useEventSchemaVersionQuery(eventType, selectedSchemaVersion)
 
@@ -83,6 +100,9 @@ export function EventDefinitionDetailPage() {
   const relatedContracts = relatedContractsQuery.data ?? []
 
   const activeSchemaVersion = schemaItems.find((item) => item.state === 'Active')?.version
+  const timelineSchemas = [...schemaItems].sort(
+    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+  )
 
   if (!canReadDefinitions) {
     return (
@@ -137,20 +157,33 @@ export function EventDefinitionDetailPage() {
     )
   }
 
-  async function handleUpdateDescription(event: FormEvent<HTMLFormElement>) {
+  async function handleUpdateDefinition(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteDefinitions) {
+    if (!definition) {
+      return
+    }
+
+    const nextDisplayName = editingDefinitionField === 'displayName'
+      ? displayNameInput.trim()
+      : definition.displayName
+    const nextDescription = editingDefinitionField === 'description'
+      ? descriptionInput.trim() || null
+      : definition.description
+
+    if (!canWriteDefinitions || !nextDisplayName || nextDisplayName.length > 200 || (nextDescription?.length ?? 0) > 2000) {
       return
     }
 
     try {
-      await descriptionMutation.mutateAsync({
-        description: descriptionInput.trim() || null,
+      await updateMutation.mutateAsync({
+        displayName: nextDisplayName,
+        description: nextDescription,
       })
-      notifications.success('Description saved.', 'Event definition')
+      setEditingDefinitionField(null)
+      notifications.success('Event definition saved.', 'Event definition')
     } catch (error) {
-      notifications.error(getApiErrorMessage(error, 'Unable to update description.'), 'Event definition')
+      notifications.error(getApiErrorMessage(error, 'Unable to update event definition.'), 'Event definition')
     }
   }
 
@@ -197,62 +230,177 @@ export function EventDefinitionDetailPage() {
     }
   }
 
+  async function handleCopyDefinition(value: string, field: string) {
+    try {
+      let copied = false
+
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(value)
+          copied = true
+        } catch {
+          copied = false
+        }
+      }
+
+      if (!copied) {
+        const textArea = document.createElement('textarea')
+        textArea.value = value
+        textArea.style.position = 'fixed'
+        textArea.style.opacity = '0'
+        document.body.appendChild(textArea)
+
+        try {
+          textArea.select()
+          copied = document.execCommand('copy')
+        } finally {
+          document.body.removeChild(textArea)
+        }
+
+        if (!copied) {
+          throw new Error('Copy command was rejected.')
+        }
+      }
+
+      setCopiedDefinitionField(field)
+
+      window.setTimeout(() => {
+        setCopiedDefinitionField((current) => (current === field ? null : current))
+      }, 1500)
+    } catch {
+      notifications.error('Unable to copy to the clipboard.', 'Copy')
+    }
+  }
+
+  const definitionInformation = JSON.stringify({
+    eventType: definition.eventType,
+    displayName: definition.displayName,
+    description: definition.description,
+    createdAt: definition.createdAt,
+  }, null, 2)
+
   return (
-    <Flex direction="column" gap="4">
-      <Flex align="center" justify="between" wrap="wrap" gap="3">
-        <Heading size="6">Event definition: {definition.eventType}</Heading>
-        <Button asChild variant="soft">
-          <NavLink to="/event-definitions">Back to list</NavLink>
-        </Button>
-      </Flex>
+    <Flex direction="column" gap="4" className="detail-page">
+      <DetailPageHeader
+        title={definition.displayName || definition.eventType}
+        description="Definition metadata, schema lifecycle, and subscribed contracts."
+        icon={EventDefinitionsIcon}
+        actions={(
+          <Button asChild variant="soft">
+            <NavLink to="/event-definitions">Back to list</NavLink>
+          </Button>
+        )}
+      />
 
-      <Card>
-        <Flex direction="column" gap="3">
-          <Heading size="4">Definition detail</Heading>
-          <Text size="2" color="gray">Event type</Text>
-          <Text>{definition.eventType}</Text>
-          <Text size="2" color="gray">Display name</Text>
-          <Text>{definition.displayName}</Text>
-          <Text size="2" color="gray">Created</Text>
-          <Text>{new Date(definition.createdAt).toLocaleString()}</Text>
-        </Flex>
-      </Card>
+      <div className="visual-detail-metric-grid">
+        <DetailMetric icon={EventsIcon} label="Event type" value={definition.eventType} supporting="Event routing key" />
+        <DetailMetric icon={CodeIcon} label="Schema versions" value={schemaItems.length} supporting={activeSchemaVersion ? `Version ${activeSchemaVersion} active` : 'No active schema'} tone={activeSchemaVersion ? 'success' : 'warning'} />
+        <DetailMetric icon={ContractsIcon} label="Related contracts" value={relatedContracts.length} supporting="Subscribed contracts" tone="violet" />
+        <DetailMetric icon={CalendarIcon} label="Created" value={new Date(definition.createdAt).toLocaleString()} supporting="Definition registration" />
+      </div>
 
-      <Card>
-        <form onSubmit={handleUpdateDescription}>
-          <Flex direction="column" gap="3">
-            <Heading size="4">Edit description</Heading>
-            <TextArea
-              value={descriptionInput}
-              onChange={(entry) => setDescriptionInput(entry.target.value)}
-              placeholder={definition.description ?? 'Add description'}
-              rows={4}
-              disabled={!canWriteDefinitions || descriptionMutation.isPending}
-            />
-
-            <FormErrorText
-              id="event-definition-description-error"
-              message={
-                descriptionMutation.isError
-                  ? getApiErrorMessage(
-                      descriptionMutation.error,
-                      'Unable to update description.',
-                    )
-                  : null
-              }
-            />
-
-            <Button type="submit" disabled={!canWriteDefinitions || descriptionMutation.isPending}>
-              {descriptionMutation.isPending ? 'Saving...' : 'Save description'}
-            </Button>
+      <Card className="detail-panel detail-panel-wide event-definition-timeline-card">
+        <div className="event-section-header">
+          <Flex align="center" gap="2">
+            <span className="event-section-icon"><ClockIcon /></span>
+            <div><Heading size="4">Schema timeline</Heading><Text size="1" color="gray">Definition registration and schema lifecycle in chronological order.</Text></div>
           </Flex>
-        </form>
+        </div>
+        <div className="event-timeline-scroll">
+          <ol className="event-timeline">
+            <li className="event-timeline-item event-timeline-received">
+              <span className="event-timeline-marker"><EventDefinitionsIcon /></span>
+              <div className="event-timeline-content">
+                <Text size="1" color="gray">Definition created</Text>
+                <Text size="2" weight="bold">{definition.displayName || definition.eventType}</Text>
+                <Text size="1" color="gray">{formatTimelineDate(definition.createdAt)}</Text>
+              </div>
+            </li>
+            {timelineSchemas.map((schema) => {
+              const stateColor = mapSchemaStateColor(schema.state)
+
+              return (
+                <li className={`event-timeline-item event-timeline-${stateColor}`} key={schema.version}>
+                  <span className="event-timeline-marker"><CodeIcon /></span>
+                  <div className="event-timeline-content">
+                    <Flex align="center" gap="1" wrap="wrap">
+                      <Text size="1" color="gray">Schema version {schema.version}</Text>
+                      <Badge color={stateColor} variant="soft">{schema.state}</Badge>
+                    </Flex>
+                    <Text size="2" weight="bold">{schema.compatibilityMode} compatibility</Text>
+                    <Text size="1" color="gray">{formatTimelineDate(schema.createdAt)}</Text>
+                  </div>
+                </li>
+              )
+            })}
+          </ol>
+        </div>
       </Card>
 
-      <Card>
+      <Card className="detail-panel detail-panel-wide event-detail-card event-information-card definition-information-card">
+        <div className="event-section-header">
+          <Flex align="center" gap="2">
+            <span className="event-section-icon"><EventDefinitionsIcon /></span>
+            <div><Heading size="4">Definition detail</Heading><Text size="1" color="gray">Detailed information about this event definition.</Text></div>
+          </Flex>
+          <Button variant="soft" size="1" onClick={() => void handleCopyDefinition(definitionInformation, 'all')}>
+            <CopyIcon />{copiedDefinitionField === 'all' ? 'Copied' : 'Copy all'}
+          </Button>
+        </div>
+        <div className="event-information-list">
+          <div className="event-information-row"><EventsIcon /><Text weight="medium">Event type</Text><Text>{definition.eventType}</Text><Button variant="ghost" size="1" aria-label={copiedDefinitionField === 'eventType' ? 'Event type copied' : 'Copy event type'} title={copiedDefinitionField === 'eventType' ? 'Copied' : 'Copy event type'} onClick={() => void handleCopyDefinition(definition.eventType, 'eventType')}>{copiedDefinitionField === 'eventType' ? <CheckCircleIcon /> : <CopyIcon />}</Button></div>
+          <div className={`event-information-row definition-editable-row${editingDefinitionField === 'displayName' ? ' is-editing' : ''}`}>
+            <EventDefinitionsIcon />
+            <Text weight="medium">Display name</Text>
+            {editingDefinitionField === 'displayName' ? (
+              <form className="definition-inline-form" onSubmit={handleUpdateDefinition}>
+                <TextField.Root value={displayNameInput} onChange={(entry) => setDisplayNameInput(entry.target.value)} placeholder="Display name" disabled={updateMutation.isPending} autoFocus aria-invalid={!displayNameInput.trim() || displayNameInput.trim().length > 200 ? 'true' : 'false'} />
+                <FieldErrorText id="event-definition-display-name-error" message={!displayNameInput.trim() ? 'Display name is required.' : displayNameInput.trim().length > 200 ? 'Display name must be at most 200 characters.' : null} />
+                <FormErrorText message={updateMutation.isError ? getApiErrorMessage(updateMutation.error, 'Unable to update event definition.') : null} />
+                <Flex gap="2" justify="end" wrap="wrap"><Button type="button" variant="soft" disabled={updateMutation.isPending} onClick={() => setEditingDefinitionField(null)}>Cancel</Button><Button type="submit" disabled={updateMutation.isPending || !displayNameInput.trim() || displayNameInput.trim().length > 200}>{updateMutation.isPending ? 'Saving...' : 'Save display name'}</Button></Flex>
+              </form>
+            ) : (
+              <><Text>{definition.displayName || '-'}</Text><Flex className="definition-row-actions" gap="1"><Button variant="ghost" size="1" aria-label={copiedDefinitionField === 'displayName' ? 'Display name copied' : 'Copy display name'} title={copiedDefinitionField === 'displayName' ? 'Copied' : 'Copy display name'} onClick={() => void handleCopyDefinition(definition.displayName, 'displayName')}>{copiedDefinitionField === 'displayName' ? <CheckCircleIcon /> : <CopyIcon />}</Button><Button variant="ghost" size="1" aria-label="Edit display name" title="Edit display name" disabled={!canWriteDefinitions} onClick={() => { setDisplayNameInput(definition.displayName); setEditingDefinitionField('displayName') }}><PencilIcon /></Button></Flex></>
+            )}
+          </div>
+          <div className={`event-information-row definition-editable-row${editingDefinitionField === 'description' ? ' is-editing' : ''}`}>
+            <CodeIcon />
+            <Text weight="medium">Description</Text>
+            {editingDefinitionField === 'description' ? (
+              <form className="definition-inline-form" onSubmit={handleUpdateDefinition}>
+                <TextArea
+                  value={descriptionInput}
+                  onChange={(entry) => setDescriptionInput(entry.target.value)}
+                  placeholder="Add description"
+                  rows={3}
+                  disabled={updateMutation.isPending}
+                  autoFocus
+                />
+                <FieldErrorText id="event-definition-description-validation-error" message={descriptionInput.trim().length > 2000 ? 'Description must be at most 2000 characters.' : null} />
+                <FormErrorText
+                  id="event-definition-description-error"
+                  message={updateMutation.isError ? getApiErrorMessage(updateMutation.error, 'Unable to update event definition.') : null}
+                />
+                <Flex gap="2" justify="end" wrap="wrap">
+                  <Button type="button" variant="soft" disabled={updateMutation.isPending} onClick={() => setEditingDefinitionField(null)}>Cancel</Button>
+                  <Button type="submit" disabled={updateMutation.isPending || descriptionInput.trim().length > 2000}>{updateMutation.isPending ? 'Saving...' : 'Save description'}</Button>
+                </Flex>
+              </form>
+            ) : (
+              <>
+                <Text>{definition.description || '-'}</Text>
+                <Flex className="definition-row-actions" gap="1"><Button variant="ghost" size="1" aria-label={copiedDefinitionField === 'description' ? 'Description copied' : 'Copy description'} title={copiedDefinitionField === 'description' ? 'Copied' : 'Copy description'} onClick={() => void handleCopyDefinition(definition.description ?? '', 'description')}>{copiedDefinitionField === 'description' ? <CheckCircleIcon /> : <CopyIcon />}</Button><Button variant="ghost" size="1" aria-label="Edit description" title="Edit description" disabled={!canWriteDefinitions} onClick={() => { setDescriptionInput(definition.description ?? ''); setEditingDefinitionField('description') }}><PencilIcon /></Button></Flex>
+              </>
+            )}
+          </div>
+          <div className="event-information-row"><CalendarIcon /><Text weight="medium">Created</Text><Text>{formatTimelineDate(definition.createdAt)}</Text><Button variant="ghost" size="1" aria-label={copiedDefinitionField === 'createdAt' ? 'Creation timestamp copied' : 'Copy creation timestamp'} title={copiedDefinitionField === 'createdAt' ? 'Copied' : 'Copy creation timestamp'} onClick={() => void handleCopyDefinition(definition.createdAt, 'createdAt')}>{copiedDefinitionField === 'createdAt' ? <CheckCircleIcon /> : <CopyIcon />}</Button></div>
+        </div>
+      </Card>
+
+      <Card className="detail-panel detail-panel-wide">
         <form onSubmit={handleCreateSchemaDraft}>
           <Flex direction="column" gap="3">
-            <Heading size="4">Schema versions</Heading>
+            <DetailSectionTitle icon={CodeIcon}>Schema versions</DetailSectionTitle>
 
             {schemasQuery.isLoading ? (
               <Text size="2" color="gray">Loading schema versions...</Text>
@@ -398,9 +546,9 @@ export function EventDefinitionDetailPage() {
         </form>
       </Card>
 
-      <Card>
+      <Card className="detail-panel detail-panel-wide">
         <Flex direction="column" gap="3">
-          <Heading size="4">Related contracts</Heading>
+          <DetailSectionTitle icon={ContractsIcon}>Related contracts</DetailSectionTitle>
           {!canReadContracts ? (
             <Text size="2" color="gray">Contracts are not available for your role.</Text>
           ) : relatedContractsQuery.isLoading ? (

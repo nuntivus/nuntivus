@@ -4,16 +4,32 @@ import {
   Card,
   Flex,
   Heading,
+  IconButton,
   Link,
   Table,
+  Tabs,
   Text,
   TextArea,
   TextField,
 } from '@radix-ui/themes'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ComponentType, type ReactNode, type SVGProps } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { JsonViewer } from '../components/json/json-viewer'
+import {
+  AlertIcon,
+  CalendarIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  CodeIcon,
+  ContractsIcon,
+  CopyIcon,
+  CustomersIcon,
+  DeliveriesIcon,
+  EventsIcon,
+  FailedDeliveriesIcon,
+  RetryIcon,
+} from '../components/icons/nav-icons'
 import { DetailLoadingState } from '../components/states/detail-loading-state'
 import {
   useDeliveryAttemptsQuery,
@@ -23,6 +39,7 @@ import {
   useRetryDeliveryMutation,
 } from '../features/deliveries/use-deliveries'
 import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
+import { useEventDetailQuery } from '../features/events/use-events'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
@@ -56,6 +73,90 @@ function httpStatusFromMetadata(metadata: Record<string, string>) {
   )
 }
 
+type DetailIcon = ComponentType<SVGProps<SVGSVGElement>>
+
+function DeliveryMetric({
+  icon: Icon,
+  label,
+  value,
+  supporting,
+  tone = 'accent',
+  copyValue,
+  onCopy,
+}: {
+  icon: DetailIcon
+  label: string
+  value: ReactNode
+  supporting?: string
+  tone?: 'accent' | 'danger' | 'success'
+  copyValue?: string
+  onCopy?: (value: string, label: string) => void
+}) {
+  return (
+    <Card className={`delivery-metric delivery-tone-${tone}`}>
+      <span className="delivery-metric-icon"><Icon /></span>
+      <div className="delivery-metric-content">
+        <Text size="1" color="gray">{label}</Text>
+        <div className="delivery-metric-value">{value}</div>
+        {supporting ? <Text size="1" color="gray">{supporting}</Text> : null}
+      </div>
+      {copyValue && onCopy ? (
+        <IconButton
+          size="1"
+          variant="ghost"
+          color="gray"
+          aria-label={`Copy ${label}`}
+          title={`Copy ${label}`}
+          onClick={() => onCopy(copyValue, label)}
+        >
+          <CopyIcon />
+        </IconButton>
+      ) : null}
+    </Card>
+  )
+}
+
+function DeliverySectionTitle({ icon: Icon, children, tone = 'accent' }: {
+  icon: DetailIcon
+  children: ReactNode
+  tone?: 'accent' | 'danger'
+}) {
+  return (
+    <Flex align="center" gap="2" className={`delivery-section-title delivery-tone-${tone}`}>
+      <Icon />
+      <Heading size="4">{children}</Heading>
+    </Flex>
+  )
+}
+
+function DeliveryInfoRow({ icon: Icon, label, children, copyValue, onCopy }: {
+  icon: DetailIcon
+  label: string
+  children: ReactNode
+  copyValue?: string
+  onCopy?: (value: string, label: string) => void
+}) {
+  return (
+    <div className="delivery-info-row">
+      <Icon />
+      <Text size="2" color="gray" weight="medium">{label}</Text>
+      <div className="delivery-info-value">{children}</div>
+      {copyValue && onCopy ? (
+        <IconButton
+          size="1"
+          variant="ghost"
+          color="gray"
+          aria-label={`Copy ${label}`}
+          title={`Copy ${label}`}
+          onClick={() => onCopy(copyValue, label)}
+        >
+          <CopyIcon />
+        </IconButton>
+      ) : null}
+    </div>
+  )
+}
+
 export function DeliveryDetailPage() {
   const { id } = useParams()
   const confirm = useConfirmDialog()
@@ -68,6 +169,7 @@ export function DeliveryDetailPage() {
   const detailQuery = useDeliveryDetailQuery(id)
   const failureQuery = useDeliveryFailureQuery(id)
   const attemptsQuery = useDeliveryAttemptsQuery(id)
+  const eventQuery = useEventDetailQuery(detailQuery.data?.eventId)
 
   const retryMutation = useRetryDeliveryMutation(id ?? '')
   const requeueMutation = useRequeueDeliveryMutation(id ?? '')
@@ -75,6 +177,7 @@ export function DeliveryDetailPage() {
   const [retryReason, setRetryReason] = useState('')
   const [requeueReason, setRequeueReason] = useState('')
   const [operationKey, setOperationKey] = useState('')
+  const [copiedField, setCopiedField] = useState<string | null>(null)
 
   const operationError = useMemo(
     () =>
@@ -145,6 +248,12 @@ export function DeliveryDetailPage() {
     }
   }
 
+  async function handleCopy(value: string, label: string) {
+    await navigator.clipboard.writeText(value)
+    setCopiedField(label)
+    window.setTimeout(() => setCopiedField((current) => current === label ? null : current), 1500)
+  }
+
   if (!canReadDeliveries) {
     return (
       <Card>
@@ -197,110 +306,183 @@ export function DeliveryDetailPage() {
   const delivery = detailQuery.data
   const failure = failureQuery.data
   const attempts = attemptsQuery.data ?? []
+  const event = eventQuery.data
+  const normalizedStatus = formatDeliveryStatus(delivery.status).toLowerCase()
+  const failed = normalizedStatus === 'failed' || normalizedStatus === 'dead'
+  const delivered = normalizedStatus === 'delivered'
+  const inFlight = normalizedStatus === 'inflight'
+  const statusTone = failed ? 'danger' : delivered ? 'success' : 'accent'
+  const statusDescription = normalizedStatus === 'dead'
+    ? 'Delivery failed permanently'
+    : failed
+      ? 'Delivery attempt failed'
+      : delivered
+        ? 'Delivery completed successfully'
+        : inFlight
+          ? 'Delivery is being processed'
+          : 'Delivery is waiting to be processed'
 
   return (
-    <Flex direction="column" gap="4">
-      <Flex align="center" justify="between" wrap="wrap" gap="3">
-        <Heading size="6">Delivery detail</Heading>
-        <Button asChild variant="soft">
-          <NavLink to="/deliveries">Back to list</NavLink>
-        </Button>
+    <Flex direction="column" gap="4" className="delivery-detail-page">
+      <Flex align="center" justify="between" wrap="wrap" gap="3" className="delivery-detail-header">
+        <Flex align="center" gap="3">
+          <span className="delivery-header-icon"><DeliveriesIcon /></span>
+          <div>
+            <Flex align="center" gap="2" wrap="wrap">
+              <Heading size="6">Delivery detail</Heading>
+              <Badge color={statusColor(delivery.status)} variant="soft">
+                {formatDeliveryStatus(delivery.status)}
+              </Badge>
+            </Flex>
+            <Text size="2" color="gray">Complete information about this delivery and its related data.</Text>
+          </div>
+        </Flex>
+        <div>
+          <Button asChild variant="soft">
+            <NavLink to="/deliveries">Back to list</NavLink>
+          </Button>
+        </div>
       </Flex>
 
-      <Card>
-        <Flex direction="column" gap="3">
-          <Heading size="4">Overview</Heading>
+      <div className="delivery-metric-grid">
+        <DeliveryMetric icon={DeliveriesIcon} label="Delivery ID" value={delivery.id} copyValue={delivery.id} onCopy={handleCopy} />
+        <DeliveryMetric
+          icon={failed ? FailedDeliveriesIcon : CheckCircleIcon}
+          label="Status"
+          value={<Text color={failed ? 'red' : delivered ? 'green' : undefined} weight="bold">{formatDeliveryStatus(delivery.status)}</Text>}
+          supporting={statusDescription}
+          tone={statusTone}
+        />
+        <DeliveryMetric icon={CalendarIcon} label="Created time" value={new Date(delivery.createdAt).toLocaleString()} />
+        <DeliveryMetric
+          icon={ClockIcon}
+          label="Next retry time"
+          value={delivery.nextAttemptAt ? new Date(delivery.nextAttemptAt).toLocaleString() : '-'}
+          supporting={delivery.nextAttemptAt ? 'Retry scheduled' : 'No retry scheduled'}
+        />
+      </div>
 
-          <Text size="2" color="gray">Delivery ID</Text>
-          <Text>{delivery.id}</Text>
+      <div className="delivery-primary-grid">
+        <Card className="delivery-section-card">
+          <DeliverySectionTitle icon={DeliveriesIcon}>Delivery information</DeliverySectionTitle>
+          <div className="delivery-info-list">
+            <DeliveryInfoRow icon={EventsIcon} label="Event" copyValue={delivery.eventId} onCopy={handleCopy}>
+              <Link asChild><NavLink to={`/events/${encodeURIComponent(delivery.eventId)}`}>{delivery.eventId}</NavLink></Link>
+            </DeliveryInfoRow>
+            <DeliveryInfoRow icon={CustomersIcon} label="Customer" copyValue={delivery.customerId} onCopy={handleCopy}>
+              <Link asChild><NavLink to={`/customers/${encodeURIComponent(delivery.customerId)}`}>{delivery.customerId}</NavLink></Link>
+            </DeliveryInfoRow>
+            <DeliveryInfoRow icon={ContractsIcon} label="Contract" copyValue={delivery.contractId} onCopy={handleCopy}>
+              <Link asChild><NavLink to={`/contracts/${encodeURIComponent(delivery.contractId)}`}>{delivery.contractId}</NavLink></Link>
+            </DeliveryInfoRow>
+            <DeliveryInfoRow icon={DeliveriesIcon} label="Destination">{delivery.destinationType}</DeliveryInfoRow>
+          </div>
+        </Card>
 
-          <Text size="2" color="gray">Status</Text>
-          <Badge color={statusColor(delivery.status)} variant="soft">
-            {formatDeliveryStatus(delivery.status)}
-          </Badge>
+        <Card className="delivery-section-card">
+          <DeliverySectionTitle icon={EventsIcon}>Event details</DeliverySectionTitle>
+          <div className="delivery-info-list">
+            <DeliveryInfoRow icon={EventsIcon} label="Event ID" copyValue={delivery.eventId} onCopy={handleCopy}>{delivery.eventId}</DeliveryInfoRow>
+            <DeliveryInfoRow icon={CodeIcon} label="Event type"><Badge variant="soft">{delivery.eventType}</Badge></DeliveryInfoRow>
+            <DeliveryInfoRow icon={ContractsIcon} label="Source">{event?.source ?? 'Contract'}</DeliveryInfoRow>
+          </div>
+        </Card>
 
-          <Text size="2" color="gray">Event</Text>
-          <Link asChild>
-            <NavLink to={`/events/${encodeURIComponent(delivery.eventId)}`}>
-              {delivery.eventId}
-            </NavLink>
-          </Link>
+        <Card className="delivery-section-card">
+          <DeliverySectionTitle icon={failed ? FailedDeliveriesIcon : CheckCircleIcon} tone={failed ? 'danger' : 'accent'}>Delivery status</DeliverySectionTitle>
+          <div className={`delivery-status-track delivery-status-${normalizedStatus}`}>
+            {[
+              ['Created', new Date(delivery.createdAt).toLocaleString(), true],
+              ['Processing', attempts.length ? `${attempts.length} attempt${attempts.length === 1 ? '' : 's'}` : 'Waiting', inFlight || delivered],
+              ['Delivered', delivered ? new Date(delivery.updatedAt).toLocaleString() : 'Pending', delivered],
+              ['Completed', delivered ? 'Done' : 'Pending', delivered],
+            ].map(([label, detail, active], index) => (
+              <div className={`delivery-status-step ${active ? 'active' : ''} ${failed && index === 0 ? 'failed' : ''}`} key={String(label)}>
+                <span className="delivery-status-dot">{failed && index === 0 ? '×' : active ? '✓' : index + 1}</span>
+                <Text size="2" weight="medium">{label}</Text>
+                <Text size="1" color="gray">{detail}</Text>
+              </div>
+            ))}
+          </div>
+        </Card>
 
-          <Text size="2" color="gray">Customer</Text>
-          <Link asChild>
-            <NavLink to={`/customers/${encodeURIComponent(delivery.customerId)}`}>
-              {delivery.customerId}
-            </NavLink>
-          </Link>
-
-          <Text size="2" color="gray">Contract</Text>
-          <Link asChild>
-            <NavLink to={`/contracts/${encodeURIComponent(delivery.contractId)}`}>
-              {delivery.contractId}
-            </NavLink>
-          </Link>
-
-          <Text size="2" color="gray">Destination</Text>
-          <Text>{delivery.destinationType}</Text>
-
-          <Text size="2" color="gray">Created time</Text>
-          <Text>{new Date(delivery.createdAt).toLocaleString()}</Text>
-
-          <Text size="2" color="gray">Next retry time</Text>
-          <Text>{delivery.nextAttemptAt ? new Date(delivery.nextAttemptAt).toLocaleString() : '-'}</Text>
-
-          <Text size="2" color="gray">Latest error</Text>
-          <Text>{delivery.lastError ?? '-'}</Text>
-        </Flex>
-      </Card>
-
-      <Card>
-        <Flex direction="column" gap="3">
-          <Heading size="4">Failure details</Heading>
-          {failureQuery.isLoading ? (
-            <Text size="2" color="gray">Loading failure details...</Text>
-          ) : failureQuery.isError ? (
-            <Text size="2" color="red">
-              {getApiErrorMessage(failureQuery.error, 'Unable to load failure details.')}
-            </Text>
-          ) : !failure ? (
-            <Text size="2" color="gray">No failure details available.</Text>
+        <Card className="delivery-section-card">
+          <DeliverySectionTitle icon={AlertIcon} tone={failed ? 'danger' : 'accent'}>Error information</DeliverySectionTitle>
+          {failed ? (
+            <div className="delivery-error-callout">
+              <FailedDeliveriesIcon />
+              <div>
+                <Text size="2" weight="bold">{normalizedStatus === 'dead' ? 'Delivery marked as dead' : 'Delivery failed'}</Text>
+                <Text size="1">{statusDescription} and {delivery.nextAttemptAt ? 'will be retried.' : 'will not be retried automatically.'}</Text>
+              </div>
+            </div>
           ) : (
-            <>
-              <Text size="2" color="gray">Failure category</Text>
-              <Text>{failure.failureCategory ?? '-'}</Text>
-              <Text size="2" color="gray">Failed at</Text>
-              <Text>{failure.failedAt ? new Date(failure.failedAt).toLocaleString() : '-'}</Text>
-
-              <Heading size="3">Failure JSON</Heading>
-              <JsonViewer
-                value={failure}
-                maxHeight={260}
-                defaultCollapsed
-                searchPlaceholder="Search failure JSON"
-                copyLabel="Copy failure JSON"
-              />
-            </>
+            <div className="delivery-success-callout">
+              <CheckCircleIcon />
+              <Text size="2">No delivery errors were reported.</Text>
+            </div>
           )}
-        </Flex>
+          <DeliveryInfoRow icon={CodeIcon} label="Latest error" copyValue={delivery.lastError ?? undefined} onCopy={handleCopy}>
+            <span className="delivery-error-preview" title={delivery.lastError ?? undefined}>
+              {delivery.lastError ?? '-'}
+            </span>
+          </DeliveryInfoRow>
+          {failure?.failureCategory ? (
+            <DeliveryInfoRow icon={AlertIcon} label="Category">{failure.failureCategory}</DeliveryInfoRow>
+          ) : null}
+        </Card>
+      </div>
+
+      <Card className="delivery-raw-card">
+        <DeliverySectionTitle icon={CodeIcon}>Raw data</DeliverySectionTitle>
+        <Tabs.Root defaultValue="overview">
+          <Tabs.List>
+            <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
+            <Tabs.Trigger value="payload">Event payload</Tabs.Trigger>
+            <Tabs.Trigger value="metadata">Metadata</Tabs.Trigger>
+            <Tabs.Trigger value="failure">Failure</Tabs.Trigger>
+          </Tabs.List>
+          <Tabs.Content value="overview" className="delivery-tab-content">
+            <div className="delivery-raw-grid">
+              <div className="delivery-info-list">
+                <DeliveryInfoRow icon={DeliveriesIcon} label="Delivery ID" copyValue={delivery.id} onCopy={handleCopy}>{delivery.id}</DeliveryInfoRow>
+                <DeliveryInfoRow icon={EventsIcon} label="Event ID" copyValue={delivery.eventId} onCopy={handleCopy}>{delivery.eventId}</DeliveryInfoRow>
+                <DeliveryInfoRow icon={CustomersIcon} label="Customer">{delivery.customerId}</DeliveryInfoRow>
+                <DeliveryInfoRow icon={ContractsIcon} label="Contract">{delivery.contractId}</DeliveryInfoRow>
+                <DeliveryInfoRow icon={failed ? FailedDeliveriesIcon : CheckCircleIcon} label="Status">
+                  <Badge color={statusColor(delivery.status)} variant="soft">{formatDeliveryStatus(delivery.status)}</Badge>
+                </DeliveryInfoRow>
+              </div>
+              <div className="delivery-help-callout">
+                <ClockIcon />
+                <div>
+                  <Text size="2" weight="bold">{failed ? 'Need to retry this delivery?' : 'Delivery processing'}</Text>
+                  <Text size="1" color="gray">
+                    {failed
+                      ? 'Use the delivery operations below to retry or requeue this delivery.'
+                      : 'Review the latest status and attempt history below.'}
+                  </Text>
+                </div>
+              </div>
+            </div>
+          </Tabs.Content>
+          <Tabs.Content value="payload" className="delivery-tab-content">
+            <JsonViewer value={event?.payload ?? { message: 'Event payload is unavailable.' }} maxHeight={360} searchPlaceholder="Search payload" copyLabel="Copy payload" />
+          </Tabs.Content>
+          <Tabs.Content value="metadata" className="delivery-tab-content">
+            <JsonViewer value={event?.metadata ?? attempts.at(-1)?.metadata ?? {}} maxHeight={320} searchPlaceholder="Search metadata" copyLabel="Copy metadata" />
+          </Tabs.Content>
+          <Tabs.Content value="failure" className="delivery-tab-content">
+            <JsonViewer value={failure ?? { message: 'No failure data available.' }} maxHeight={320} searchPlaceholder="Search failure" copyLabel="Copy failure data" />
+          </Tabs.Content>
+        </Tabs.Root>
       </Card>
 
-      <Card>
-        <Flex direction="column" gap="3">
-          <Heading size="4">Delivery JSON</Heading>
-          <JsonViewer
-            value={delivery}
-            maxHeight={300}
-            defaultCollapsed
-            searchPlaceholder="Search delivery JSON"
-            copyLabel="Copy delivery JSON"
-          />
-        </Flex>
-      </Card>
+      {copiedField ? <Text size="1" color="gray" className="delivery-copy-feedback">{copiedField} copied</Text> : null}
 
-      <Card>
+      <Card className="delivery-lower-card">
         <Flex direction="column" gap="3">
-          <Heading size="4">Delivery attempt timeline</Heading>
+          <DeliverySectionTitle icon={ClockIcon}>Delivery attempts</DeliverySectionTitle>
           {attemptsQuery.isLoading ? (
             <Text size="2" color="gray">Loading attempts...</Text>
           ) : attemptsQuery.isError ? (
@@ -354,24 +536,12 @@ export function DeliveryDetailPage() {
             </Table.Root>
           )}
 
-          {attempts.length > 0 ? (
-            <>
-              <Heading size="3">Attempts JSON</Heading>
-              <JsonViewer
-                value={attempts}
-                maxHeight={260}
-                defaultCollapsed
-                searchPlaceholder="Search attempts JSON"
-                copyLabel="Copy attempts JSON"
-              />
-            </>
-          ) : null}
         </Flex>
       </Card>
 
-      <Card>
+      <Card className="delivery-lower-card">
         <Flex direction="column" gap="3">
-          <Heading size="4">Operations</Heading>
+          <DeliverySectionTitle icon={RetryIcon}>Operations</DeliverySectionTitle>
 
           {!canOperateDeliveries ? (
             <Text size="2" color="gray">Delivery operations are not available for your role.</Text>

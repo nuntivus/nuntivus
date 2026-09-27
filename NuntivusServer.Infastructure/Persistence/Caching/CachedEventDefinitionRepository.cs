@@ -49,12 +49,19 @@ namespace NuntivusServer.Infastructure.Persistence.Caching
                 ct => _inner.ListAsync(page, pageSize, ct),
                 cancellationToken);
 
-        public Task<Result<int>> UpdateDescriptionAsync(
+        public async Task<Result<int>> UpdateAsync(
             string eventType,
+            string displayName,
             string? description,
             IUnitOfWork uow,
-            CancellationToken cancellationToken) =>
-            _inner.UpdateDescriptionAsync(eventType, description, uow, cancellationToken);
+            CancellationToken cancellationToken)
+        {
+            var result = await _inner.UpdateAsync(eventType, displayName, description, uow, cancellationToken);
+            if (result.IsSuccess && result.Value > 0)
+                _cache.Remove($"{CacheKeys.EventDefinitionsByType}:{eventType}");
+
+            return result;
+        }
 
         public Task<Result> InsertSchemaVersionAsync(
             EventSchemaVersion schemaVersion,

@@ -13,7 +13,9 @@ import { useState } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { JsonViewer } from '../components/json/json-viewer'
+import { CalendarIcon, ChevronRightIcon, ClockIcon, CodeIcon, CopyIcon, DeliveriesIcon, EventsIcon, RetryIcon } from '../components/icons/nav-icons'
 import { DetailLoadingState } from '../components/states/detail-loading-state'
+import { DetailMetric } from '../components/states/detail-visuals'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
 import {
   useEventDetailQuery,
@@ -72,6 +74,27 @@ function summarizeDeliveries(deliveries: DeliveryListItem[]) {
   }
 }
 
+function formatEventDate(value: string) {
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(value))
+}
+
+function deliveryBadgeColor(status: number | string): 'amber' | 'blue' | 'green' | 'red' | 'gray' {
+  const normalized = formatDeliveryStatus(status).toLowerCase()
+
+  if (normalized === 'delivered') return 'green'
+  if (normalized === 'pending') return 'amber'
+  if (normalized === 'inflight') return 'blue'
+  if (normalized === 'failed' || normalized === 'dead') return 'red'
+  return 'gray'
+}
+
 export function EventDetailPage() {
   const { id } = useParams()
   const confirm = useConfirmDialog()
@@ -98,18 +121,16 @@ export function EventDetailPage() {
 
   const replayKeyError = !replayKey.trim() ? 'Replay key is required.' : null
 
-  async function handleCopy() {
-    const value = detail?.id ?? ''
-
+  async function handleCopy(value: string, field: string) {
     if (!value) {
       return
     }
 
     await navigator.clipboard.writeText(value)
-    setCopiedField('id')
+    setCopiedField(field)
 
     window.setTimeout(() => {
-      setCopiedField((current) => (current === 'id' ? null : current))
+      setCopiedField((current) => (current === field ? null : current))
     }, 1500)
   }
 
@@ -198,65 +219,109 @@ export function EventDetailPage() {
 
   const deliverySummary = summarizeDeliveries(detail.deliveries)
 
+  const eventInformation = JSON.stringify({
+    id: detail.id,
+    type: detail.type,
+    source: detail.source,
+    occurredAt: detail.occurredAt,
+    receivedAt: detail.receivedAt,
+  }, null, 2)
+  const timelineDeliveries = [...detail.deliveries].sort(
+    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+  )
+
   return (
-    <Flex direction="column" gap="4">
-      <Flex align="center" justify="between" wrap="wrap" gap="3">
-        <Heading size="6">Event detail</Heading>
+    <Flex direction="column" gap="3" className="detail-page event-detail-page">
+      <Flex align="center" justify="between" wrap="wrap" gap="3" className="event-detail-header">
+        <Flex align="center" gap="3" className="event-detail-heading">
+          <span className="detail-page-icon" aria-hidden="true"><EventsIcon /></span>
+          <div>
+            <Flex align="center" gap="2" wrap="wrap">
+              <Heading size="6">{detail.type}</Heading>
+              <Badge variant="soft">Event</Badge>
+            </Flex>
+            <Text size="2" color="gray">Event timing, payload, linked deliveries, and replay controls.</Text>
+          </div>
+        </Flex>
         <Button asChild variant="soft">
-          <NavLink to="/events">Back to list</NavLink>
+          <NavLink to="/events"><ChevronRightIcon className="event-back-icon" />Back to list</NavLink>
         </Button>
       </Flex>
 
-      <Card>
-        <Flex direction="column" gap="3">
-          <Heading size="4">Overview</Heading>
+      <div className="visual-detail-metric-grid">
+        <DetailMetric icon={EventsIcon} label="Event type" value={detail.type} supporting={`Source: ${detail.source}`} />
+        <DetailMetric icon={CalendarIcon} label="Occurred" value={formatEventDate(detail.occurredAt)} supporting="Producer timestamp" />
+        <DetailMetric icon={ClockIcon} label="Received" value={formatEventDate(detail.receivedAt)} supporting="Ingestion timestamp" tone="violet" />
+        <DetailMetric icon={DeliveriesIcon} label="Deliveries" value={deliverySummary.total} supporting={`${deliverySummary.delivered} delivered / ${deliverySummary.failedOrDead} failed`} tone={deliverySummary.failedOrDead ? 'danger' : 'success'} />
+      </div>
 
-          <Text size="2" color="gray">Event ID</Text>
-          <Flex align="center" gap="2" wrap="wrap">
-            <Text>{detail.id}</Text>
-            <Button variant="soft" size="1" onClick={() => void handleCopy()}>
-              {copiedField === 'id' ? 'Copied' : 'Copy ID'}
-            </Button>
+      <Card className="detail-panel detail-panel-wide event-detail-card event-timeline-card">
+        <div className="event-section-header">
+          <Flex align="center" gap="2">
+            <span className="event-section-icon"><ClockIcon /></span>
+            <div><Heading size="4">Delivery timeline</Heading><Text size="1" color="gray">Event ingestion and delivery activity in chronological order.</Text></div>
           </Flex>
-
-          <Text size="2" color="gray">Type</Text>
-          <Text>{detail.type}</Text>
-
-          <Text size="2" color="gray">Source</Text>
-          <Text>{detail.source}</Text>
-
-          <Text size="2" color="gray">Occurred timestamp</Text>
-          <Text>{new Date(detail.occurredAt).toLocaleString()}</Text>
-
-          <Text size="2" color="gray">Received timestamp</Text>
-          <Text>{new Date(detail.receivedAt).toLocaleString()}</Text>
-
-          <Text size="2" color="gray">Delivery summary</Text>
-          <Flex gap="1" wrap="wrap">
-            <Badge variant="soft">Total {deliverySummary.total}</Badge>
-            <Badge color="green" variant="soft">Delivered {deliverySummary.delivered}</Badge>
-            <Badge color="amber" variant="soft">Pending {deliverySummary.pending}</Badge>
-            <Badge color="red" variant="soft">Failed/Dead {deliverySummary.failedOrDead}</Badge>
-          </Flex>
-        </Flex>
+        </div>
+        <div className="event-timeline-scroll">
+          <ol className="event-timeline">
+            <li className="event-timeline-item event-timeline-received">
+              <span className="event-timeline-marker"><EventsIcon /></span>
+              <div className="event-timeline-content">
+                <Text size="1" color="gray">Event received</Text>
+                <Text size="2" weight="bold">{formatEventDate(detail.receivedAt)}</Text>
+                <Text size="1" color="gray">Ready for contract matching</Text>
+              </div>
+            </li>
+            {timelineDeliveries.map((delivery) => (
+              <li className={`event-timeline-item event-timeline-${deliveryBadgeColor(delivery.status)}`} key={delivery.id}>
+                <span className="event-timeline-marker"><DeliveriesIcon /></span>
+                <div className="event-timeline-content">
+                  <Flex align="center" gap="1" wrap="wrap">
+                    <Text size="1" color="gray">Delivery</Text>
+                    <Badge color={deliveryBadgeColor(delivery.status)} variant="soft">{formatDeliveryStatus(delivery.status)}</Badge>
+                  </Flex>
+                  <NavLink className="event-timeline-link" to={`/deliveries/${delivery.id}`}>{delivery.id}</NavLink>
+                  <Text size="1" color="gray">{formatEventDate(delivery.updatedAt)} / {delivery.attemptCount} attempt{delivery.attemptCount === 1 ? '' : 's'}</Text>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
       </Card>
 
-      <Card>
+      <Card className="detail-panel detail-panel-wide event-detail-card event-information-card">
+        <div className="event-section-header">
+          <Flex align="center" gap="2">
+            <span className="event-section-icon"><EventsIcon /></span>
+            <div><Heading size="4">Event information</Heading><Text size="1" color="gray">Detailed information about this event.</Text></div>
+          </Flex>
+          <Button variant="soft" size="1" onClick={() => void handleCopy(eventInformation, 'all')}><CopyIcon />{copiedField === 'all' ? 'Copied' : 'Copy all'}</Button>
+        </div>
+        <div className="event-information-list">
+          <div className="event-information-row"><EventsIcon /><Text weight="medium">Event ID</Text><Text>{detail.id}</Text><Button variant="ghost" size="1" aria-label="Copy event ID" onClick={() => void handleCopy(detail.id, 'id')}><CopyIcon /></Button></div>
+          <div className="event-information-row"><EventsIcon /><Text weight="medium">Event type</Text><Text>{detail.type}</Text><Button variant="ghost" size="1" aria-label="Copy event type" onClick={() => void handleCopy(detail.type, 'type')}><CopyIcon /></Button></div>
+          <div className="event-information-row"><CodeIcon /><Text weight="medium">Source</Text><Text>{detail.source}</Text><Button variant="ghost" size="1" aria-label="Copy source" onClick={() => void handleCopy(detail.source, 'source')}><CopyIcon /></Button></div>
+          <div className="event-information-row"><CalendarIcon /><Text weight="medium">Occurred timestamp</Text><Text>{formatEventDate(detail.occurredAt)}</Text><Button variant="ghost" size="1" aria-label="Copy occurred timestamp" onClick={() => void handleCopy(detail.occurredAt, 'occurred')}><CopyIcon /></Button></div>
+          <div className="event-information-row"><ClockIcon /><Text weight="medium">Received timestamp</Text><Text>{formatEventDate(detail.receivedAt)}</Text><Button variant="ghost" size="1" aria-label="Copy received timestamp" onClick={() => void handleCopy(detail.receivedAt, 'received')}><CopyIcon /></Button></div>
+          <div className="event-information-row"><DeliveriesIcon /><Text weight="medium">Delivery summary</Text><Flex gap="1" wrap="wrap"><Badge variant="soft">Total {deliverySummary.total}</Badge><Badge color="green" variant="soft">Delivered {deliverySummary.delivered}</Badge><Badge color="amber" variant="soft">Pending {deliverySummary.pending}</Badge><Badge color="red" variant="soft">Failed/Dead {deliverySummary.failedOrDead}</Badge></Flex><span /></div>
+        </div>
+      </Card>
+
+      <Card className="detail-panel detail-panel-wide event-detail-card event-json-card">
         <Flex direction="column" gap="3">
-          <Heading size="4">Metadata</Heading>
+          <div className="event-section-header"><Flex align="center" gap="2"><span className="event-section-icon event-section-icon-violet"><CodeIcon /></span><div><Heading size="4">Metadata</Heading><Text size="1" color="gray">Additional metadata included with this event.</Text></div></Flex></div>
           <JsonViewer
             value={detail.metadata ?? {}}
             maxHeight={280}
-            defaultCollapsed
             searchPlaceholder="Search metadata"
             copyLabel="Copy metadata"
           />
         </Flex>
       </Card>
 
-      <Card>
+      <Card className="detail-panel detail-panel-wide event-detail-card event-json-card">
         <Flex direction="column" gap="3">
-          <Heading size="4">Payload</Heading>
+          <div className="event-section-header"><Flex align="center" gap="2"><span className="event-section-icon"><CodeIcon /></span><div><Heading size="4">Payload</Heading><Text size="1" color="gray">The raw event payload as received.</Text></div></Flex></div>
           <JsonViewer
             value={detail.payload ?? {}}
             maxHeight={380}
@@ -266,9 +331,9 @@ export function EventDetailPage() {
         </Flex>
       </Card>
 
-      <Card>
+      <Card className="detail-panel detail-panel-wide event-detail-card event-deliveries-card">
         <Flex direction="column" gap="3">
-          <Heading size="4">Related deliveries</Heading>
+          <div className="event-section-header"><Flex align="center" gap="2"><span className="event-section-icon"><DeliveriesIcon /></span><div><Heading size="4">Related deliveries</Heading><Text size="1" color="gray">Deliveries created for this event.</Text></div></Flex></div>
           {detail.deliveries.length === 0 ? (
             <Text size="2" color="gray">No deliveries linked to this event.</Text>
           ) : (
@@ -280,6 +345,7 @@ export function EventDetailPage() {
                   <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Attempts</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Updated</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell aria-label="Actions" />
                 </Table.Row>
               </Table.Header>
               <Table.Body>
@@ -287,9 +353,10 @@ export function EventDetailPage() {
                   <Table.Row key={delivery.id}>
                     <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
                     <Table.Cell>{delivery.contractId}</Table.Cell>
-                    <Table.Cell>{formatDeliveryStatus(delivery.status)}</Table.Cell>
+                    <Table.Cell><Badge color={deliveryBadgeColor(delivery.status)} variant="soft">{formatDeliveryStatus(delivery.status)}</Badge></Table.Cell>
                     <Table.Cell>{delivery.attemptCount}</Table.Cell>
                     <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>
+                    <Table.Cell><Button asChild variant="ghost" size="1" aria-label={`Open delivery ${delivery.id}`}><NavLink to={`/deliveries/${delivery.id}`}><ChevronRightIcon /></NavLink></Button></Table.Cell>
                   </Table.Row>
                 ))}
               </Table.Body>
@@ -298,27 +365,19 @@ export function EventDetailPage() {
         </Flex>
       </Card>
 
-      <Card>
+      <Card className="detail-panel detail-panel-wide event-detail-card event-replay-card">
         <Flex direction="column" gap="3">
-          <Heading size="4">Replay</Heading>
-          <Text size="2" color="gray">
-            Replay creates a new event from this source event and re-runs contract matching.
-            It can produce new deliveries even if previous deliveries already exist.
-          </Text>
+          <div className="event-section-header"><Flex align="center" gap="2"><span className="event-section-icon"><RetryIcon /></span><div><Heading size="4">Replay event</Heading><Text size="1" color="gray">Create a new event from this event and re-run contract matching. This can produce new deliveries even if previous deliveries already exist.</Text></div></Flex></div>
           {!canReplayEvents ? (
             <Text size="2" color="gray">
               Replay is not available for your role.
             </Text>
           ) : (
             <>
-              <TextField.Root
-                placeholder="Replay key"
-                value={replayKey}
-                onChange={(event) => setReplayKey(event.target.value)}
-                disabled={replayMutation.isPending}
-                aria-invalid={replayKeyError ? 'true' : 'false'}
-                aria-describedby={replayKeyError ? 'event-replay-key-error' : undefined}
-              />
+              <div className="event-replay-controls">
+                <TextField.Root placeholder="Replay key" value={replayKey} onChange={(event) => setReplayKey(event.target.value)} disabled={replayMutation.isPending} aria-invalid={replayKeyError ? 'true' : 'false'} aria-describedby={replayKeyError ? 'event-replay-key-error' : undefined} />
+                <Button type="button" onClick={() => void handleReplay()} disabled={replayMutation.isPending || !!replayKeyError}><RetryIcon />{replayMutation.isPending ? 'Submitting...' : 'Replay event'}</Button>
+              </div>
               <FieldErrorText id="event-replay-key-error" message={replayKeyError} />
               <TextArea
                 placeholder="Reason (optional)"
@@ -397,13 +456,6 @@ export function EventDetailPage() {
                 </>
               ) : null}
 
-              <Button
-                type="button"
-                onClick={() => void handleReplay()}
-                disabled={replayMutation.isPending || !!replayKeyError}
-              >
-                {replayMutation.isPending ? 'Submitting...' : 'Replay event'}
-              </Button>
             </>
           )}
         </Flex>

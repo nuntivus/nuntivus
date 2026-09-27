@@ -112,27 +112,34 @@ namespace NuntivusServer.Application.Events
             return Result.Success(result.Value.Map(d => d.ToView()));
         }
 
-        public async Task<Result<EventDefinitionView>> UpdateDescriptionAsync(
+        public async Task<Result<EventDefinitionView>> UpdateAsync(
             string eventType,
+            string displayName,
             string? description,
             CancellationToken cancellationToken)
         {
             if (!EventDefinitionValidation.IsValidEventType(eventType))
                 return Result.Failure<EventDefinitionView>(Error.Validation("eventType is invalid."));
 
+            if (!EventDefinitionValidation.IsValidDisplayName(displayName))
+                return Result.Failure<EventDefinitionView>(Error.Validation(
+                    $"displayName is required and must be at most {EventDefinitionValidation.DisplayNameMaxLength} characters."));
+
             if (!EventDefinitionValidation.IsValidDescription(description))
                 return Result.Failure<EventDefinitionView>(Error.Validation(
                     $"description must be at most {EventDefinitionValidation.DescriptionMaxLength} characters."));
 
             var normalizedEventType = eventType.Trim();
+            var normalizedDisplayName = displayName.Trim();
             var normalizedDescription = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
 
             try
             {
                 _unitOfWork.Begin(true);
 
-                var updatedRows = await _repository.UpdateDescriptionAsync(
+                var updatedRows = await _repository.UpdateAsync(
                     normalizedEventType,
+                    normalizedDisplayName,
                     normalizedDescription,
                     _unitOfWork,
                     cancellationToken);
@@ -155,7 +162,7 @@ namespace NuntivusServer.Application.Events
             catch (Exception ex)
             {
                 _unitOfWork.Rollback();
-                _logger.Error(ex, "Failed to update event definition description for {EventType}.", normalizedEventType);
+                _logger.Error(ex, "Failed to update event definition for {EventType}.", normalizedEventType);
                 return Result.Failure<EventDefinitionView>(ex);
             }
 

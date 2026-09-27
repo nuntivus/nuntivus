@@ -3,6 +3,7 @@ import {
   Card,
   Flex,
   Heading,
+  Switch,
   Text,
   TextArea,
   TextField,
@@ -12,6 +13,7 @@ import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
 import { getServerValidation } from '../components/forms/form-validation'
+import { ContractsIcon } from '../components/icons/nav-icons'
 import { ContractOptionsForm } from '../features/contracts/contract-options-form'
 import { backendConfigToFormState, formStateToBackendConfig, validateAdvancedContractOptions } from '../features/contracts/contract-options'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
@@ -28,6 +30,8 @@ import {
 } from '../features/contracts/destination-forms/types'
 import {
   useContractDetailQuery,
+  useDisableContractMutation,
+  useEnableContractMutation,
   useReplaceContractMutation,
 } from '../features/contracts/use-contracts'
 import { getApiErrorMessage } from '../services/api/api-client'
@@ -37,6 +41,7 @@ import { useAppSelector } from '../store/hooks'
 type EditorInitialState = {
   name: string
   eventTypesInput: string
+  enabled: boolean
   destination: DestinationFormState
   destinationConfiguration: string
   options: ContractOptions
@@ -181,10 +186,10 @@ function parseDestinationConfiguration(
 
     const resolvedType: 'http' | 'kafka' | 'nats' | 'rabbitmq' | 'sqs' =
       parsed.type === 'http' ||
-      parsed.type === 'kafka' ||
-      parsed.type === 'nats' ||
-      parsed.type === 'rabbitmq' ||
-      parsed.type === 'sqs'
+        parsed.type === 'kafka' ||
+        parsed.type === 'nats' ||
+        parsed.type === 'rabbitmq' ||
+        parsed.type === 'sqs'
         ? parsed.type
         : (destinationType.toLowerCase() as 'http' | 'kafka' | 'nats' | 'rabbitmq' | 'sqs')
 
@@ -196,20 +201,20 @@ function parseDestinationConfiguration(
           url: parsed.url ?? '',
           authenticationType:
             parsed.authentication?.type === 'bearer' ||
-            parsed.authentication?.type === 'hmac'
+              parsed.authentication?.type === 'hmac'
               ? (parsed.authentication.type as 'bearer' | 'hmac')
               : 'none',
           credential: parsed.authentication?.credential
             ? {
-                mode: 'keep',
-                hasStoredValue: true,
-                kind:
-                  parsed.authentication.credential.kind === 'ref' ? 'ref' : 'inline',
-                value: parsed.authentication.credential.value ?? '',
-                version: parsed.authentication.credential.version
-                  ? String(parsed.authentication.credential.version)
-                  : '',
-              }
+              mode: 'keep',
+              hasStoredValue: true,
+              kind:
+                parsed.authentication.credential.kind === 'ref' ? 'ref' : 'inline',
+              value: parsed.authentication.credential.value ?? '',
+              version: parsed.authentication.credential.version
+                ? String(parsed.authentication.credential.version)
+                : '',
+            }
             : createDefaultSecretFieldState(),
         },
       }
@@ -230,14 +235,14 @@ function parseDestinationConfiguration(
           username: parsed.credentials?.username ?? '',
           password: parsed.credentials?.password
             ? {
-                mode: 'keep',
-                hasStoredValue: true,
-                kind: parsed.credentials.password.kind === 'ref' ? 'ref' : 'inline',
-                value: parsed.credentials.password.value ?? '',
-                version: parsed.credentials.password.version
-                  ? String(parsed.credentials.password.version)
-                  : '',
-              }
+              mode: 'keep',
+              hasStoredValue: true,
+              kind: parsed.credentials.password.kind === 'ref' ? 'ref' : 'inline',
+              value: parsed.credentials.password.value ?? '',
+              version: parsed.credentials.password.version
+                ? String(parsed.credentials.password.version)
+                : '',
+            }
             : createDefaultSecretFieldState(),
         },
       }
@@ -255,26 +260,26 @@ function parseDestinationConfiguration(
           stream: parsed.stream ?? '',
           token: parsed.credentials?.token
             ? {
-                mode: 'keep',
-                hasStoredValue: true,
-                kind: parsed.credentials.token.kind === 'ref' ? 'ref' : 'inline',
-                value: parsed.credentials.token.value ?? '',
-                version: parsed.credentials.token.version
-                  ? String(parsed.credentials.token.version)
-                  : '',
-              }
+              mode: 'keep',
+              hasStoredValue: true,
+              kind: parsed.credentials.token.kind === 'ref' ? 'ref' : 'inline',
+              value: parsed.credentials.token.value ?? '',
+              version: parsed.credentials.token.version
+                ? String(parsed.credentials.token.version)
+                : '',
+            }
             : createDefaultSecretFieldState(),
           username: parsed.credentials?.username ?? '',
           password: parsed.credentials?.password
             ? {
-                mode: 'keep',
-                hasStoredValue: true,
-                kind: parsed.credentials.password.kind === 'ref' ? 'ref' : 'inline',
-                value: parsed.credentials.password.value ?? '',
-                version: parsed.credentials.password.version
-                  ? String(parsed.credentials.password.version)
-                  : '',
-              }
+              mode: 'keep',
+              hasStoredValue: true,
+              kind: parsed.credentials.password.kind === 'ref' ? 'ref' : 'inline',
+              value: parsed.credentials.password.value ?? '',
+              version: parsed.credentials.password.version
+                ? String(parsed.credentials.password.version)
+                : '',
+            }
             : createDefaultSecretFieldState(),
         },
       }
@@ -294,14 +299,14 @@ function parseDestinationConfiguration(
           username: parsed.credentials?.username ?? '',
           password: parsed.credentials?.password
             ? {
-                mode: 'keep',
-                hasStoredValue: true,
-                kind: parsed.credentials.password.kind === 'ref' ? 'ref' : 'inline',
-                value: parsed.credentials.password.value ?? '',
-                version: parsed.credentials.password.version
-                  ? String(parsed.credentials.password.version)
-                  : '',
-              }
+              mode: 'keep',
+              hasStoredValue: true,
+              kind: parsed.credentials.password.kind === 'ref' ? 'ref' : 'inline',
+              value: parsed.credentials.password.value ?? '',
+              version: parsed.credentials.password.version
+                ? String(parsed.credentials.password.version)
+                : '',
+            }
             : createDefaultSecretFieldState(),
         },
       }
@@ -319,29 +324,29 @@ function parseDestinationConfiguration(
           accessKeyId: parsed.credentials?.accessKeyId ?? '',
           secretAccessKey: parsed.credentials?.secretAccessKey
             ? {
-                mode: 'keep',
-                hasStoredValue: true,
-                kind:
-                  parsed.credentials.secretAccessKey.kind === 'ref'
-                    ? 'ref'
-                    : 'inline',
-                value: parsed.credentials.secretAccessKey.value ?? '',
-                version: parsed.credentials.secretAccessKey.version
-                  ? String(parsed.credentials.secretAccessKey.version)
-                  : '',
-              }
+              mode: 'keep',
+              hasStoredValue: true,
+              kind:
+                parsed.credentials.secretAccessKey.kind === 'ref'
+                  ? 'ref'
+                  : 'inline',
+              value: parsed.credentials.secretAccessKey.value ?? '',
+              version: parsed.credentials.secretAccessKey.version
+                ? String(parsed.credentials.secretAccessKey.version)
+                : '',
+            }
             : createDefaultSecretFieldState(),
           sessionToken: parsed.credentials?.sessionToken
             ? {
-                mode: 'keep',
-                hasStoredValue: true,
-                kind:
-                  parsed.credentials.sessionToken.kind === 'ref' ? 'ref' : 'inline',
-                value: parsed.credentials.sessionToken.value ?? '',
-                version: parsed.credentials.sessionToken.version
-                  ? String(parsed.credentials.sessionToken.version)
-                  : '',
-              }
+              mode: 'keep',
+              hasStoredValue: true,
+              kind:
+                parsed.credentials.sessionToken.kind === 'ref' ? 'ref' : 'inline',
+              value: parsed.credentials.sessionToken.value ?? '',
+              version: parsed.credentials.sessionToken.version
+                ? String(parsed.credentials.sessionToken.version)
+                : '',
+            }
             : createDefaultSecretFieldState(),
         },
       }
@@ -372,9 +377,12 @@ function ContractEditorForm({
   const confirm = useConfirmDialog()
   const notifications = useNotifications()
   const replaceMutation = useReplaceContractMutation(id)
+  const enableMutation = useEnableContractMutation()
+  const disableMutation = useDisableContractMutation()
 
   const [name, setName] = useState(initial.name)
   const [eventTypesInput, setEventTypesInput] = useState(initial.eventTypesInput)
+  const [enabled, setEnabled] = useState(initial.enabled)
   const [destination, setDestination] = useState(initial.destination)
   const [optionsDraft, setOptionsDraft] = useState(() => backendConfigToFormState(initial.options))
   const [rawEditing, setRawEditing] = useState<string[]>([])
@@ -409,6 +417,7 @@ function ContractEditorForm({
     const currentSnapshot = JSON.stringify({
       name: name.trim(),
       eventTypes,
+      enabled,
       destination: mapDestinationFormToConfig(destination),
       options: optionsDraft,
     })
@@ -416,6 +425,7 @@ function ContractEditorForm({
     const initialSnapshot = JSON.stringify({
       name: initial.name.trim(),
       eventTypes: parseEventTypes(initial.eventTypesInput),
+      enabled: initial.enabled,
       destination: mapDestinationFormToConfig(initial.destination),
       options: backendConfigToFormState(initial.options),
     })
@@ -423,8 +433,10 @@ function ContractEditorForm({
     return currentSnapshot !== initialSnapshot
   }, [
     destination,
+    enabled,
     eventTypes,
     initial.destination,
+    initial.enabled,
     initial.eventTypesInput,
     initial.name,
     initial.options,
@@ -443,7 +455,7 @@ function ContractEditorForm({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteContracts || replaceMutation.isPending || hasValidationError || rawEditing.length > 0) {
+    if (!canWriteContracts || replaceMutation.isPending || enableMutation.isPending || disableMutation.isPending || hasValidationError || rawEditing.length > 0) {
       return
     }
 
@@ -469,18 +481,18 @@ function ContractEditorForm({
       const storedDestination = normalizeConfiguration(JSON.parse(initial.destinationConfiguration)) as Record<string, unknown>
       const mergedDestination = destinationConfig.type === initial.destination.type.toLowerCase()
         ? {
-            ...storedDestination,
-            ...destinationConfig,
-            ...('credentials' in destinationConfig && destinationConfig.credentials
-              ? { credentials: { ...(storedDestination.credentials as Record<string, unknown> ?? {}), ...destinationConfig.credentials } }
-              : {}),
-            ...(destinationConfig.type === 'http'
-              ? {
-                  headers: storedDestination.headers,
-                  timeoutSeconds: storedDestination.timeoutSeconds,
-                }
-              : {}),
-          }
+          ...storedDestination,
+          ...destinationConfig,
+          ...('credentials' in destinationConfig && destinationConfig.credentials
+            ? { credentials: { ...(storedDestination.credentials as Record<string, unknown> ?? {}), ...destinationConfig.credentials } }
+            : {}),
+          ...(destinationConfig.type === 'http'
+            ? {
+              headers: storedDestination.headers,
+              timeoutSeconds: storedDestination.timeoutSeconds,
+            }
+            : {}),
+        }
         : destinationConfig
       if (destinationConfig.type === 'http' && mergedDestination.type === 'http') {
         delete (mergedDestination as Record<string, unknown>).secretHeaders
@@ -501,6 +513,10 @@ function ContractEditorForm({
         },
       })
 
+      if (enabled !== initial.enabled) {
+        await (enabled ? enableMutation.mutateAsync(id) : disableMutation.mutateAsync(id))
+      }
+
       notifications.success('Contract changes saved.', 'Save contract')
       setSavedContractId(result.contract.id)
     } catch (error) {
@@ -510,68 +526,54 @@ function ContractEditorForm({
   }
 
   return (
-    <Card>
-      <form onSubmit={handleSubmit}>
-        <Flex direction="column" gap="3">
-          <Text size="2" color="gray">
-            Contract name
-          </Text>
-          <TextField.Root
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            disabled={!canWriteContracts || replaceMutation.isPending}
-          />
-
-          <Text size="2" color="gray">
-            Event types
-          </Text>
-          <TextArea
-            value={eventTypesInput}
-            onChange={(event) => setEventTypesInput(event.target.value)}
-            rows={4}
-            disabled={!canWriteContracts || replaceMutation.isPending}
-            aria-invalid={fieldErrors.eventTypes ? 'true' : 'false'}
-            aria-describedby={fieldErrors.eventTypes ? 'contract-edit-event-types-error' : undefined}
-          />
-          <FieldErrorText id="contract-edit-event-types-error" message={fieldErrors.eventTypes} />
-
-          <DestinationConfigurationForm
-            value={destination}
-            onChange={setDestination}
-          />
-          <FieldErrorText id="contract-edit-destination-error" message={fieldErrors.destination} />
-          <ContractOptionsForm value={optionsDraft} onChange={setOptionsDraft} eventTypes={eventTypes} disabled={!canWriteContracts || replaceMutation.isPending} onRawEditingChange={(key, editing) => setRawEditing((current) => editing ? [...current.filter((item) => item !== key), key] : current.filter((item) => item !== key))} />
-          <FieldErrorText id="contract-edit-options-error" message={fieldErrors.options} />
-
-          <FormErrorText
-            id="contract-edit-submit-error"
-            message={
-              submitError ??
-              (replaceMutation.isError
-                ? getApiErrorMessage(replaceMutation.error, 'Unable to update contract.')
-                : null)
-            }
-          />
-
-          <Flex gap="2">
-            <Button
-              type="submit"
-              disabled={!canWriteContracts || replaceMutation.isPending || hasValidationError || rawEditing.length > 0 || !dirty}
-            >
-              {replaceMutation.isPending ? 'Saving...' : 'Save changes'}
-            </Button>
-
-            <Button
-              type="button"
-              variant="soft"
-              onClick={() => navigate(`/contracts/${encodeURIComponent(id)}`)}
-            >
-              Cancel
-            </Button>
-          </Flex>
+    <form id="contract-edit-form" onSubmit={handleSubmit} className="contract-edit-form">
+      <Card className="contract-edit-details-card">
+        <Flex align="center" gap="2" className="contract-edit-card-title">
+          <span><ContractsIcon /></span>
+          <div><Heading size="4">Contract details</Heading><Text size="1" color="gray">Basic information about this contract.</Text></div>
         </Flex>
-      </form>
-    </Card>
+        <div className="contract-edit-details-grid">
+          <label className="contract-edit-field">
+            <Text size="2" weight="medium">Contract name <span aria-hidden="true">*</span></Text>
+            <TextField.Root
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              disabled={!canWriteContracts || replaceMutation.isPending}
+            />
+          </label>
+          <label className="contract-edit-field">
+            <Text size="2" weight="medium">Customer <span aria-hidden="true">*</span></Text>
+            <TextField.Root value={customerId} readOnly disabled />
+          </label>
+          <label className="contract-edit-field">
+            <Text size="2" weight="medium">Event types <span aria-hidden="true">*</span></Text>
+            <TextArea
+              value={eventTypesInput}
+              onChange={(event) => setEventTypesInput(event.target.value)}
+              rows={1}
+              disabled={!canWriteContracts || replaceMutation.isPending}
+              aria-invalid={fieldErrors.eventTypes ? 'true' : 'false'}
+              aria-describedby={fieldErrors.eventTypes ? 'contract-edit-event-types-error' : undefined}
+            />
+            <FieldErrorText id="contract-edit-event-types-error" message={fieldErrors.eventTypes} />
+          </label>
+          <label className="contract-edit-enabled-field">
+            <Text size="2" weight="medium">Enabled</Text>
+            <Switch checked={enabled} onCheckedChange={setEnabled} disabled={!canWriteContracts || replaceMutation.isPending || enableMutation.isPending || disableMutation.isPending} aria-label="Enabled" />
+            <Text size="1" color="gray">Enable or disable this contract.</Text>
+          </label>
+          <div className="contract-edit-destination-fields">
+            <DestinationConfigurationForm value={destination} onChange={setDestination} />
+          </div>
+          <FieldErrorText id="contract-edit-destination-error" message={fieldErrors.destination} />
+        </div>
+      </Card>
+
+      <ContractOptionsForm standalone value={optionsDraft} onChange={setOptionsDraft} eventTypes={eventTypes} disabled={!canWriteContracts || replaceMutation.isPending} onRawEditingChange={(key, editing) => setRawEditing((current) => editing ? [...current.filter((item) => item !== key), key] : current.filter((item) => item !== key))} />
+      <FieldErrorText id="contract-edit-options-error" message={fieldErrors.options} />
+      <FormErrorText id="contract-edit-submit-error" message={submitError ?? (replaceMutation.isError ? getApiErrorMessage(replaceMutation.error, 'Unable to update contract.') : null)} />
+      <input type="hidden" value={String(enabled)} readOnly />
+    </form>
   )
 }
 
@@ -641,8 +643,19 @@ export function ContractEditPage() {
   )
 
   return (
-    <Flex direction="column" gap="4">
-      <Heading size="6">Edit contract</Heading>
+    <Flex direction="column" gap="4" className="contract-edit-page">
+      <Flex align="center" justify="between" gap="3" wrap="wrap" className="contract-edit-header">
+        <Flex align="center" gap="3">
+          <span className="contract-edit-header-icon"><ContractsIcon /></span>
+          <div><Heading size="6">Edit contract</Heading><Text size="2" color="gray">Update contract configuration and settings for event delivery.</Text></div>
+        </Flex>
+        <Flex gap="2">
+          <Button asChild variant="soft">
+            <NavLink to={`/contracts/${encodeURIComponent(contract.id)}`}>Cancel</NavLink>
+          </Button>
+          <Button type="submit" form="contract-edit-form" disabled={!canWriteContracts}>Save changes</Button>
+        </Flex>
+      </Flex>
       <ContractEditorForm
         key={`${contract.id}-${contract.updatedAt}`}
         id={contract.id}
@@ -652,6 +665,7 @@ export function ContractEditPage() {
         initial={{
           name: contract.name ?? '',
           eventTypesInput: contract.eventTypes.join(', '),
+          enabled: contract.enabled,
           destination,
           destinationConfiguration: contract.destinationConfiguration,
           options: {

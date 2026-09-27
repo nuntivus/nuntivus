@@ -22,8 +22,9 @@ namespace NuntivusServer.Application.Events
             int pageSize,
             CancellationToken cancellationToken);
 
-        Task<Result<EventDefinitionView>> UpdateDescriptionAsync(
+        Task<Result<EventDefinitionView>> UpdateAsync(
             string eventType,
+            string displayName,
             string? description,
             CancellationToken cancellationToken);
 

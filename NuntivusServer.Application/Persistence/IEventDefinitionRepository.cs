@@ -22,8 +22,9 @@ namespace NuntivusServer.Application.Persistence
             int pageSize,
             CancellationToken cancellationToken);
 
-        Task<Result<int>> UpdateDescriptionAsync(
+        Task<Result<int>> UpdateAsync(
             string eventType,
+            string displayName,
             string? description,
             IUnitOfWork uow,
             CancellationToken cancellationToken);
