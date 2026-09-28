@@ -77,6 +77,29 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task InsertPendingAsync_rejects_missing_snapshot_secret()
+        {
+            var (eventId, contractId, customerId) = await SeedAsync();
+            var delivery = DeliveryFactory.CreatePending(
+                eventId, contractId, customerId, "orders.created", "{}",
+                new Destination(DestinationType.Nats,
+                    "{\"Credentials\":{\"Token\":{\"Kind\":\"ref\",\"Value\":\"secret.acme.missing\"}}}"),
+                DateTimeOffset.UtcNow);
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            using var uow = new PostgresUnitOfWork(factory);
+            uow.Begin(true);
+
+            var result = await new PostgresDeliveryRepository(factory).InsertPendingAsync(
+                new[] { delivery }, uow, CancellationToken.None);
+
+            Assert.True(result.IsFailure);
+            Assert.Contains("secret.acme.missing", result.Errors[0].Message);
+            uow.Rollback();
+            await using var conn = new NpgsqlConnection(_fx.ConnectionString);
+            Assert.Equal(0, await conn.ExecuteScalarAsync<int>("SELECT count(*) FROM deliveries"));
+        }
+
+        [Fact]
         public async Task InsertPendingAsync_Deduplicates_On_EventId_And_ContractId()
         {
             var (eventId, contractId, customerId) = await SeedAsync();

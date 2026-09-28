@@ -101,6 +101,11 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 var inserted = 0;
                 foreach (var delivery in deliveries)
                 {
+                    var secretValidation = await ManagedSecretReferenceValidator.ValidateAndLockAsync(
+                        delivery.DestinationConfiguration, delivery.AuthenticationReference, uow, cancellationToken);
+                    if (secretValidation.IsFailure)
+                        return Result<int>.Fail(secretValidation.Errors);
+
                     var rows = await connection.ExecuteAsync(new CommandDefinition(
                         sql,
                         new

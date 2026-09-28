@@ -308,6 +308,7 @@ builder.Services.AddScoped<IAuditLogRepository, PostgresAuditLogRepository>();
 builder.Services.AddScoped<IAdminUserRoleRepository, PostgresAdminUserRoleRepository>();
 builder.Services.AddScoped<IAdminLocalCredentialRepository, PostgresAdminLocalCredentialRepository>();
 builder.Services.AddScoped<ISettingsRepository, PostgresSettingsRepository>();
+builder.Services.AddSingleton<IManagedSecretRepository, PostgresManagedSecretRepository>();
 
 builder.Services.AddScoped<PostgresEventRepository>();
 builder.Services.AddScoped<IEventRepository>(sp => new CachedEventRepository(

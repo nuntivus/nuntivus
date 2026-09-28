@@ -38,6 +38,8 @@ namespace NuntivusServer.IntegrationTests
             await conn.OpenAsync();
             await conn.ExecuteAsync(
                 "TRUNCATE TABLE event_definitions, delivery_attempts, deliveries, contract_event_types, contracts, customers, events CASCADE;");
+            await conn.ExecuteAsync("TRUNCATE TABLE managed_secrets CASCADE;");
+            await ManagedSecretTestSeed.SeedAsync(conn, "secret.acme.hmac");
         }
 
         private async Task ApplyMigrationsAsync()

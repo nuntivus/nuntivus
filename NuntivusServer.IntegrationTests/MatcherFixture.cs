@@ -73,6 +73,8 @@ namespace NuntivusServer.IntegrationTests
             await conn.OpenAsync();
             // deliveries cascades from contracts/customers/events; customers cascades cover contracts.
             await conn.ExecuteAsync("TRUNCATE TABLE event_definitions, delivery_attempts, deliveries, outbox_messages, events, contract_event_types, contracts, customers CASCADE;");
+            await conn.ExecuteAsync("TRUNCATE TABLE managed_secrets CASCADE;");
+            await ManagedSecretTestSeed.SeedAsync(conn, "secret.acme.v1", "secret.acme.v2");
         }
 
         /// <summary>

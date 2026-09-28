@@ -9,6 +9,7 @@ import {
   listContractRecentFailures,
   listContracts,
   replaceContract,
+  type ContractDetailResponse,
   type ContractListQuery,
   type CreateContractRequest,
   type UpdateContractRequest,
@@ -64,11 +65,15 @@ export function useEnableContractMutation() {
 
   return useMutation({
     mutationFn: (id: string) => enableContract(id),
-    onSuccess: async (_, id) => {
-      await invalidateQueryKeys(queryClient, [
-        ['contracts'],
+    onSuccess: async (contract, id) => {
+      queryClient.setQueryData<ContractDetailResponse>(
         ['contracts', 'detail', id],
-      ])
+        (current) => current ? { ...current, contract } : current,
+      )
+      await queryClient.invalidateQueries({
+        queryKey: ['contracts'],
+        predicate: (query) => query.queryKey[1] !== 'detail',
+      })
     },
   })
 }
@@ -81,11 +86,12 @@ export function useReplaceContractMutation(id: string) {
       etag: string
       payload: UpdateContractRequest
     }) => replaceContract(id, request.etag, request.payload),
-    onSuccess: async () => {
-      await invalidateQueryKeys(queryClient, [
-        ['contracts'],
-        ['contracts', 'detail', id],
-      ])
+    onSuccess: async (result) => {
+      queryClient.setQueryData(['contracts', 'detail', id], result)
+      await queryClient.invalidateQueries({
+        queryKey: ['contracts'],
+        predicate: (query) => query.queryKey[1] !== 'detail',
+      })
     },
   })
 }
@@ -95,8 +101,15 @@ export function useDisableContractMutation() {
 
   return useMutation({
     mutationFn: (id: string) => disableContract(id),
-    onSuccess: async () => {
-      await invalidateQueryKeys(queryClient, [['contracts']])
+    onSuccess: async (contract, id) => {
+      queryClient.setQueryData<ContractDetailResponse>(
+        ['contracts', 'detail', id],
+        (current) => current ? { ...current, contract } : current,
+      )
+      await queryClient.invalidateQueries({
+        queryKey: ['contracts'],
+        predicate: (query) => query.queryKey[1] !== 'detail',
+      })
     },
   })
 }

@@ -22,16 +22,16 @@ export function ContractOptionsForm({ value, onChange, eventTypes, disabled = fa
       <SchemaTargetsEditor value={value.schemaTargets} onChange={(schemaTargets) => onChange({ ...value, schemaTargets })} eventTypes={eventTypes} errors={errors} disabled={disabled} />
     </ConfigSection>
     <ConfigSection {...common} title="Filters" sectionKey="filter" summary={`${(value.filter?.metadataRules.length ?? 0) + (value.filter?.payloadRules.length ?? 0)} rules`} enabled={value.filter !== null} onToggle={(enabled) => onChange({ ...value, filter: enabled ? { metadataRules: [], payloadRules: [] } : null })}>
-      {value.filter ? <FiltersEditor value={value.filter} onChange={(filter) => onChange({ ...value, filter })} errors={errors} disabled={disabled} /> : null}
+      {value.filter ? <FiltersEditor value={value.filter} onChange={(filter) => onChange({ ...value, filter })} eventTypes={eventTypes} errors={errors} disabled={disabled} /> : null}
     </ConfigSection>
     <ConfigSection {...common} title="Payload transformation" sectionKey="transformation" summary={`${value.transformation?.fieldMappings.length ?? 0} mappings`} enabled={value.transformation !== null} onToggle={(enabled) => onChange({ ...value, transformation: enabled ? { version: '1', fieldMappings: [{ sourceSelector: '', targetSelector: '' }] } : null })}>
-      {value.transformation ? <PayloadTransformationEditor value={value.transformation} onChange={(transformation) => onChange({ ...value, transformation })} errors={errors} disabled={disabled} /> : null}
+      {value.transformation ? <PayloadTransformationEditor value={value.transformation} onChange={(transformation) => onChange({ ...value, transformation })} eventTypes={eventTypes} errors={errors} disabled={disabled} /> : null}
     </ConfigSection>
     <ConfigSection {...common} title="Rate limiting" sectionKey="rateLimit" summary={value.rateLimit ? [value.rateLimit.perSecond && `${value.rateLimit.perSecond}/sec`, value.rateLimit.perMinute && `${value.rateLimit.perMinute}/min`].filter(Boolean).join(' · ') || 'Configure limits' : 'Off'} enabled={value.rateLimit !== null} onToggle={(enabled) => onChange({ ...value, rateLimit: enabled ? { perSecond: '', perMinute: '', burst: '' } : null })}>
       {value.rateLimit ? <RateLimitEditor value={value.rateLimit} onChange={(rateLimit) => onChange({ ...value, rateLimit })} errors={errors} disabled={disabled} /> : null}
     </ConfigSection>
     <ConfigSection {...common} title="Ordering" sectionKey="ordering" summary={value.ordering?.keySelector || (value.ordering ? 'Default key' : 'Off')} enabled={value.ordering !== null} onToggle={(enabled) => onChange({ ...value, ordering: enabled ? { keySelector: '' } : null })}>
-      {value.ordering ? <OrderingEditor value={value.ordering} onChange={(ordering) => onChange({ ...value, ordering })} errors={errors} disabled={disabled} /> : null}
+      {value.ordering ? <OrderingEditor value={value.ordering} onChange={(ordering) => onChange({ ...value, ordering })} eventTypes={eventTypes} errors={errors} disabled={disabled} /> : null}
     </ConfigSection>
   </>
 

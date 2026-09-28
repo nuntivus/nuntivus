@@ -70,11 +70,12 @@ export function useUpdateCustomerMutation(id: string) {
 
   return useMutation({
     mutationFn: (request: UpdateCustomerRequest) => updateCustomer(id, request),
-    onSuccess: async () => {
-      await invalidateQueryKeys(queryClient, [
-        ['customers'],
-        ['customers', 'detail', id],
-      ])
+    onSuccess: async (customer) => {
+      queryClient.setQueryData(['customers', 'detail', id], customer)
+      await queryClient.invalidateQueries({
+        queryKey: ['customers'],
+        predicate: (query) => query.queryKey[1] !== 'detail',
+      })
     },
   })
 }
@@ -84,11 +85,12 @@ export function useEnableCustomerMutation() {
 
   return useMutation({
     mutationFn: (id: string) => enableCustomer(id),
-    onSuccess: async (_, id) => {
-      await invalidateQueryKeys(queryClient, [
-        ['customers'],
-        ['customers', 'detail', id],
-      ])
+    onSuccess: async (customer, id) => {
+      queryClient.setQueryData(['customers', 'detail', id], customer)
+      await queryClient.invalidateQueries({
+        queryKey: ['customers'],
+        predicate: (query) => query.queryKey[1] !== 'detail',
+      })
     },
   })
 }
@@ -98,11 +100,12 @@ export function useDisableCustomerMutation() {
 
   return useMutation({
     mutationFn: (id: string) => disableCustomer(id),
-    onSuccess: async (_, id) => {
-      await invalidateQueryKeys(queryClient, [
-        ['customers'],
-        ['customers', 'detail', id],
-      ])
+    onSuccess: async (customer, id) => {
+      queryClient.setQueryData(['customers', 'detail', id], customer)
+      await queryClient.invalidateQueries({
+        queryKey: ['customers'],
+        predicate: (query) => query.queryKey[1] !== 'detail',
+      })
     },
   })
 }

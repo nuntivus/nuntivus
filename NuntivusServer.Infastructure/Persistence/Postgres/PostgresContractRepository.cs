@@ -78,6 +78,11 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 var transaction = uow.GetTransaction()!;
                 var authSnapshot = ExtractAuthenticationSnapshot(contract.Destination);
 
+                var secretValidation = await ManagedSecretReferenceValidator.ValidateAndLockAsync(
+                    contract.Destination.Configuration, authSnapshot.AuthenticationReference, uow, cancellationToken);
+                if (secretValidation.IsFailure)
+                    return secretValidation;
+
                 await connection.ExecuteAsync(new CommandDefinition(
                     insertContract,
                     new
@@ -354,6 +359,11 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 var connection = uow.GetConnection()!;
                 var transaction = uow.GetTransaction()!;
                 var authSnapshot = ExtractAuthenticationSnapshot(contract.Destination);
+
+                var secretValidation = await ManagedSecretReferenceValidator.ValidateAndLockAsync(
+                    contract.Destination.Configuration, authSnapshot.AuthenticationReference, uow, cancellationToken);
+                if (secretValidation.IsFailure)
+                    return secretValidation;
 
                 var rows = await connection.ExecuteAsync(new CommandDefinition(
                     updateContract,

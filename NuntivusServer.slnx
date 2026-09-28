@@ -5,6 +5,9 @@
   </Folder>
   <Folder Name="/migration/">
     <File Path="migration/001_initial_schema.sql" />
+    <File Path="migration/002_create_delivery_attempts.sql" />
+    <File Path="migration/003_create_secrets.sql" />
+    <File Path="migration/004_version_managed_secrets.sql" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path="../../../Desktop/AI_CONTEXT.md" />

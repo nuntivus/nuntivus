@@ -44,8 +44,11 @@ namespace NuntivusServer.IntegrationTests
             await conn.OpenAsync();
             // contract_event_types cascades from contracts; contracts cascades from customers.
             await conn.ExecuteAsync("TRUNCATE TABLE customers CASCADE;");
+            await conn.ExecuteAsync("TRUNCATE TABLE managed_secrets CASCADE;");
             await conn.ExecuteAsync("TRUNCATE TABLE event_schema_versions, event_definitions;");
             await conn.ExecuteAsync("TRUNCATE TABLE audit_logs;");
+            await ManagedSecretTestSeed.SeedAsync(conn,
+                "secret.acme.webhook", "secret.acme.rotated", "secret.acme.v1", "secret.acme.v2");
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)

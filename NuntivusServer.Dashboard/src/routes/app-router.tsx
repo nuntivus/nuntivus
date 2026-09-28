@@ -25,6 +25,7 @@ const ForbiddenPage = lazy(() => import('../pages/forbidden-page').then((module)
 const LoginPage = lazy(() => import('../pages/login-page').then((module) => ({ default: module.LoginPage })))
 const NotFoundPage = lazy(() => import('../pages/not-found-page').then((module) => ({ default: module.NotFoundPage })))
 const SettingsPage = lazy(() => import('../pages/settings-page').then((module) => ({ default: module.SettingsPage })))
+const SecretsPage = lazy(() => import('../pages/secrets-page').then((module) => ({ default: module.SecretsPage })))
 const UserDetailPage = lazy(() => import('../pages/user-detail-page').then((module) => ({ default: module.UserDetailPage })))
 const UsersPage = lazy(() => import('../pages/users-page').then((module) => ({ default: module.UsersPage })))
 
@@ -73,6 +74,7 @@ const router = createBrowserRouter(createRoutesFromElements(
               <Route element={<RequirePermission permissions={['contracts.write']} />}>
                 <Route path="contracts/new" element={<ContractCreatePage />} />
                 <Route path="contracts/:id/edit" element={<ContractEditPage />} />
+                <Route path="secrets" element={<SecretsPage />} />
               </Route>
               <Route element={<RequirePermission permissions={['users.read']} />}>
                 <Route path="users" element={<UsersPage />} />

@@ -64,8 +64,15 @@ export function useCreateEventDefinitionMutation() {
 
   return useMutation({
     mutationFn: (request: CreateEventDefinitionRequest) => createEventDefinition(request),
-    onSuccess: async () => {
-      await invalidateQueryKeys(queryClient, [['event-definitions']])
+    onSuccess: async (definition) => {
+      queryClient.setQueryData(
+        ['event-definitions', 'detail', definition.eventType],
+        definition,
+      )
+      await queryClient.invalidateQueries({
+        queryKey: ['event-definitions'],
+        predicate: (query) => query.queryKey[1] !== 'detail',
+      })
     },
   })
 }
@@ -76,11 +83,15 @@ export function useUpdateEventDefinitionMutation(eventType: string) {
   return useMutation({
     mutationFn: (request: UpdateEventDefinitionRequest) =>
       updateEventDefinition(eventType, request),
-    onSuccess: async () => {
-      await invalidateQueryKeys(queryClient, [
-        ['event-definitions'],
+    onSuccess: async (definition) => {
+      queryClient.setQueryData(
         ['event-definitions', 'detail', eventType],
-      ])
+        definition,
+      )
+      await queryClient.invalidateQueries({
+        queryKey: ['event-definitions'],
+        predicate: (query) => query.queryKey[1] !== 'detail',
+      })
     },
   })
 }

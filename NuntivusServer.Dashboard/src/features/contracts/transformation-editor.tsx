@@ -2,13 +2,17 @@ import { Button, Card, Flex, Text } from '@radix-ui/themes'
 import type { AdvancedOptionsDraft, ValidationErrors } from './contract-options'
 import { OptionField } from './option-fields'
 import { FieldErrorText } from '../../components/forms/form-feedback'
+import { PayloadFieldPicker } from './filters-editor'
+import { useSchemaFieldOptions } from './use-schema-field-options'
 
-export function PayloadTransformationEditor({ value, onChange, errors, disabled }: {
+export function PayloadTransformationEditor({ value, onChange, eventTypes, errors, disabled }: {
   value: NonNullable<AdvancedOptionsDraft['transformation']>
   onChange: (next: NonNullable<AdvancedOptionsDraft['transformation']>) => void
+  eventTypes: string[]
   errors: ValidationErrors
   disabled?: boolean
 }) {
+  const schemaFields = useSchemaFieldOptions(eventTypes)
   const updateMapping = (index: number, mapping: typeof value.fieldMappings[number]) => onChange({ ...value, fieldMappings: value.fieldMappings.map((item, i) => i === index ? mapping : item) })
   return <Flex direction="column" gap="3">
     <OptionField label="Transformation version" path="transformation.version" value={value.version} onChange={(version) => onChange({ ...value, version })} type="number" min={1} errors={errors} disabled={disabled} hint="Increment when changing how event payloads are transformed." />
@@ -16,7 +20,7 @@ export function PayloadTransformationEditor({ value, onChange, errors, disabled 
     {value.fieldMappings.map((mapping, index) => <Card key={index}>
       <Flex direction="column" gap="2">
         <Flex gap="2" align="center" wrap="wrap">
-          <OptionField label={`Source field ${index + 1}`} path={`transformation.fieldMappings.${index}.sourceSelector`} value={mapping.sourceSelector} onChange={(sourceSelector) => updateMapping(index, { ...mapping, sourceSelector })} errors={errors} disabled={disabled} />
+          <PayloadFieldPicker label={`Source field ${index + 1}`} path={`transformation.fieldMappings.${index}.sourceSelector`} value={mapping.sourceSelector} onChange={(sourceSelector) => updateMapping(index, { ...mapping, sourceSelector })} fields={schemaFields.options} hint="Choose an input schema field or enter a custom path." loading={schemaFields.isLoading} loadError={schemaFields.isError} errors={errors} disabled={disabled} />
           <Text aria-hidden="true">→</Text>
           <OptionField label={`Target field ${index + 1}`} path={`transformation.fieldMappings.${index}.targetSelector`} value={mapping.targetSelector} onChange={(targetSelector) => updateMapping(index, { ...mapping, targetSelector })} errors={errors} disabled={disabled} />
         </Flex>

@@ -2072,6 +2072,61 @@
   gap: 12px;
 }
 
+.payload-field-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.schema-field-browser {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.schema-field-browser-scroll {
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.schema-field-tree-branch>summary {
+  display: flex;
+  min-height: 32px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  font-size: var(--font-size-2);
+  font-weight: 500;
+}
+
+.schema-field-tree-branch>summary:hover {
+  background: var(--accent-bg);
+}
+
+.schema-field-tree-children {
+  margin-left: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+
+.schema-field-tree-leaf.rt-BaseButton {
+  width: 100%;
+  min-height: 34px;
+  height: auto;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 7px;
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .payload-field-control {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .contract-edit-details-card {
   min-width: 0;
 }

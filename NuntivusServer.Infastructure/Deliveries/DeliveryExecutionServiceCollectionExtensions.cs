@@ -1,6 +1,8 @@
 using NuntivusServer.Application.Deliveries.Execution;
 using NuntivusServer.Application.Contracts.Destinations;
 using NuntivusServer.Application.Security;
+using NuntivusServer.Application.Persistence;
+using NuntivusServer.Infastructure.Persistence.Postgres;
 using NuntivusServer.Infastructure.Deliveries.Kafka;
 using NuntivusServer.Infastructure.Deliveries.Nats;
 using NuntivusServer.Infastructure.Deliveries.RabbitMq;
@@ -39,6 +41,7 @@ namespace NuntivusServer.Infastructure.Deliveries
 
             services.TryAddSingleton(new DestinationCredentialOption());
             services.TryAddSingleton<IDestinationCredentialProtector, AesGcmDestinationCredentialProtector>();
+            services.TryAddSingleton<IManagedSecretRepository, PostgresManagedSecretRepository>();
             services.AddSingleton<ISecretResolver, ProtectedSecretResolver>();
             services.AddSingleton<IDeliveryExecutor, HttpDeliveryExecutor>();
             services.AddSingleton<IDeliveryExecutor, KafkaDeliveryExecutor>();

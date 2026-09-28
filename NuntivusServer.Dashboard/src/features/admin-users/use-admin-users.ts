@@ -54,11 +54,12 @@ export function useReplaceAdminUserRolesMutation(subject: string) {
   return useMutation({
     mutationFn: (request: ReplaceAdminUserRolesRequest) =>
       replaceAdminUserRoles(subject, request),
-    onSuccess: async () => {
-      await invalidateQueryKeys(queryClient, [
-        ['admin', 'users'],
-        ['admin', 'users', subject],
-      ])
+    onSuccess: async (user) => {
+      queryClient.setQueryData(['admin', 'users', subject], user)
+      await queryClient.invalidateQueries({
+        queryKey: ['admin', 'users'],
+        exact: true,
+      })
     },
   })
 }

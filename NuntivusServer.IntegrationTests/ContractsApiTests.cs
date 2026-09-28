@@ -31,6 +31,58 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Create_with_missing_managed_secret_returns_400()
+        {
+            await CreateCustomerAsync("acme");
+            var request = new CreateContractRequest("acme", new[] { "orders.created" },
+                new NatsDestinationConfig("nats://localhost:4222", "orders.created",
+                    Credentials: new NatsCredentials(Token: new DestinationCredential("ref", "secret.acme.missing"))));
+
+            var response = await _client.PostAsJsonAsync("/v1/contracts", request);
+
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Contains("secret.acme.missing", await response.Content.ReadAsStringAsync());
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            Assert.Equal(0, await conn.ExecuteScalarAsync<int>("SELECT count(*) FROM contracts"));
+        }
+
+        [Fact]
+        public async Task Replace_and_credential_update_with_missing_secret_leave_contract_unchanged()
+        {
+            await CreateCustomerAsync("acme");
+            var createdResponse = await _client.PostAsJsonAsync("/v1/contracts", new CreateContractRequest(
+                "acme", new[] { "orders.created" },
+                new HttpDestinationConfig("https://hooks.example.com/acme", new HttpAuthentication("none"))));
+            Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+            var created = await createdResponse.Content.ReadFromJsonAsync<ContractCreated>();
+
+            var original = await _client.GetAsync($"/v1/contracts/{created!.Id}");
+            var originalView = await original.Content.ReadFromJsonAsync<ContractView>();
+            using var replace = new HttpRequestMessage(HttpMethod.Put, $"/v1/contracts/{created.Id}")
+            {
+                Content = JsonContent.Create(new UpdateContractRequest(
+                    "Changed", originalView!.EventTypes,
+                    new HttpDestinationConfig("https://hooks.example.com/acme",
+                        new HttpAuthentication("bearer", new HttpCredential("ref", "secret.acme.missing")))))
+            };
+            replace.Headers.IfMatch.Add(original.Headers.ETag!);
+            Assert.Equal(HttpStatusCode.BadRequest, (await _client.SendAsync(replace)).StatusCode);
+
+            var credentials = await _client.PostAsJsonAsync($"/v1/contracts/{created.Id}/credentials",
+                new UpdateContractCredentialsRequest(new HttpDestinationConfig(
+                    "https://hooks.example.com/acme",
+                    new HttpAuthentication("bearer", new HttpCredential("ref", "secret.acme.missing")))));
+            Assert.Equal(HttpStatusCode.BadRequest, credentials.StatusCode);
+
+            var after = await _client.GetFromJsonAsync<ContractView>($"/v1/contracts/{created.Id}");
+            Assert.Equal(originalView.Name, after!.Name);
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var config = await conn.ExecuteScalarAsync<string>(
+                "SELECT destination_config::text FROM contracts WHERE id = @Id", new { created.Id });
+            Assert.DoesNotContain("secret.acme.missing", config);
+        }
+
+        [Fact]
         public async Task Put_preserves_redacted_http_credentials_and_advanced_options()
         {
             await CreateCustomerAsync("acme");
