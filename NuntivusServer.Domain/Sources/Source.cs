@@ -16,10 +16,6 @@ namespace NuntivusServer.Domain.Sources
     ///   <item><description>The canonical <see cref="Events.Event"/> preserves the originating
     ///   source via its <c>SourceId</c> string, which is the stable, normalized value produced by
     ///   <see cref="SourceId"/>. Preservation is a hard invariant of the ingestion pipeline.</description></item>
-    ///   <item><description>At this stage Source is not yet persisted; it is a domain model used
-    ///   by adapters to describe producers. Source becomes persisted configuration once
-    ///   adapters require per-source secrets/config, quotas, or per-source authorization —
-    ///   at which point an <c>ISourceRepository</c> and query support will be introduced.</description></item>
     /// </list>
     /// </remarks>
     public sealed class Source
@@ -28,10 +24,10 @@ namespace NuntivusServer.Domain.Sources
         public SourceId Id { get; }
 
         /// <summary>Human-friendly display name.</summary>
-        public string Name { get; }
+        public string Name { get; private set; }
 
         /// <summary>Optional free-form description.</summary>
-        public string? Description { get; }
+        public string? Description { get; private set; }
 
         /// <summary>Adapter category this source belongs to.</summary>
         public SourceType Type { get; }
@@ -40,10 +36,12 @@ namespace NuntivusServer.Domain.Sources
         /// Opaque adapter-specific configuration payload (typically JSON) whose schema
         /// is determined by <see cref="Type"/> and validated by the adapter layer.
         /// </summary>
-        public string Configuration { get; }
+        public string Configuration { get; private set; }
 
         /// <summary>Whether the source is currently accepting events.</summary>
-        public bool Enabled { get; }
+        public bool Enabled { get; private set; }
+        public DateTimeOffset CreatedAt { get; }
+        public DateTimeOffset UpdatedAt { get; private set; }
 
         private Source(
             SourceId id,
@@ -51,7 +49,9 @@ namespace NuntivusServer.Domain.Sources
             string? description,
             SourceType type,
             string configuration,
-            bool enabled)
+            bool enabled,
+            DateTimeOffset createdAt,
+            DateTimeOffset updatedAt)
         {
             Id = id;
             Name = name;
@@ -59,6 +59,8 @@ namespace NuntivusServer.Domain.Sources
             Type = type;
             Configuration = configuration;
             Enabled = enabled;
+            CreatedAt = createdAt;
+            UpdatedAt = updatedAt;
         }
 
         public static Source Create(
@@ -67,7 +69,8 @@ namespace NuntivusServer.Domain.Sources
             SourceType type,
             string configuration,
             bool enabled,
-            string? description = null)
+            string? description = null,
+            DateTimeOffset? now = null)
         {
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Source name cannot be null or whitespace.", nameof(name));
@@ -77,7 +80,39 @@ namespace NuntivusServer.Domain.Sources
 
             var sourceId = SourceId.Create(id);
 
-            return new Source(sourceId, name.Trim(), description, type, configuration, enabled);
+            var createdAt = now ?? DateTimeOffset.UtcNow;
+            return new Source(sourceId, name.Trim(), description, type, configuration, enabled, createdAt, createdAt);
+        }
+
+        public static Source Rehydrate(string id, string name, string? description, SourceType type,
+            string configuration, bool enabled, DateTimeOffset createdAt, DateTimeOffset updatedAt) =>
+            new(SourceId.Create(id), name, description, type, configuration, enabled, createdAt, updatedAt);
+
+        public void Update(string name, string? description, string configuration, DateTimeOffset now)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("Source name is required.", nameof(name));
+            if (string.IsNullOrWhiteSpace(configuration))
+                throw new ArgumentException("Source configuration is required.", nameof(configuration));
+
+            Name = name.Trim();
+            Description = description;
+            Configuration = configuration;
+            UpdatedAt = now;
+        }
+
+        public void Enable(DateTimeOffset now)
+        {
+            if (Enabled) return;
+            Enabled = true;
+            UpdatedAt = now;
+        }
+
+        public void Disable(DateTimeOffset now)
+        {
+            if (!Enabled) return;
+            Enabled = false;
+            UpdatedAt = now;
         }
     }
 }

@@ -39,13 +39,17 @@ namespace NuntivusServer.Application.Sources
                         Error.Validation("source must be a valid GUID.")));
                 }
 
+                var metadata = NormalizeMetadata(request.Metadata);
+                if (metadata.IsFailure)
+                    return Task.FromResult(Result<CanonicalSourceEvent>.Fail(metadata.Errors));
+
                 var canonical = new CanonicalSourceEvent(
                     request.IdempotencyKey.Trim(),
                     request.Type.Trim(),
                     sourceId,
                     request.Timestamp,
                     NormalizeJsonObject(request.Payload),
-                    NormalizeJsonObject(request.Metadata));
+                    metadata.Value);
 
                 return Task.FromResult(Result.Success(canonical));
             }
@@ -70,6 +74,30 @@ namespace NuntivusServer.Application.Sources
             catch
             {
                 return "{}";
+            }
+        }
+
+        private static Result<string> NormalizeMetadata(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return Result.Success("{}");
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                    return Result.Failure<string>(Error.Validation("metadata must be an object."));
+
+                var metadata = new System.Collections.Generic.Dictionary<string, string>();
+                foreach (var field in document.RootElement.EnumerateObject())
+                {
+                    if (field.Name is not ("traceId" or "correlationId") || field.Value.ValueKind != JsonValueKind.String)
+                        return Result.Failure<string>(Error.Validation("metadata only supports string traceId and correlationId fields."));
+                    metadata[field.Name] = field.Value.GetString() ?? string.Empty;
+                }
+                return Result.Success(JsonSerializer.Serialize(metadata));
+            }
+            catch (JsonException)
+            {
+                return Result.Failure<string>(Error.Validation("metadata must be a valid JSON object."));
             }
         }
     }

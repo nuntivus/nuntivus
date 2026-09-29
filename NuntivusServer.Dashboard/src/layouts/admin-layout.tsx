@@ -60,6 +60,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/customers' as To, label: 'Customers', icon: CustomersIcon, permission: 'customers.read' },
       { to: '/contracts' as To, label: 'Contracts', icon: ContractsIcon, permission: 'contracts.read' },
+      { to: '/sources' as To, label: 'Sources', icon: EventsIcon, permission: 'contracts.read' },
       { to: '/secrets' as To, label: 'Secrets', icon: SettingsIcon, permission: 'contracts.write' },
       { to: '/test-events' as To, label: 'Test events', icon: EventsIcon, permission: 'contracts.read' },
       { to: '/events' as To, label: 'Events', icon: EventsIcon, permission: 'events.read' },
@@ -86,6 +87,7 @@ const navGroups: NavGroup[] = [
 const breadcrumbLabels: Record<string, string> = {
   customers: 'Customers',
   contracts: 'Contracts',
+  sources: 'Sources',
   secrets: 'Secrets',
   'test-events': 'Test events',
   events: 'Events',

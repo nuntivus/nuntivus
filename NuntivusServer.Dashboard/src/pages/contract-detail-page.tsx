@@ -34,6 +34,7 @@ import {
   useEnableContractMutation,
 } from '../features/contracts/use-contracts'
 import { useContractDestinationHealthQuery } from '../features/destination-health/use-destination-health'
+import { useSourcesQuery } from '../features/sources/use-sources'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
@@ -134,6 +135,7 @@ export function ContractDetailPage() {
   const canReadFailures = hasPermission(currentUser, 'delivery-failures.read')
 
   const detailQuery = useContractDetailQuery(id)
+  const sourcesQuery = useSourcesQuery(canReadContracts)
   const destinationHealthQuery = useContractDestinationHealthQuery(id)
   const deliveriesQuery = useContractDeliveriesQuery(canReadDeliveries ? id : undefined)
   const failuresQuery = useContractRecentFailuresQuery(canReadFailures ? id : undefined)
@@ -283,6 +285,7 @@ export function ContractDetailPage() {
           <div className="contract-info-list">
             <ContractInfoRow icon={ContractsIcon} label="Contract ID" action={<IconButton size="1" variant="ghost" color="gray" aria-label="Copy contract ID" onClick={() => void copyValue(contract.id, 'Contract ID')}><CopyIcon /></IconButton>}>{contract.id}</ContractInfoRow>
             <ContractInfoRow icon={CustomersIcon} label="Customer" action={<IconButton size="1" variant="ghost" color="gray" aria-label="Copy customer ID" onClick={() => void copyValue(contract.customerId, 'Customer ID')}><CopyIcon /></IconButton>}><Link asChild><NavLink to={`/customers/${encodeURIComponent(contract.customerId)}`}>{contract.customerId}</NavLink></Link></ContractInfoRow>
+            <ContractInfoRow icon={EventsIcon} label="Sources"><Flex gap="1" wrap="wrap">{contract.sourceIds.map((sourceId) => <Link asChild key={sourceId}><NavLink to="/sources">{sourcesQuery.data?.find((source) => source.id === sourceId)?.name ?? sourceId}</NavLink></Link>)}</Flex></ContractInfoRow>
             <ContractInfoRow icon={EventsIcon} label="Event types"><Flex gap="1" wrap="wrap">{contract.eventTypes.map((eventType) => <Badge key={eventType} variant="soft">{eventType}</Badge>)}</Flex></ContractInfoRow>
             <ContractInfoRow icon={DeliveriesIcon} label="Destination">{contract.destinationType}</ContractInfoRow>
             <ContractInfoRow icon={CheckCircleIcon} label="Enabled state"><div><Badge color={contract.enabled ? 'green' : 'gray'} variant="soft">{contract.enabled ? 'Enabled' : 'Disabled'}</Badge><Text as="p" size="1" color="gray">This contract is currently {contract.enabled ? 'active and can receive events' : 'inactive'}.</Text></div></ContractInfoRow>

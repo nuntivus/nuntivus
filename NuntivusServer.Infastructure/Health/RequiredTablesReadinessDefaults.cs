@@ -5,6 +5,7 @@ namespace NuntivusServer.Infastructure.Health
         public static readonly string[] CoreTables =
         [
             "events",
+            "sources",
             "outbox_messages",
             "customers",
             "contracts",

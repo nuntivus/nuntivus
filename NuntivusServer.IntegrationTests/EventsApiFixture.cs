@@ -40,6 +40,7 @@ namespace NuntivusServer.IntegrationTests
             await conn.OpenAsync();
             await conn.ExecuteAsync("TRUNCATE TABLE audit_logs;");
             await conn.ExecuteAsync("TRUNCATE TABLE event_replays, outbox_messages, events CASCADE;");
+            await conn.ExecuteAsync("TRUNCATE TABLE sources;");
         }
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)

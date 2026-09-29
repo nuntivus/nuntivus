@@ -193,6 +193,31 @@ Different sources can use different protocols.
 
 Once accepted, incoming data is normalized into Nuntivus's internal event model.
 
+Today, HTTP is the operational managed Source type (`HTTP_API`). Create an HTTP Source
+with `POST /v1/sources` using `name`, `type: "HTTP_API"`, and a configuration such as
+`{"authentication":{"type":"none"}}`. Use
+`{"authentication":{"type":"token","secretRef":"secret.orders.ingest"}}` to require
+a token stored through the managed-secrets API. Send that token in the
+`X-Nuntivus-Source-Token` header; raw tokens are never saved in Source configuration.
+Use `GET /v1/sources`, `GET /v1/sources/{id}`, `PUT /v1/sources/{id}`,
+`DELETE /v1/sources/{id}`, and `POST /v1/sources/{id}/enable|disable` to manage Sources.
+Sources referenced by events cannot be deleted. Ingest through
+`POST /v1/sources/{id}/events` with `idempotencyKey`, `type`, `timestamp`, a JSON
+object `payload`, and optional JSON object `metadata` containing only string
+`traceId` or `correlationId` fields. The previous direct event publish and
+generic webhook routes are not part of the managed ingestion API.
+
+HTTP is a push adapter; no permanent Source worker is required. Kafka, SQS,
+HTTP polling, and folder are defined as future Source types, **not** operational
+consumers and cannot be created via the management API. Future active adapters
+should run in independently cancellable `BackgroundService` workers and call the
+same canonical ingestion service. External messages must only be ACKed after
+the event and its outbox entry commit, not when a message is received. Delivery
+is at least once: a process can fail between commit and external ACK, causing
+redelivery. `(sourceId, idempotencyKey)` identifies duplicates; adapters should
+derive stable idempotency keys from upstream message IDs or offsets. No Source
+adapter changes routing, contracts, or destination processing.
+
 Sources exist to bring business events into Nuntivus.
 
 Nuntivus is not intended to become a general-purpose integration or anything-to-anything routing platform.

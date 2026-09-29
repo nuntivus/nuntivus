@@ -75,7 +75,7 @@ namespace NuntivusServer.Application.Matching
                 }
 
                 var matchesResult = await _contracts.ListEnabledMatchingAsync(
-                    authoritative.Type, cancellationToken);
+                    authoritative.Type, authoritative.SourceId, cancellationToken);
                 var matches = matchesResult.EnsureValue();
 
                 if (matches.Count == 0)

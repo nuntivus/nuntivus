@@ -13,6 +13,8 @@
         KAFKA,
         NATS,
         RABBITMQ,
-        SQS
+        SQS,
+        HTTP_POLLING,
+        FOLDER
     }
 }

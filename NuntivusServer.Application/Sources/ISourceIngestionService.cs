@@ -9,6 +9,7 @@ namespace NuntivusServer.Application.Sources
     {
         Task<Result<SourceIngestionResult>> IngestAsync(
             SourceType sourceType,
+            string sourceId,
             object adapterContext,
             CancellationToken cancellationToken);
     }

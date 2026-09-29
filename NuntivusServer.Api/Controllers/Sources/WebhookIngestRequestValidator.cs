@@ -15,6 +15,9 @@ namespace NuntivusServer.Api.Controllers.Sources
 
         public Result Validate(WebhookIngestRequest request)
         {
+            if (request.Payload.ValueKind != System.Text.Json.JsonValueKind.Object)
+                return Result.Failure(Error.Validation("payload must be a JSON object."));
+
             var payloadBytes = Encoding.UTF8.GetByteCount(request.Payload.GetRawText());
             if (payloadBytes > _security.MaxEventPayloadBytes)
             {

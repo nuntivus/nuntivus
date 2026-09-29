@@ -1,5 +1,6 @@
 using System;
 using NuntivusServer.Application.Events;
+using NuntivusServer.Application.Persistence;
 using NuntivusServer.Application.Sources;
 using NuntivusServer.Common;
 using NuntivusServer.Domain.Sources;
@@ -15,10 +16,12 @@ namespace NuntivusServer.UnitTests.Sources
             var eventService = new FakeEventService();
             var sut = new SourceIngestionService(
                 new SourceAdapterRegistry(new ISourceAdapter[] { new HttpApiSourceAdapter() }),
-                eventService);
+                eventService,
+                new FakeSourceRepository(Source.Create(source, "HTTP", SourceType.HTTP_API, "{\"authentication\":{\"type\":\"none\"}}", true)));
 
             var result = await sut.IngestAsync(
                 SourceType.HTTP_API,
+                source,
                 new HttpApiSourceEventContext(
                     IdempotencyKey: " idem-1 ",
                     Type: " orders.created ",
@@ -38,17 +41,54 @@ namespace NuntivusServer.UnitTests.Sources
         [Fact]
         public async Task IngestAsync_WithoutRegisteredAdapter_ReturnsNotFound()
         {
+            var id = Guid.NewGuid().ToString("D");
             var sut = new SourceIngestionService(
                 new SourceAdapterRegistry(Array.Empty<ISourceAdapter>()),
-                new FakeEventService());
+                new FakeEventService(),
+                new FakeSourceRepository(Source.Create(id, "Kafka", SourceType.KAFKA, "{}", true)));
 
             var result = await sut.IngestAsync(
                 SourceType.KAFKA,
+                id,
                 new object(),
                 CancellationToken.None);
 
             Assert.True(result.IsFailure);
             Assert.Equal("not_found", result.Error?.Code);
+        }
+
+        [Theory]
+        [InlineData(false, "conflict")]
+        [InlineData(true, "validation")]
+        public async Task IngestAsync_RejectsDisabledOrWrongType(bool enabled, string expectedCode)
+        {
+            var id = Guid.NewGuid().ToString("D");
+            var sut = new SourceIngestionService(new SourceAdapterRegistry([new HttpApiSourceAdapter()]),
+                new FakeEventService(), new FakeSourceRepository(Source.Create(id, "Kafka", SourceType.KAFKA, "{}", enabled)));
+            var result = await sut.IngestAsync(SourceType.HTTP_API, id, new object(), CancellationToken.None);
+            Assert.Equal(expectedCode, result.Error?.Code);
+        }
+
+        [Fact]
+        public async Task IngestAsync_RejectsMissingSource()
+        {
+            var sut = new SourceIngestionService(new SourceAdapterRegistry([new HttpApiSourceAdapter()]),
+                new FakeEventService(), new FakeSourceRepository(null));
+            var result = await sut.IngestAsync(SourceType.HTTP_API, Guid.NewGuid().ToString("D"),
+                new object(), CancellationToken.None);
+            Assert.Equal("not_found", result.Error?.Code);
+        }
+
+        private sealed class FakeSourceRepository : ISourceRepository
+        {
+            private readonly Source? _source;
+            public FakeSourceRepository(Source? source) => _source = source;
+            public Task<Result<Source?>> GetByIdAsync(string id, CancellationToken ct) =>
+                Task.FromResult(Result.Success<Source?>(_source?.Id.Value == id ? _source : null));
+            public Task<Result> InsertAsync(Source source, IUnitOfWork uow, CancellationToken ct) => throw new NotImplementedException();
+            public Task<Result> UpdateAsync(Source source, IUnitOfWork uow, CancellationToken ct) => throw new NotImplementedException();
+            public Task<Result> DeleteAsync(string id, IUnitOfWork uow, CancellationToken ct) => throw new NotImplementedException();
+            public Task<Result<PagedResult<Source>>> ListAsync(int page, int size, CancellationToken ct) => throw new NotImplementedException();
         }
 
         private sealed class FakeEventService : IEventService

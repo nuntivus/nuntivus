@@ -57,6 +57,7 @@ export interface ContractOptions {
 export interface Contract {
   id: string
   customerId: string
+  sourceIds: string[]
   enabled: boolean
   eventTypes: string[]
   destinationType: DestinationType
@@ -69,6 +70,7 @@ export interface Contract {
 export interface ContractDetail extends ContractOptions {
   id: string
   customerId: string
+  sourceIds: string[]
   enabled: boolean
   eventTypes: string[]
   destinationType: DestinationType
@@ -91,6 +93,7 @@ export interface ContractListQuery {
 
 export interface CreateContractRequest extends ContractOptions {
   customerId: string
+  sourceIds: string[]
   eventTypes: string[]
   name?: string | null
   destination?: DestinationConfigInput
@@ -375,6 +378,7 @@ export async function createContract(request: CreateContractRequest) {
 
   return apiPost<Contract>('/v1/contracts', {
     customerId: request.customerId,
+    sourceIds: request.sourceIds,
     eventTypes: request.eventTypes,
     configuration: mapDestinationToApi(destination),
     name: request.name ?? null,
@@ -421,6 +425,7 @@ export async function replaceContract(
     `/v1/contracts/${encodeURIComponent(id)}`,
     {
       name: request.name ?? null,
+      sourceIds: request.sourceIds,
       eventTypes: request.eventTypes,
       configuration: mapDestinationToApi(destination),
       schemaTargets: request.schemaTargets ?? null,

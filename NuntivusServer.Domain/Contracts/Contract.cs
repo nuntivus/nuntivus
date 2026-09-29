@@ -13,6 +13,7 @@ namespace NuntivusServer.Domain.Contracts
     public sealed class Contract
     {
         private readonly HashSet<string> _eventTypes;
+        private readonly IReadOnlyCollection<Guid> _sourceIds;
         private readonly IReadOnlyCollection<ContractSchemaTarget> _schemaTargets;
 
         public Guid Id { get; }
@@ -21,6 +22,7 @@ namespace NuntivusServer.Domain.Contracts
         public bool Enabled { get; private set; }
         public Destination Destination { get; private set; }
         public IReadOnlyCollection<string> EventTypes => _eventTypes;
+        public IReadOnlyCollection<Guid> SourceIds => _sourceIds;
         public IReadOnlyCollection<ContractSchemaTarget> SchemaTargets => _schemaTargets;
         public ContractFilter? Filter { get; }
         public ContractPayloadTransformation? Transformation { get; }
@@ -42,13 +44,15 @@ namespace NuntivusServer.Domain.Contracts
             ContractOrdering? ordering,
             Destination destination,
             DateTimeOffset createdAt,
-            DateTimeOffset updatedAt)
+            DateTimeOffset updatedAt,
+            IEnumerable<Guid> sourceIds)
         {
             Id = id;
             CustomerId = customerId;
             Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
             Enabled = enabled;
             _eventTypes = new HashSet<string>(eventTypes, StringComparer.Ordinal);
+            _sourceIds = sourceIds.ToArray();
             _schemaTargets = new List<ContractSchemaTarget>(schemaTargets);
             Filter = filter is null
                 ? null
@@ -77,7 +81,8 @@ namespace NuntivusServer.Domain.Contracts
             ContractPayloadTransformation? transformation = null,
             ContractRateLimit? rateLimit = null,
             ContractOrdering? ordering = null,
-            string? name = null)
+            string? name = null,
+            IEnumerable<Guid>? sourceIds = null)
         {
             if (string.IsNullOrWhiteSpace(customerId))
                 throw new ArgumentException("Customer id cannot be null or whitespace.", nameof(customerId));
@@ -99,6 +104,11 @@ namespace NuntivusServer.Domain.Contracts
 
             if (materialized.Length == 0)
                 throw new ArgumentException("At least one event type is required.", nameof(eventTypes));
+
+            var selectedSources = sourceIds?.ToArray() ?? [];
+            if (selectedSources.Length == 0 || selectedSources.Any(id => id == Guid.Empty)
+                || selectedSources.Distinct().Count() != selectedSources.Length)
+                throw new ArgumentException("At least one unique, valid Source is required.", nameof(sourceIds));
 
             foreach (var target in materializedSchemaTargets)
             {
@@ -130,7 +140,8 @@ namespace NuntivusServer.Domain.Contracts
                 ordering,
                 destination,
                 createdAt: now,
-                updatedAt: now);
+                updatedAt: now,
+                selectedSources);
         }
 
         /// <summary>
@@ -150,7 +161,8 @@ namespace NuntivusServer.Domain.Contracts
             DateTimeOffset updatedAt,
             ContractPayloadTransformation? transformation = null,
             ContractRateLimit? rateLimit = null,
-            ContractOrdering? ordering = null) =>
+            ContractOrdering? ordering = null,
+            IEnumerable<Guid>? sourceIds = null) =>
             new(
                 id,
                 customerId,
@@ -164,7 +176,8 @@ namespace NuntivusServer.Domain.Contracts
                 ordering,
                 destination,
                 createdAt,
-                updatedAt);
+                updatedAt,
+                sourceIds ?? []);
 
         public void Enable(DateTimeOffset now)
         {

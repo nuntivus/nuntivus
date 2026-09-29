@@ -26,7 +26,8 @@ namespace NuntivusServer.Application.Contracts
                 c.Destination.Configuration,
                 c.CreatedAt,
                 c.UpdatedAt,
-                c.Name);
+                c.Name,
+                new System.Collections.Generic.List<System.Guid>(c.SourceIds));
 
         public static ContractCreated ToCreated(this Contract c) =>
             new(
@@ -41,7 +42,8 @@ namespace NuntivusServer.Application.Contracts
                 ToOrderingConfig(c.Ordering),
                 MapDestinationType(c.Destination.Type),
                 c.CreatedAt,
-                c.Name);
+                c.Name,
+                new System.Collections.Generic.List<System.Guid>(c.SourceIds));
 
         public static ContractFilter? ToDomain(this ContractFilterRequest? filter)
         {

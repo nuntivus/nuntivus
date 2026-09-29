@@ -164,10 +164,6 @@ namespace NuntivusServer.Application.Matching
 
             metadata["nuntivus.test"] = "true";
             metadata["nuntivus.test.contractId"] = contractId.ToString("D");
-            var @event = Event.Create(
-                Guid.NewGuid().ToString("N"), request.Type.Trim(), contractId.ToString("D"),
-                DateTimeOffset.UtcNow, request.Payload.GetRawText(), metadata);
-
             var lookup = await _contracts.GetByIdAsync(contractId, cancellationToken);
             if (lookup.IsFailure)
                 return Result<Evaluation>.Fail(lookup.Errors);
@@ -175,12 +171,19 @@ namespace NuntivusServer.Application.Matching
             if (contract is null)
                 return Result.Failure<Evaluation>(Error.NotFound($"Contract '{contractId}' was not found."));
 
+            if (contract.SourceIds.Count == 0)
+                return Result.Failure<Evaluation>(Error.Validation("Contract must have at least one Source."));
+
+            var @event = Event.Create(
+                Guid.NewGuid().ToString("N"), request.Type.Trim(), contract.SourceIds.First().ToString("D"),
+                DateTimeOffset.UtcNow, request.Payload.GetRawText(), metadata);
+
             if (!contract.Enabled)
                 return Result.Success(new Evaluation(new(false, "Contract is disabled."), null, @event));
             if (!contract.EventTypes.Contains(@event.Type, StringComparer.Ordinal))
                 return Result.Success(new Evaluation(new(false, "Contract does not subscribe to this event type."), null, @event));
 
-            var matches = await _contracts.ListEnabledMatchingAsync(@event.Type, cancellationToken);
+            var matches = await _contracts.ListEnabledMatchingAsync(@event.Type, @event.SourceId, cancellationToken);
             if (matches.IsFailure)
                 return Result<Evaluation>.Fail(matches.Errors);
             var match = matches.Value.FirstOrDefault(item => item.ContractId == contractId);

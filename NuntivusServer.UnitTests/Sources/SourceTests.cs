@@ -25,6 +25,20 @@ namespace NuntivusServer.UnitTests.Sources
         }
 
         [Fact]
+        public void Source_lifecycle_preserves_creation_time_and_updates_state()
+        {
+            var now = DateTimeOffset.UtcNow;
+            var source = Source.Create(Guid.NewGuid().ToString("D"), "HTTP", SourceType.HTTP_API, "{}", true, now: now);
+            source.Disable(now.AddMinutes(1));
+            Assert.False(source.Enabled);
+            source.Enable(now.AddMinutes(2));
+            source.Update("Updated", null, "{\"authentication\":{\"type\":\"none\"}}", now.AddMinutes(3));
+            Assert.Equal(now, source.CreatedAt);
+            Assert.Equal(now.AddMinutes(3), source.UpdatedAt);
+            Assert.Equal("Updated", source.Name);
+        }
+
+        [Fact]
         public void Create_Allows_Null_Description()
         {
             var source = Source.Create("orders.v1", "Orders", SourceType.HTTP_API, "{}", true);

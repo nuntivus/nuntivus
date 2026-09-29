@@ -303,6 +303,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ICacheStore, InMemoryCacheStore>();
 
 builder.Services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
+builder.Services.AddScoped<ISourceRepository, PostgresSourceRepository>();
 builder.Services.AddScoped<IOutboxRepository, PostgresOutboxRepository>();
 builder.Services.AddScoped<IAuditLogRepository, PostgresAuditLogRepository>();
 builder.Services.AddScoped<IAdminUserRoleRepository, PostgresAdminUserRoleRepository>();
@@ -340,9 +341,10 @@ builder.Services.AddScoped<IEventDefinitionRepository>(sp => new CachedEventDefi
 builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<IEventQueryService, EventQueryService>();
 builder.Services.AddScoped<ISourceAdapter, HttpApiSourceAdapter>();
-builder.Services.AddScoped<ISourceAdapter, GenericWebhookSourceAdapter>();
 builder.Services.AddScoped<ISourceAdapterRegistry, SourceAdapterRegistry>();
 builder.Services.AddScoped<ISourceIngestionService, SourceIngestionService>();
+builder.Services.AddScoped<ISourceService, SourceService>();
+builder.Services.AddScoped<IHttpSourceAuthenticator, HttpSourceAuthenticator>();
 builder.Services.AddScoped<IEventDefinitionService, EventDefinitionService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContractService, ContractService>();

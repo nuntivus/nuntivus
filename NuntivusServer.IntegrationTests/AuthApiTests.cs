@@ -489,7 +489,7 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
-        public async Task Webhook_ingest_remains_anonymous()
+        public async Task Http_source_ingest_does_not_require_admin_authentication()
         {
             using var client = _fixture.CreateClient();
             var payload = new
@@ -497,9 +497,9 @@ namespace NuntivusServer.IntegrationTests
                 payload = JsonDocument.Parse("{}").RootElement,
             };
 
-            var response = await client.PostAsJsonAsync("/v1/sources/webhooks/public-source", payload);
+            var response = await client.PostAsJsonAsync($"/v1/sources/{Guid.NewGuid():D}/events", payload);
 
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         }
 
         [Fact]

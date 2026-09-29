@@ -13,6 +13,7 @@ import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
 import { getServerValidation } from '../components/forms/form-validation'
 import { ContractOptionsForm } from '../features/contracts/contract-options-form'
+import { ContractSourceSelector } from '../features/contracts/contract-source-selector'
 import { backendConfigToFormState, formStateToBackendConfig, validateAdvancedContractOptions } from '../features/contracts/contract-options'
 import { DestinationConfigurationForm } from '../features/contracts/destination-forms/destination-configuration-form'
 import {
@@ -50,6 +51,7 @@ export function ContractCreatePage() {
   const eventDefinitionsQuery = useEventDefinitionsQuery({ page: 1, pageSize: 100 })
 
   const [customerId, setCustomerId] = useState('')
+  const [sourceIds, setSourceIds] = useState<string[]>([])
   const [name, setName] = useState('')
   const [selectedEventType, setSelectedEventType] = useState('')
   const [newEventType, setNewEventType] = useState('')
@@ -65,6 +67,7 @@ export function ContractCreatePage() {
     ? newEventType.trim()
     : selectedEventType.trim()
   const customerError = !customerId ? 'Customer is required.' : null
+  const sourceError = sourceIds.length === 0 ? 'Select at least one Source.' : null
   const eventTypeError = !eventType ? 'Event type is required.' : null
   const destinationError = validateDestinationFormState(destination)
   const optionErrors = validateAdvancedContractOptions(optionsDraft, eventType ? [eventType] : [])
@@ -96,9 +99,9 @@ export function ContractCreatePage() {
       return
     }
 
-    if (step === 0 || customerError || eventTypeError) {
+    if (step === 0 || customerError || sourceError || eventTypeError) {
       setBasicsAttempted(true)
-      if (customerError || eventTypeError) {
+      if (customerError || sourceError || eventTypeError) {
         setStep(0)
         return
       }
@@ -121,6 +124,7 @@ export function ContractCreatePage() {
     try {
       const result = await createMutation.mutateAsync({
         customerId: customerId.trim(),
+        sourceIds,
         name: name.trim() || null,
         eventTypes: [eventType],
         destination: mapDestinationFormToConfig(destination),
@@ -184,6 +188,9 @@ export function ContractCreatePage() {
                   <FieldErrorText id="contract-create-customer-error" message={customerError} />
                 ) : null}
 
+                <ContractSourceSelector value={sourceIds} onChange={setSourceIds} />
+                {basicsAttempted ? <FieldErrorText id="contract-create-source-error" message={sourceError} /> : null}
+
                 <Text as="label" htmlFor="contract-create-name" size="2" color="gray">Contract name (optional)</Text>
                 <TextField.Root
                   id="contract-create-name"
@@ -241,6 +248,7 @@ export function ContractCreatePage() {
                 <Card>
                   <Flex direction="column" gap="2">
                     <Text size="2"><strong>Customer:</strong> {customersQuery.data?.items.find((item) => item.id === customerId)?.name ?? customerId}</Text>
+                    <Text size="2"><strong>Sources:</strong> {sourceIds.join(', ')}</Text>
                     <Text size="2"><strong>Name:</strong> {name.trim() || '—'}</Text>
                     <Text size="2"><strong>Event type:</strong> {eventType}</Text>
                     <Text size="2"><strong>Destination:</strong> {destination.type}</Text>

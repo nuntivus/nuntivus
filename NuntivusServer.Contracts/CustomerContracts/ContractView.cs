@@ -17,5 +17,6 @@ namespace NuntivusServer.Contracts.CustomerContracts
         string DestinationConfiguration,
         DateTimeOffset CreatedAt,
         DateTimeOffset UpdatedAt,
-        string? Name = null);
+        string? Name = null,
+        IReadOnlyCollection<Guid>? SourceIds = null);
 }

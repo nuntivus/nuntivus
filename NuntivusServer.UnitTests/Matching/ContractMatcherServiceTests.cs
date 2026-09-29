@@ -115,7 +115,7 @@ namespace NuntivusServer.UnitTests.Matching
             public Task<Result<PagedResult<Contract>>> ListAsync(AdminContractListQuery query, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(PagedResult<Contract>.Create(Array.Empty<Contract>(), query.Page, query.PageSize, 0)));
 
-            public Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(string eventType, CancellationToken cancellationToken) =>
+            public Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(string eventType, string sourceId, CancellationToken cancellationToken) =>
                 Task.FromResult(Result.Success(_matches));
         }
 

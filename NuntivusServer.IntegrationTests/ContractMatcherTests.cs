@@ -75,7 +75,8 @@ namespace NuntivusServer.IntegrationTests
                 filter,
                 destination ?? new Destination(DestinationType.Http, "{\"Url\":\"https://x.example.com\"}"),
                 now,
-                transformation: transformation);
+                transformation: transformation,
+                sourceIds: [MatcherFixture.TestSourceId]);
             if (!enabled) contract.Disable(now);
 
             await using var scope = _services.CreateAsyncScope();
@@ -97,7 +98,7 @@ namespace NuntivusServer.IntegrationTests
             var @event = Event.Create(
                 idempotencyKey: Guid.NewGuid().ToString(),
                 type: type,
-                sourceId: Guid.NewGuid().ToString(),
+                sourceId: MatcherFixture.TestSourceId.ToString("D"),
                 occurredAt: DateTimeOffset.UtcNow,
                 payload: payload,
                 metadata: metadata);

@@ -26,6 +26,8 @@ const LoginPage = lazy(() => import('../pages/login-page').then((module) => ({ d
 const NotFoundPage = lazy(() => import('../pages/not-found-page').then((module) => ({ default: module.NotFoundPage })))
 const SettingsPage = lazy(() => import('../pages/settings-page').then((module) => ({ default: module.SettingsPage })))
 const SecretsPage = lazy(() => import('../pages/secrets-page').then((module) => ({ default: module.SecretsPage })))
+const SourcesPage = lazy(() => import('../pages/sources-page').then((module) => ({ default: module.SourcesPage })))
+const SourceDetailPage = lazy(() => import('../pages/source-detail-page').then((module) => ({ default: module.SourceDetailPage })))
 const UserDetailPage = lazy(() => import('../pages/user-detail-page').then((module) => ({ default: module.UserDetailPage })))
 const UsersPage = lazy(() => import('../pages/users-page').then((module) => ({ default: module.UsersPage })))
 
@@ -68,6 +70,8 @@ const router = createBrowserRouter(createRoutesFromElements(
               </Route>
               <Route element={<RequirePermission permissions={['contracts.read']} />}>
                 <Route path="contracts" element={<ContractsPage />} />
+                <Route path="sources" element={<SourcesPage />} />
+                <Route path="sources/:id" element={<SourceDetailPage />} />
                 <Route path="contracts/:id" element={<ContractDetailPage />} />
                 <Route path="test-events" element={<TestEventsPage />} />
               </Route>

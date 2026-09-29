@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System;
 
 namespace NuntivusServer.Contracts.CustomerContracts
 {
@@ -10,5 +11,6 @@ namespace NuntivusServer.Contracts.CustomerContracts
         ContractFilterRequest? Filter = null,
         ContractPayloadTransformationRequest? Transformation = null,
         ContractRateLimitConfig? RateLimit = null,
-        ContractOrderingConfig? Ordering = null);
+        ContractOrderingConfig? Ordering = null,
+        IReadOnlyCollection<Guid>? SourceIds = null);
 }

@@ -1,15 +1,12 @@
 using NuntivusServer.Application.Events;
 using NuntivusServer.Application.Events.Queries;
-using NuntivusServer.Application.Sources;
 using NuntivusServer.Api.Common;
 using NuntivusServer.Api.Security;
-using NuntivusServer.Common.Extensions;
 using NuntivusServer.Common.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using System.Text.Json;
-using Swashbuckle.AspNetCore.Annotations;
 
 namespace NuntivusServer.Api.Controllers.Events
 {
@@ -20,22 +17,16 @@ namespace NuntivusServer.Api.Controllers.Events
     {
         private readonly IEventService _events;
         private readonly IEventQueryService _eventQueries;
-        private readonly ISourceIngestionService _sourceIngestion;
         private readonly IAppLogger<EventsController> _logger;
-        private readonly IEventPublishRequestValidator _validator;
 
         public EventsController(
             IEventService events,
             IEventQueryService eventQueries,
-            ISourceIngestionService sourceIngestion,
-            IAppLogger<EventsController> logger,
-            IEventPublishRequestValidator validator)
+            IAppLogger<EventsController> logger)
         {
             _events = events;
             _eventQueries = eventQueries;
-            _sourceIngestion = sourceIngestion;
             _logger = logger;
-            _validator = validator;
         }
 
         [HttpGet("{id:guid}")]
@@ -66,39 +57,6 @@ namespace NuntivusServer.Api.Controllers.Events
 
             var result = await _eventQueries.ListAsync(query, cancellationToken);
             return result.ToPagedOk(HttpContext, MapEvent);
-        }
-
-        [HttpPost]
-        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
-        [SwaggerOperation(
-            Summary = "Publish event",
-            Description = "Publishes an event idempotently. Example request: { \"idempotencyKey\": \"evt-123\", \"type\": \"orders.created\", \"source\": \"checkout\", \"timestamp\": \"2026-01-01T00:00:00Z\", \"payload\": { \"orderId\": \"o-1\" }, \"metadata\": {} }.")]
-        public async Task<IActionResult> Publish(
-            PublishEventRequest request,
-            CancellationToken cancellationToken)
-        {
-            var validation = _validator.Validate(request);
-            if (validation.IsFailure)
-                return new BadRequestObjectResult(ApiErrorResponse.From(validation.Errors, HttpContext));
-
-            _logger.Information(
-                "Received PublishEvent request (idempotencyKey {IdempotencyKey}, type {Type}, source {Source}).",
-                request.IdempotencyKey,
-                request.Type,
-                request.Source);
-
-            var result = await _sourceIngestion.IngestAsync(
-                Domain.Sources.SourceType.HTTP_API,
-                new HttpApiSourceEventContext(
-                    request.IdempotencyKey,
-                    request.Type,
-                    request.Source,
-                    request.Timestamp,
-                    request.Payload.EnsureJsonObject(),
-                    request.Metadata.EnsureJsonObject()),
-                cancellationToken);
-
-            return result.ToActionResult(HttpContext, ack => Ok(new PublishEventResponse(ack.EventId, ack.Status)));
         }
 
         [HttpPost("{id:guid}/replay")]

@@ -60,11 +60,11 @@ namespace NuntivusServer.Infastructure.Persistence.Caching
                 cancellationToken);
 
         public Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(
-            string eventType, CancellationToken cancellationToken) =>
+            string eventType, string sourceId, CancellationToken cancellationToken) =>
             _cache.GetOrCreateAsync(
-                $"{CacheKeys.ContractsMatch}:{eventType}",
+                $"{CacheKeys.ContractsMatch}:{eventType}:{sourceId}",
                 _ttl,
-                ct => _inner.ListEnabledMatchingAsync(eventType, ct),
+                ct => _inner.ListEnabledMatchingAsync(eventType, sourceId, ct),
                 cancellationToken);
     }
 }

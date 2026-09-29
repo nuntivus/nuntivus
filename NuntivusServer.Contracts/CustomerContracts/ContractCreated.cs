@@ -15,5 +15,6 @@ namespace NuntivusServer.Contracts.CustomerContracts
         ContractOrderingConfig? Ordering,
         DestinationType DestinationType,
         DateTimeOffset CreatedAt,
-        string? Name = null);
+        string? Name = null,
+        IReadOnlyCollection<Guid>? SourceIds = null);
 }

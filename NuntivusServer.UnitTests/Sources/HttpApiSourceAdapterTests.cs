@@ -19,7 +19,7 @@ namespace NuntivusServer.UnitTests.Sources
                     Source: $"  {source}  ",
                     Timestamp: DateTimeOffset.Parse("2026-01-01T10:00:00Z"),
                     Payload: "{\"orderId\":\"o-1\"}",
-                    Metadata: "[1,2,3]"),
+                    Metadata: "{\"traceId\":\"t-1\"}"),
                 CancellationToken.None);
 
             Assert.True(result.IsSuccess);
@@ -28,7 +28,7 @@ namespace NuntivusServer.UnitTests.Sources
             Assert.Equal("orders.created", canonical.Type);
             Assert.Equal(source.ToLowerInvariant(), canonical.SourceId.Value);
             Assert.Equal("{\"orderId\":\"o-1\"}", canonical.Payload);
-            Assert.Equal("{}", canonical.Metadata);
+            Assert.Equal("{\"traceId\":\"t-1\"}", canonical.Metadata);
         }
 
         [Fact]

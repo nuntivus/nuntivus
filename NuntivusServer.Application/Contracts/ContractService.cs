@@ -11,6 +11,7 @@ using NuntivusServer.Common.Logging;
 using NuntivusServer.Contracts.CustomerContracts;
 using NuntivusServer.Domain.Auditing;
 using NuntivusServer.Domain.Contracts;
+using NuntivusServer.Domain.Sources;
 
 namespace NuntivusServer.Application.Contracts
 {
@@ -21,6 +22,7 @@ namespace NuntivusServer.Application.Contracts
 
         private readonly IContractRepository _repository;
         private readonly ICustomerRepository _customers;
+        private readonly ISourceRepository _sources;
         private readonly IEventDefinitionRepository _eventDefinitions;
         private readonly IAuditLogRepository _auditLogs;
         private readonly IUnitOfWork _unitOfWork;
@@ -31,6 +33,7 @@ namespace NuntivusServer.Application.Contracts
         public ContractService(
             IContractRepository repository,
             ICustomerRepository customers,
+            ISourceRepository sources,
             IEventDefinitionRepository eventDefinitions,
             IAuditLogRepository auditLogs,
             IUnitOfWork unitOfWork,
@@ -40,6 +43,7 @@ namespace NuntivusServer.Application.Contracts
         {
             _repository = repository;
             _customers = customers;
+            _sources = sources;
             _eventDefinitions = eventDefinitions;
             _auditLogs = auditLogs;
             _unitOfWork = unitOfWork;
@@ -133,6 +137,10 @@ namespace NuntivusServer.Application.Contracts
             if (destinationResult.IsFailure)
                 return Result<ContractCreated>.Fail(destinationResult.Errors);
 
+            var sourcesValidation = await ValidateSourcesAsync(request.SourceIds, [], cancellationToken);
+            if (sourcesValidation.IsFailure)
+                return Result<ContractCreated>.Fail(sourcesValidation.Errors);
+
             var customerLookup = await _customers.GetByIdAsync(request.CustomerId, cancellationToken);
             if (customerLookup.IsFailure)
                 return Result<ContractCreated>.Fail(customerLookup.Errors);
@@ -157,7 +165,8 @@ namespace NuntivusServer.Application.Contracts
                     request.Transformation.ToDomain(),
                     request.RateLimit.ToDomain(),
                     request.Ordering.ToDomain(),
-                    request.Name);
+                    request.Name,
+                    request.SourceIds);
 
                 _unitOfWork.Begin(true);
                 var insert = await _repository.InsertAsync(contract, _unitOfWork, cancellationToken);
@@ -178,6 +187,7 @@ namespace NuntivusServer.Application.Contracts
                         contract.CustomerId,
                         contract.Enabled,
                         EventTypes = contract.EventTypes,
+                        SourceIds = contract.SourceIds,
                         DestinationType = contract.Destination.Type.ToString(),
                     }),
                     createdAt: now);
@@ -467,6 +477,10 @@ namespace NuntivusServer.Application.Contracts
                 if (existing.UpdatedAt != expectedUpdatedAt)
                     return Result.Failure<ContractView>(Error.Conflict("If-Match ETag does not match current contract version."));
 
+                var sourcesValidation = await ValidateSourcesAsync(request.SourceIds, existing.SourceIds, cancellationToken);
+                if (sourcesValidation.IsFailure)
+                    return Result<ContractView>.Fail(sourcesValidation.Errors);
+
                 var resolvedConfiguration = _destinationUpdates.Resolve(request.Configuration, existing.Destination);
                 if (resolvedConfiguration.IsFailure)
                     return Result<ContractView>.Fail(resolvedConfiguration.Errors);
@@ -493,7 +507,8 @@ namespace NuntivusServer.Application.Contracts
                     now,
                     request.Transformation.ToDomain(),
                     request.RateLimit.ToDomain(),
-                    request.Ordering.ToDomain());
+                    request.Ordering.ToDomain(),
+                    request.SourceIds);
 
                 _unitOfWork.Begin(true);
                 var update = await _repository.UpdateAsync(updated, _unitOfWork, cancellationToken);
@@ -514,6 +529,7 @@ namespace NuntivusServer.Application.Contracts
                         updated.CustomerId,
                         updated.Name,
                         EventTypes = updated.EventTypes,
+                        SourceIds = updated.SourceIds,
                         DestinationType = updated.Destination.Type.ToString(),
                     }),
                     createdAt: now);
@@ -747,7 +763,29 @@ namespace NuntivusServer.Application.Contracts
                 redactedConfig.Value,
                 contract.CreatedAt,
                 contract.UpdatedAt,
-                contract.Name));
+                contract.Name,
+                new List<Guid>(contract.SourceIds)));
+        }
+
+        private async Task<Result> ValidateSourcesAsync(
+            IReadOnlyCollection<Guid>? sourceIds,
+            IReadOnlyCollection<Guid> existingIds,
+            CancellationToken cancellationToken)
+        {
+            if (sourceIds is null || sourceIds.Count == 0 || sourceIds.Count > 100
+                || sourceIds.Any(id => id == Guid.Empty) || sourceIds.Distinct().Count() != sourceIds.Count)
+                return Result.Failure(Error.Validation("Select 1-100 unique Source IDs."));
+
+            foreach (var id in sourceIds)
+            {
+                var lookup = await _sources.GetByIdAsync(id.ToString("D"), cancellationToken);
+                if (lookup.IsFailure) return Result.Failure(lookup.Errors);
+                if (lookup.Value is null)
+                    return Result.Failure(Error.NotFound($"Source '{id}' was not found."));
+                if (!existingIds.Contains(id) && (!lookup.Value.Enabled || lookup.Value.Type != SourceType.HTTP_API))
+                    return Result.Failure(Error.Validation($"Source '{id}' is not an enabled, operational Source."));
+            }
+            return Result.Success();
         }
 
         private static Result ValidateOrdering(ContractOrderingConfig? ordering)

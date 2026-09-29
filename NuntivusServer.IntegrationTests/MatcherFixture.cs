@@ -53,6 +53,8 @@ namespace NuntivusServer.IntegrationTests
 
         public string ConnectionString => _postgres.GetConnectionString();
 
+        public static readonly Guid TestSourceId = Guid.Parse("ebc7ce26-7e11-4125-b5c1-37c853bb5710");
+
         public string NatsUrl => $"nats://{_nats.Hostname}:{_nats.GetMappedPublicPort(4222)}";
 
         public async Task InitializeAsync()
@@ -74,6 +76,8 @@ namespace NuntivusServer.IntegrationTests
             // deliveries cascades from contracts/customers/events; customers cascades cover contracts.
             await conn.ExecuteAsync("TRUNCATE TABLE event_definitions, delivery_attempts, deliveries, outbox_messages, events, contract_event_types, contracts, customers CASCADE;");
             await conn.ExecuteAsync("TRUNCATE TABLE managed_secrets CASCADE;");
+            await conn.ExecuteAsync("TRUNCATE TABLE sources CASCADE;");
+            await conn.ExecuteAsync("INSERT INTO sources (id, name, type, enabled, configuration, created_at, updated_at) VALUES (@Id, 'Test source', 'HTTP_API', TRUE, '{\"authentication\":{\"type\":\"none\"}}'::jsonb, now(), now())", new { Id = TestSourceId });
             await ManagedSecretTestSeed.SeedAsync(conn, "secret.acme.v1", "secret.acme.v2");
         }
 

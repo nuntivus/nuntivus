@@ -15,6 +15,7 @@ import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback
 import { getServerValidation } from '../components/forms/form-validation'
 import { ContractsIcon } from '../components/icons/nav-icons'
 import { ContractOptionsForm } from '../features/contracts/contract-options-form'
+import { ContractSourceSelector } from '../features/contracts/contract-source-selector'
 import { backendConfigToFormState, formStateToBackendConfig, validateAdvancedContractOptions } from '../features/contracts/contract-options'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
@@ -40,6 +41,7 @@ import { useAppSelector } from '../store/hooks'
 
 type EditorInitialState = {
   name: string
+  sourceIds: string[]
   eventTypesInput: string
   enabled: boolean
   destination: DestinationFormState
@@ -381,6 +383,7 @@ function ContractEditorForm({
   const disableMutation = useDisableContractMutation()
 
   const [name, setName] = useState(initial.name)
+  const [sourceIds, setSourceIds] = useState(initial.sourceIds)
   const [eventTypesInput, setEventTypesInput] = useState(initial.eventTypesInput)
   const [enabled, setEnabled] = useState(initial.enabled)
   const [destination, setDestination] = useState(initial.destination)
@@ -399,6 +402,10 @@ function ContractEditorForm({
       errors.eventTypes = 'At least one event type is required.'
     }
 
+    if (sourceIds.length === 0) {
+      errors.sources = 'Select at least one Source.'
+    }
+
     if (Object.keys(optionErrors).length) {
       errors.options = 'Correct the advanced contract options before saving.'
     }
@@ -409,13 +416,14 @@ function ContractEditorForm({
     }
 
     return errors
-  }, [destination, eventTypes.length, optionErrors])
+  }, [destination, eventTypes.length, optionErrors, sourceIds])
 
   const hasValidationError = Object.keys(fieldErrors).length > 0
 
   const dirty = useMemo(() => {
     const currentSnapshot = JSON.stringify({
       name: name.trim(),
+      sourceIds,
       eventTypes,
       enabled,
       destination: mapDestinationFormToConfig(destination),
@@ -424,6 +432,7 @@ function ContractEditorForm({
 
     const initialSnapshot = JSON.stringify({
       name: initial.name.trim(),
+      sourceIds: initial.sourceIds,
       eventTypes: parseEventTypes(initial.eventTypesInput),
       enabled: initial.enabled,
       destination: mapDestinationFormToConfig(initial.destination),
@@ -439,8 +448,10 @@ function ContractEditorForm({
     initial.enabled,
     initial.eventTypesInput,
     initial.name,
+    initial.sourceIds,
     initial.options,
     name,
+    sourceIds,
     optionsDraft,
   ])
 
@@ -504,6 +515,7 @@ function ContractEditorForm({
         etag,
         payload: {
           customerId,
+          sourceIds,
           name: name.trim() || null,
           eventTypes,
           destination: destinationPayload as typeof destinationConfig,
@@ -545,6 +557,10 @@ function ContractEditorForm({
             <Text size="2" weight="medium">Customer <span aria-hidden="true">*</span></Text>
             <TextField.Root value={customerId} readOnly disabled />
           </label>
+          <div className="contract-edit-field">
+            <ContractSourceSelector value={sourceIds} onChange={setSourceIds} disabled={!canWriteContracts || replaceMutation.isPending} />
+            <FieldErrorText id="contract-edit-sources-error" message={fieldErrors.sources} />
+          </div>
           <label className="contract-edit-field">
             <Text size="2" weight="medium">Event types <span aria-hidden="true">*</span></Text>
             <TextArea
@@ -664,6 +680,7 @@ export function ContractEditPage() {
         canWriteContracts={canWriteContracts}
         initial={{
           name: contract.name ?? '',
+          sourceIds: contract.sourceIds,
           eventTypesInput: contract.eventTypes.join(', '),
           enabled: contract.enabled,
           destination,

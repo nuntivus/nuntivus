@@ -33,11 +33,13 @@ namespace NuntivusServer.Application.Persistence
 
         /// <summary>
         /// Returns the ids of all enabled Contracts (with enabled Customers)
-        /// whose subscribed event types include <paramref name="eventType"/>.
+        /// whose subscribed event types include <paramref name="eventType"/> and
+        /// whose selected Sources include <paramref name="sourceId"/>.
         /// Hot path invoked once per accepted event by the contract matcher.
         /// </summary>
         Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(
             string eventType,
+            string sourceId,
             CancellationToken cancellationToken);
     }
 }

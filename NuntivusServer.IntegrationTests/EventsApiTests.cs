@@ -112,10 +112,11 @@ namespace NuntivusServer.IntegrationTests
         [Fact]
         public async Task Publish_with_oversized_payload_returns_400()
         {
+            var source = await CreateSourceAsync();
             using var payloadDoc = JsonDocument.Parse($"{{\"blob\":\"{new string('x', 300_000)}\"}}");
 
             var response = await _client.PostAsJsonAsync(
-                "/v1/events",
+                $"/v1/sources/{source}/events",
                 new PublishEventRequest(
                     IdempotencyKey: "idem-security-1",
                     Type: "orders.created",
@@ -133,10 +134,11 @@ namespace NuntivusServer.IntegrationTests
         [Fact]
         public async Task Publish_with_oversized_metadata_returns_400()
         {
+            var source = await CreateSourceAsync();
             using var metadataDoc = JsonDocument.Parse($"{{\"blob\":\"{new string('x', 80_000)}\"}}");
 
             var response = await _client.PostAsJsonAsync(
-                "/v1/events",
+                $"/v1/sources/{source}/events",
                 new PublishEventRequest(
                     IdempotencyKey: "idem-security-metadata-1",
                     Type: "orders.created",
@@ -154,12 +156,12 @@ namespace NuntivusServer.IntegrationTests
         [Fact]
         public async Task Publish_same_source_and_idempotency_key_is_idempotent()
         {
-            var source = Guid.NewGuid().ToString("D");
+            var source = await CreateSourceAsync();
             var idempotencyKey = "idem-publish-1";
             var occurredAt = DateTimeOffset.UtcNow;
 
             var first = await _client.PostAsJsonAsync(
-                "/v1/events",
+                $"/v1/sources/{source}/events",
                 new PublishEventRequest(
                     IdempotencyKey: idempotencyKey,
                     Type: "orders.created",
@@ -169,7 +171,7 @@ namespace NuntivusServer.IntegrationTests
                     Payload: JsonDocument.Parse("{\"orderId\":\"o-42\"}").RootElement.Clone()));
 
             var second = await _client.PostAsJsonAsync(
-                "/v1/events",
+                $"/v1/sources/{source}/events",
                 new PublishEventRequest(
                     IdempotencyKey: idempotencyKey,
                     Type: "orders.created",
@@ -191,11 +193,11 @@ namespace NuntivusServer.IntegrationTests
         [Fact]
         public async Task Publish_persists_event_and_outbox_before_client_restart()
         {
-            var source = Guid.NewGuid().ToString("D");
+            var source = await CreateSourceAsync();
             var idempotencyKey = $"idem-durable-{Guid.NewGuid():N}";
 
             var response = await _client.PostAsJsonAsync(
-                "/v1/events",
+                $"/v1/sources/{source}/events",
                 new PublishEventRequest(
                     IdempotencyKey: idempotencyKey,
                     Type: "orders.created",
@@ -226,6 +228,7 @@ namespace NuntivusServer.IntegrationTests
             }
 
             using var restartedClient = _fixture.CreateClient();
+            restartedClient.DefaultRequestHeaders.Add("X-Test-Auth", "on");
             var getResponse = await restartedClient.GetAsync($"/v1/events/{eventId:D}");
             Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         }
@@ -233,14 +236,14 @@ namespace NuntivusServer.IntegrationTests
         [Fact]
         public async Task Publish_normalizes_source_identity_before_idempotency_check()
         {
-            var sourceGuid = Guid.NewGuid();
+            var sourceGuid = Guid.Parse(await CreateSourceAsync());
             var sourceUpper = sourceGuid.ToString("D").ToUpperInvariant();
             var sourceLower = sourceGuid.ToString("D");
             var idempotencyKey = "idem-publish-normalized-source-1";
             var occurredAt = DateTimeOffset.UtcNow;
 
             var first = await _client.PostAsJsonAsync(
-                "/v1/events",
+                $"/v1/sources/{sourceUpper}/events",
                 new PublishEventRequest(
                     IdempotencyKey: idempotencyKey,
                     Type: "orders.created",
@@ -250,7 +253,7 @@ namespace NuntivusServer.IntegrationTests
                     Payload: JsonDocument.Parse("{\"orderId\":\"o-42\"}").RootElement.Clone()));
 
             var second = await _client.PostAsJsonAsync(
-                "/v1/events",
+                $"/v1/sources/{sourceLower}/events",
                 new PublishEventRequest(
                     IdempotencyKey: idempotencyKey,
                     Type: "orders.created",
@@ -281,12 +284,12 @@ namespace NuntivusServer.IntegrationTests
         [Fact]
         public async Task Generic_webhook_ingest_accepts_and_is_idempotent_for_same_source_and_key()
         {
-            var source = Guid.NewGuid().ToString("D");
+            var source = await CreateSourceAsync();
             var idempotencyKey = "webhook-idem-1";
             var occurredAt = DateTimeOffset.UtcNow;
 
             var first = await _client.PostAsJsonAsync(
-                $"/v1/sources/webhooks/{source}",
+                $"/v1/sources/{source}/events",
                 new WebhookIngestRequest(
                     IdempotencyKey: idempotencyKey,
                     Type: "orders.webhook.created",
@@ -295,7 +298,7 @@ namespace NuntivusServer.IntegrationTests
                     Payload: JsonDocument.Parse("{\"orderId\":\"o-900\"}").RootElement.Clone()));
 
             var second = await _client.PostAsJsonAsync(
-                $"/v1/sources/webhooks/{source}",
+                $"/v1/sources/{source}/events",
                 new WebhookIngestRequest(
                     IdempotencyKey: idempotencyKey,
                     Type: "orders.webhook.created",
@@ -316,9 +319,9 @@ namespace NuntivusServer.IntegrationTests
         [Fact]
         public async Task Generic_webhook_ingest_supports_header_fallback_for_idempotency_and_type()
         {
-            var source = Guid.NewGuid().ToString("D");
+            var source = await CreateSourceAsync();
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, $"/v1/sources/webhooks/{source}");
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"/v1/sources/{source}/events");
             request.Headers.Add("X-Nuntivus-Idempotency-Key", "webhook-idem-header-1");
             request.Headers.Add("X-Nuntivus-Event-Type", "orders.webhook.header");
             request.Content = JsonContent.Create(new WebhookIngestRequest(
@@ -533,6 +536,17 @@ namespace NuntivusServer.IntegrationTests
             var body = await response.Content.ReadFromJsonAsync<PagedResponse<EventQueryDto>>();
             Assert.NotNull(body);
             Assert.Equal(2L, body!.TotalCount);
+        }
+
+        private async Task<string> CreateSourceAsync()
+        {
+            var response = await _client.PostAsJsonAsync("/v1/sources", new
+            {
+                name = "HTTP", type = "HTTP_API", configuration = new { authentication = new { type = "none" } }
+            });
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return body.RootElement.GetProperty("id").GetString()!;
         }
 
         private async Task<Guid> SeedEventAsync()

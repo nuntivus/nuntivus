@@ -108,6 +108,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     cancellationToken: cancellationToken));
 
                 await InsertEventTypesAsync(connection, transaction, contract, cancellationToken);
+                await InsertSourceIdsAsync(connection, transaction, contract, cancellationToken);
                 await InsertSchemaTargetsAsync(connection, transaction, contract, cancellationToken);
                 await InsertFilterRulesAsync(connection, transaction, contract, cancellationToken);
 
@@ -116,7 +117,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
             catch (PostgresException pgEx) when (pgEx.SqlState == "23503")
             {
                 return Result.Failure(Error.NotFound(
-                    $"Customer '{contract.CustomerId}' was not found."));
+                    "Contract customer or Source was not found."));
             }
             catch (Exception ex)
             {
@@ -303,6 +304,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     }
                 }
 
+                var sourceIdsByContract = await LoadSourceIdsAsync(connection, ids, cancellationToken);
                 var materialized = new List<Contract>(rowList.Count);
                 foreach (var r in rowList)
                 {
@@ -312,7 +314,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     materialized.Add(r.ToDomain(
                         etList ?? new List<string>(),
                         stList ?? new List<ContractSchemaTarget>(),
-                        filter));
+                        filter,
+                        sourceIdsByContract.GetValueOrDefault(r.id) ?? []));
                 }
 
                 return Result.Success(
@@ -397,12 +400,20 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     cancellationToken: cancellationToken));
 
                 await InsertEventTypesAsync(connection, transaction, contract, cancellationToken);
+                await connection.ExecuteAsync(new CommandDefinition(
+                    "DELETE FROM contract_sources WHERE contract_id = @Id", new { contract.Id }, transaction,
+                    cancellationToken: cancellationToken));
+                await InsertSourceIdsAsync(connection, transaction, contract, cancellationToken);
                 await DeleteSchemaTargetsAsync(connection, transaction, contract.Id, cancellationToken);
                 await InsertSchemaTargetsAsync(connection, transaction, contract, cancellationToken);
                 await DeleteFilterRulesAsync(connection, transaction, contract.Id, cancellationToken);
                 await InsertFilterRulesAsync(connection, transaction, contract, cancellationToken);
 
                 return Result.Success();
+            }
+            catch (PostgresException ex) when (ex.SqlState == "23503")
+            {
+                return Result.Failure(Error.NotFound("Contract Source was not found."));
             }
             catch (Exception ex)
             {
@@ -460,11 +471,16 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 var filterRules = await connection.QueryAsync<FilterRuleRow>(
                     new CommandDefinition(filterRulesSql, new { Id = id }, cancellationToken: cancellationToken));
 
+                var sourceIds = await connection.QueryAsync<Guid>(new CommandDefinition(
+                    "SELECT source_id FROM contract_sources WHERE contract_id = @Id ORDER BY source_id",
+                    new { Id = id }, cancellationToken: cancellationToken));
+
                 return Result.Success<Contract?>(
                     row.ToDomain(
                         eventTypes,
                         schemaTargets.Select(s => s.ToDomain()),
-                        BuildFilter(filterRules)));
+                        BuildFilter(filterRules),
+                        sourceIds));
             }
             catch (Exception ex)
             {
@@ -625,6 +641,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     }
                 }
 
+                var sourceIdsByContract = await LoadSourceIdsAsync(connection, ids, cancellationToken);
                 var materialized = new List<Contract>(rowList.Count);
                 foreach (var r in rowList)
                 {
@@ -634,7 +651,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     materialized.Add(r.ToDomain(
                         etList ?? new List<string>(),
                         stList ?? new List<ContractSchemaTarget>(),
-                        filter));
+                        filter,
+                        sourceIdsByContract.GetValueOrDefault(r.id) ?? []));
                 }
 
                 return Result.Success(
@@ -668,11 +686,12 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
 
         public async Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(
             string eventType,
+            string sourceId,
             CancellationToken cancellationToken)
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(eventType))
+                if (string.IsNullOrWhiteSpace(eventType) || !Guid.TryParse(sourceId, out var parsedSourceId))
                     return Result.Success<IReadOnlyList<ContractMatch>>(Array.Empty<ContractMatch>());
 
                 const string sql = """
@@ -691,6 +710,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                            c.rate_limit_burst      AS RateLimitBurst
                     FROM contracts c
                     INNER JOIN contract_event_types cet ON cet.contract_id = c.id
+                    INNER JOIN contract_sources cs ON cs.contract_id = c.id AND cs.source_id = @SourceId
                     INNER JOIN customers cu             ON cu.id = c.customer_id
                     LEFT JOIN contract_schema_targets cst
                         ON cst.contract_id = c.id
@@ -713,7 +733,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 var rows = await connection.QueryAsync<(Guid ContractId, string CustomerId, bool OrderingEnabled, string? OrderingKeySelector, string DestinationType, string DestinationConfig, string? AuthenticationReference, int? AuthenticationVersion, string? TransformationConfig, int? SchemaVersion, int? RateLimitPerSecond, int? RateLimitPerMinute, int? RateLimitBurst)>(
                     new CommandDefinition(
                         sql,
-                        new { EventType = eventType },
+                        new { EventType = eventType, SourceId = parsedSourceId },
                         cancellationToken: cancellationToken));
 
                 var rowList = rows.ToList();
@@ -760,6 +780,36 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
             {
                 return Result.Failure<IReadOnlyList<ContractMatch>>(ex);
             }
+        }
+
+        private static async Task InsertSourceIdsAsync(
+            System.Data.IDbConnection connection,
+            System.Data.IDbTransaction transaction,
+            Contract contract,
+            CancellationToken cancellationToken)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "INSERT INTO contract_sources (contract_id, source_id) SELECT @ContractId, unnest(@SourceIds)",
+                new { ContractId = contract.Id, SourceIds = contract.SourceIds.ToArray() }, transaction,
+                cancellationToken: cancellationToken));
+        }
+
+        private static async Task<Dictionary<Guid, List<Guid>>> LoadSourceIdsAsync(
+            System.Data.IDbConnection connection, List<Guid> contractIds, CancellationToken cancellationToken)
+        {
+            var assignments = new Dictionary<Guid, List<Guid>>();
+            if (contractIds.Count == 0) return assignments;
+
+            var rows = await connection.QueryAsync<(Guid contract_id, Guid source_id)>(new CommandDefinition(
+                "SELECT contract_id, source_id FROM contract_sources WHERE contract_id = ANY(@Ids) ORDER BY source_id",
+                new { Ids = contractIds.ToArray() }, cancellationToken: cancellationToken));
+            foreach (var (contractId, sourceId) in rows)
+            {
+                if (!assignments.TryGetValue(contractId, out var sourceIds))
+                    assignments[contractId] = sourceIds = [];
+                sourceIds.Add(sourceId);
+            }
+            return assignments;
         }
 
         private static async Task InsertEventTypesAsync(
@@ -1008,7 +1058,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
             public Contract ToDomain(
                 IEnumerable<string> eventTypes,
                 IEnumerable<ContractSchemaTarget> schemaTargets,
-                ContractFilter? filter)
+                ContractFilter? filter,
+                IEnumerable<Guid> sourceIds)
             {
                 var type = Enum.Parse<DestinationType>(destination_type, ignoreCase: true);
                 var destination = new Destination(type, destination_config);
@@ -1025,7 +1076,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     updated_at,
                     DeserializeTransformation(transformation_config),
                     ContractRateLimit.Create(rate_limit_per_second, rate_limit_per_minute, rate_limit_burst),
-                    ordering_enabled ? ContractOrdering.Create(ordering_key_selector) : null);
+                    ordering_enabled ? ContractOrdering.Create(ordering_key_selector) : null,
+                    sourceIds);
             }
         }
 

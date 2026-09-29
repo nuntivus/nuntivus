@@ -110,6 +110,10 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                        OR jsonb_path_exists(c.destination_config, '$.** ? (@ == $secret)', jsonb_build_object('secret', @Name))
                   )
                   AND NOT EXISTS (
+                    SELECT 1 FROM sources src
+                    WHERE jsonb_path_exists(src.configuration, '$.** ? (@ == $secret)', jsonb_build_object('secret', @Name))
+                  )
+                  AND NOT EXISTS (
                     SELECT 1 FROM deliveries d
                     WHERE d.status IN ('Pending', 'InFlight', 'Failed', 'Dead')
                       AND (d.auth_ref = @Name
