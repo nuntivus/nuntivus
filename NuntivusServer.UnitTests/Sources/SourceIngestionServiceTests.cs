@@ -89,6 +89,8 @@ namespace NuntivusServer.UnitTests.Sources
             public Task<Result> UpdateAsync(Source source, IUnitOfWork uow, CancellationToken ct) => throw new NotImplementedException();
             public Task<Result> DeleteAsync(string id, IUnitOfWork uow, CancellationToken ct) => throw new NotImplementedException();
             public Task<Result<PagedResult<Source>>> ListAsync(int page, int size, CancellationToken ct) => throw new NotImplementedException();
+            public Task<Result<IReadOnlyList<Source>>> ListEnabledAsync(CancellationToken ct) =>
+                Task.FromResult(Result.Success<IReadOnlyList<Source>>(_source is { Enabled: true } ? [_source] : []));
         }
 
         private sealed class FakeEventService : IEventService

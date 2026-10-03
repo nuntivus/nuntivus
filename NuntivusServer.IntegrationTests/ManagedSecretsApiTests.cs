@@ -62,7 +62,8 @@ namespace NuntivusServer.IntegrationTests
             var contract = await _client.PostAsJsonAsync("/v1/contracts", new CreateContractRequest(
                 "acme", new[] { "orders.created" },
                 new NatsDestinationConfig("nats://localhost:4222", "orders.created",
-                    Credentials: new NatsCredentials(Token: new DestinationCredential("ref", "secret.acme.token")))));
+                    Credentials: new NatsCredentials(Token: new DestinationCredential("ref", "secret.acme.token"))),
+                SourceIds: [ContractsApiFixture.SourceId]));
             Assert.Equal(HttpStatusCode.Created, contract.StatusCode);
 
             var conflict = await _client.DeleteAsync("/v1/admin/secrets/secret.acme.token");
@@ -109,7 +110,7 @@ namespace NuntivusServer.IntegrationTests
             var contract = Contract.Create("acme", new[] { "orders.created" }, null, null,
                 new Destination(NuntivusServer.Domain.Contracts.DestinationType.Nats,
                     "{\"Credentials\":{\"Token\":{\"Kind\":\"ref\",\"Value\":\"secret.acme.concurrent\"}}}"),
-                DateTimeOffset.UtcNow);
+                DateTimeOffset.UtcNow, sourceIds: [ContractsApiFixture.SourceId]);
             (await new PostgresContractRepository(factory).InsertAsync(contract, uow, CancellationToken.None)).EnsureSuccess();
 
             var deleteTask = new PostgresManagedSecretRepository(factory).DeleteAsync(name, CancellationToken.None);
@@ -144,7 +145,7 @@ namespace NuntivusServer.IntegrationTests
             var contract = Contract.Create("acme", new[] { "orders.created" }, null, null,
                 new Destination(NuntivusServer.Domain.Contracts.DestinationType.Nats,
                     "{\"Credentials\":{\"Token\":{\"Kind\":\"ref\",\"Value\":\"secret.acme.removed\"}}}"),
-                DateTimeOffset.UtcNow);
+                DateTimeOffset.UtcNow, sourceIds: [ContractsApiFixture.SourceId]);
             var saveTask = new PostgresContractRepository(factory).InsertAsync(contract, uow, CancellationToken.None);
             await Task.Delay(150);
             Assert.False(saveTask.IsCompleted);

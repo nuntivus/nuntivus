@@ -782,7 +782,9 @@ namespace NuntivusServer.Application.Contracts
                 if (lookup.IsFailure) return Result.Failure(lookup.Errors);
                 if (lookup.Value is null)
                     return Result.Failure(Error.NotFound($"Source '{id}' was not found."));
-                if (!existingIds.Contains(id) && (!lookup.Value.Enabled || lookup.Value.Type != SourceType.HTTP_API))
+                if (!existingIds.Contains(id) && (!lookup.Value.Enabled ||
+                    lookup.Value.Type is not (SourceType.HTTP_API or SourceType.RABBITMQ or SourceType.KAFKA or
+                        SourceType.SQS or SourceType.NATS or SourceType.HTTP_POLLING or SourceType.FOLDER or SourceType.S3)))
                     return Result.Failure(Error.Validation($"Source '{id}' is not an enabled, operational Source."));
             }
             return Result.Success();

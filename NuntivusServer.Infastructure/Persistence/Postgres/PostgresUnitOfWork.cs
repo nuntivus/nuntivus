@@ -21,22 +21,20 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
 
         public void Rollback()
         {
-            if (_transaction != null)
-            {
-                _transaction.Rollback();
-            }
+            try { _transaction?.Rollback(); }
+            finally { Close(); }
         }
 
         public void Commit()
         {
-            if (_transaction != null)
-            {
-                _transaction.Commit();
-            }
+            try { _transaction?.Commit(); }
+            finally { Close(); }
         }
 
         public void Begin(bool inTransaction = true)
         {
+            if (_connection != null)
+                throw new InvalidOperationException("Unit of work is already open.");
             _connection = _connectionFactory.CreateConnection();
             _connection.Open();
 
@@ -58,8 +56,15 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
 
         public void Dispose()
         {
+            Close();
+        }
+
+        private void Close()
+        {
             _transaction?.Dispose();
+            _transaction = null;
             _connection?.Dispose();
+            _connection = null;
         }
     }
 }

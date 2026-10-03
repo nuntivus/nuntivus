@@ -30,6 +30,7 @@ using NuntivusServer.Infastructure.Persistence.Postgres;
 using NuntivusServer.Infastructure.Persistence.Postgres.Migrations;
 using NuntivusServer.Infastructure.Security;
 using NuntivusServer.Domain.Deliveries;
+using NuntivusServer.Domain.Sources;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -341,6 +342,13 @@ builder.Services.AddScoped<IEventDefinitionRepository>(sp => new CachedEventDefi
 builder.Services.AddScoped<IEventService, EventService>();
 builder.Services.AddScoped<IEventQueryService, EventQueryService>();
 builder.Services.AddScoped<ISourceAdapter, HttpApiSourceAdapter>();
+builder.Services.AddSingleton<ISourceConfigurationHandler, HttpSourceConfigurationHandler>();
+foreach (var type in new[] { SourceType.RABBITMQ, SourceType.KAFKA, SourceType.SQS, SourceType.NATS,
+    SourceType.HTTP_POLLING, SourceType.FOLDER, SourceType.S3 })
+{
+    builder.Services.AddSingleton<ISourceConfigurationHandler>(new PullSourceConfigurationHandler(type));
+}
+builder.Services.AddSingleton<ISourceConfigurationRegistry, SourceConfigurationRegistry>();
 builder.Services.AddScoped<ISourceAdapterRegistry, SourceAdapterRegistry>();
 builder.Services.AddScoped<ISourceIngestionService, SourceIngestionService>();
 builder.Services.AddScoped<ISourceService, SourceService>();

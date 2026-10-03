@@ -12,9 +12,11 @@ import {
 import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { FieldErrorText } from '../components/forms/form-feedback'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
 import { RetryIcon } from '../components/icons/nav-icons'
+import { deliveryIdError } from '../features/deliveries/delivery-filter-validation'
 import { DetailAction, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
 import {
   useFailedDeliveriesQuery,
@@ -59,6 +61,7 @@ export function FailedDeliveriesPage() {
 
   const [customerIdInput, setCustomerIdInput] = useState(customerIdParam)
   const [contractIdInput, setContractIdInput] = useState(contractIdParam)
+  const [contractIdError, setContractIdError] = useState<string | null>(null)
   const [failureCategoryInput, setFailureCategoryInput] = useState(failureCategoryParam)
   const [retryReason, setRetryReason] = useState('')
   const [confirmDeliveryId, setConfirmDeliveryId] = useState<string | null>(null)
@@ -86,12 +89,16 @@ export function FailedDeliveriesPage() {
     ],
   )
 
-  const failedQuery = useFailedDeliveriesQuery(query)
+  const failedQuery = useFailedDeliveriesQuery(query, !deliveryIdError(contractIdParam, 'Contract ID'))
 
   const activeRetryMutation = useRetryDeliveryMutation(confirmDeliveryId ?? '')
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    const error = deliveryIdError(contractIdInput, 'Contract ID')
+    setContractIdError(error)
+    if (error) return
 
     updateParams({
       customerId: customerIdInput.trim() || null,
@@ -187,10 +194,13 @@ export function FailedDeliveriesPage() {
               />
               <TextField.Root
                 aria-label="Contract ID"
+                aria-invalid={!!contractIdError}
+                aria-describedby={contractIdError ? 'failed-contract-id-error' : undefined}
                 placeholder="Contract ID"
                 value={contractIdInput}
-                onChange={(event) => setContractIdInput(event.target.value)}
+                onChange={(event) => { setContractIdInput(event.target.value); setContractIdError(null) }}
               />
+              <FieldErrorText id="failed-contract-id-error" message={contractIdError} />
               <TextField.Root
                 aria-label="Failure type or category"
                 placeholder="Failure type/category"
@@ -230,6 +240,7 @@ export function FailedDeliveriesPage() {
                 onClick={() => {
                   setCustomerIdInput('')
                   setContractIdInput('')
+                  setContractIdError(null)
                   setFailureCategoryInput('')
                   setSearchParams(new URLSearchParams())
                 }}

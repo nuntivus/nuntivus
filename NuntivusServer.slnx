@@ -8,6 +8,9 @@
     <File Path="migration/002_create_delivery_attempts.sql" />
     <File Path="migration/003_create_secrets.sql" />
     <File Path="migration/004_version_managed_secrets.sql" />
+    <File Path="migration/005_create_sources.sql" />
+    <File Path="migration/006_contract_sources.sql" />
+    <File Path="migration/007_source_ingestion_state.sql" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path="../../../Desktop/AI_CONTEXT.md" />

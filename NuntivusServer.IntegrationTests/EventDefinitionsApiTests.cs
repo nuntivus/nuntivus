@@ -87,6 +87,22 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Definition_detail_remains_available_after_related_contract_query()
+        {
+            var created = await _client.PostAsJsonAsync("/v1/event-definitions",
+                new CreateEventDefinitionRequest("order.created", "Order Created", null));
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                Assert.Equal(HttpStatusCode.OK,
+                    (await _client.GetAsync("/v1/event-definitions/order.created")).StatusCode);
+                Assert.Equal(HttpStatusCode.OK,
+                    (await _client.GetAsync("/v1/admin/contracts?eventType=order.created&page=1&pageSize=20&sortBy=updatedAt&sortDirection=desc")).StatusCode);
+            }
+        }
+
+        [Fact]
         public async Task GetByEventType_missing_returns_404()
         {
             var resp = await _client.GetAsync("/v1/event-definitions/missing.type");
@@ -180,12 +196,14 @@ namespace NuntivusServer.IntegrationTests
             await _client.PostAsJsonAsync("/v1/event-definitions",
                 new CreateEventDefinitionRequest("orders.updated", "Order Updated", null));
 
-            await _client.PostAsJsonAsync(
+            var draftV1 = await _client.PostAsJsonAsync(
                 "/v1/event-definitions/orders.updated/schemas",
                 new CreateEventSchemaVersionRequest(1, "{}", SchemaCompatibilityMode.Backward));
-            await _client.PostAsJsonAsync(
+            Assert.Equal(HttpStatusCode.Created, draftV1.StatusCode);
+            var draftV2 = await _client.PostAsJsonAsync(
                 "/v1/event-definitions/orders.updated/schemas",
                 new CreateEventSchemaVersionRequest(2, "{}", SchemaCompatibilityMode.Forward));
+            Assert.Equal(HttpStatusCode.Created, draftV2.StatusCode);
 
             var activateV1 = await _client.PostAsync("/v1/event-definitions/orders.updated/schemas/1/activate", content: null);
             Assert.Equal(HttpStatusCode.OK, activateV1.StatusCode);
@@ -208,9 +226,10 @@ namespace NuntivusServer.IntegrationTests
             await _client.PostAsJsonAsync("/v1/event-definitions",
                 new CreateEventDefinitionRequest("orders.cancelled", "Order Cancelled", null));
 
-            await _client.PostAsJsonAsync(
+            var draft = await _client.PostAsJsonAsync(
                 "/v1/event-definitions/orders.cancelled/schemas",
                 new CreateEventSchemaVersionRequest(1, "{}", SchemaCompatibilityMode.Backward));
+            Assert.Equal(HttpStatusCode.Created, draft.StatusCode);
 
             var deprecateResp = await _client.PostAsync("/v1/event-definitions/orders.cancelled/schemas/1/deprecate", content: null);
             Assert.Equal(HttpStatusCode.OK, deprecateResp.StatusCode);

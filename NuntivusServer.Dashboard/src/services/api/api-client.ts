@@ -203,12 +203,16 @@ export function getApiErrorMessage(error: unknown, fallback = 'Request failed') 
   }
 }
 
-function publishApiError(message: string) {
+function publishApiError(message: string, route: string, request: string) {
   window.dispatchEvent(
     new CustomEvent('nuntivus:api-error', {
-      detail: { message },
+      detail: { message, route, request },
     }),
   )
+}
+
+function publishApiRecovery(route: string, request: string) {
+  window.dispatchEvent(new CustomEvent('nuntivus:api-recovered', { detail: { route, request } }))
 }
 
 function publishUnauthorized() {
@@ -249,6 +253,8 @@ async function apiRequest<TResponse>(
   options?: ApiMutationOptions,
 ): Promise<ApiResponse<TResponse>> {
   const token = options?.token ?? getStoredToken()
+  const route = window.location.pathname + window.location.search
+  const request = `${method} ${path}`
 
   let response: Response
 
@@ -270,7 +276,8 @@ async function apiRequest<TResponse>(
     }
 
     const apiError = new ApiError('Network error while contacting API', 0)
-    publishApiError(getApiErrorMessage(apiError, 'Network error while contacting API'))
+    if (method !== 'GET')
+      publishApiError(getApiErrorMessage(apiError, 'Network error while contacting API'), route, request)
     throw apiError
   }
 
@@ -284,14 +291,16 @@ async function apiRequest<TResponse>(
     }
 
     if (
-      response.status !== 401 &&
+      method !== 'GET' && response.status >= 500 &&
       !options?.suppressErrorStatuses?.includes(response.status)
     ) {
-      publishApiError(getApiErrorMessage(apiError, `Request failed (${response.status})`))
+      publishApiError(getApiErrorMessage(apiError, `Request failed (${response.status})`), route, request)
     }
 
     throw apiError
   }
+
+  if (method !== 'GET') publishApiRecovery(route, request)
 
   return {
     data: body as TResponse,

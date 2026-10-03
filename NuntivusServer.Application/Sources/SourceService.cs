@@ -13,14 +13,16 @@ namespace NuntivusServer.Application.Sources
         private readonly IAuditLogRepository _audits;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IAppLogger<SourceService> _logger;
+        private readonly ISourceConfigurationRegistry _configurations;
 
         public SourceService(ISourceRepository sources, IAuditLogRepository audits, IUnitOfWork unitOfWork,
-            IAppLogger<SourceService> logger)
+            IAppLogger<SourceService> logger, ISourceConfigurationRegistry configurations)
         {
             _sources = sources;
             _audits = audits;
             _unitOfWork = unitOfWork;
             _logger = logger;
+            _configurations = configurations;
         }
 
         public async Task<Result<Source>> CreateAsync(string name, string type, string configuration,
@@ -28,14 +30,14 @@ namespace NuntivusServer.Application.Sources
         {
             if (!Enum.TryParse<SourceType>(type, true, out var sourceType) || !Enum.IsDefined(sourceType))
                 return Result.Failure<Source>(Error.Validation("Unknown Source type."));
-            if (sourceType != SourceType.HTTP_API)
+            if (!_configurations.IsOperational(sourceType))
                 return Result.Failure<Source>(Error.Validation($"Source type '{sourceType}' is not operational."));
             if (string.IsNullOrWhiteSpace(name) || name.Length > 200)
                 return Result.Failure<Source>(Error.Validation("Source name must contain 1-200 characters."));
             if (description?.Length > 1000)
                 return Result.Failure<Source>(Error.Validation("Source description is too long."));
 
-            var config = HttpSourceConfigurationValidator.Normalize(configuration);
+            var config = _configurations.Normalize(sourceType, configuration);
             if (config.IsFailure) return Result<Source>.Fail(config.Errors);
             var source = Source.Create(Guid.NewGuid().ToString("D"), name, sourceType,
                 config.Value, true, description);
@@ -66,9 +68,7 @@ namespace NuntivusServer.Application.Sources
             if (existing.IsFailure) return existing;
             if (string.IsNullOrWhiteSpace(name) || name.Length > 200 || description?.Length > 1000)
                 return Result.Failure<Source>(Error.Validation("Source name or description is invalid."));
-            if (existing.Value.Type != SourceType.HTTP_API)
-                return Result.Failure<Source>(Error.Validation("Source type is not operational."));
-            var config = HttpSourceConfigurationValidator.Normalize(configuration);
+            var config = _configurations.Normalize(existing.Value.Type, configuration);
             if (config.IsFailure) return Result<Source>.Fail(config.Errors);
             var source = existing.Value;
             source.Update(name, description, config.Value, DateTimeOffset.UtcNow);

@@ -9,6 +9,7 @@ using Dapper;
 using NuntivusServer.Api.Common;
 using NuntivusServer.Api.Controllers.Events;
 using NuntivusServer.Api.Controllers.Sources;
+using NuntivusServer.Domain.Deliveries;
 using NuntivusServer.Domain.Outbox;
 using Npgsql;
 
@@ -369,10 +370,11 @@ namespace NuntivusServer.IntegrationTests
             await InsertAttemptAsync(firstDeliveryId, 1, succeeded: false, "Transient", "timeout", now.AddMinutes(-8), now.AddMinutes(-8).AddSeconds(3));
             await InsertAttemptAsync(firstDeliveryId, 2, succeeded: false, "Permanent", "bad request", now.AddMinutes(-7), now.AddMinutes(-7).AddSeconds(3));
 
+            var secondContractId = await InsertContractAsync(customerId, now.AddMinutes(-19));
             await InsertDeliveryAsync(
                 Guid.NewGuid(),
                 eventId,
-                contractId,
+                secondContractId,
                 customerId,
                 status: "Delivered",
                 attemptCount: 1,
@@ -394,7 +396,7 @@ namespace NuntivusServer.IntegrationTests
             Assert.Equal(2, body.Deliveries.Count);
 
             var failedDelivery = Assert.Single(body.Deliveries, d => d.Id == firstDeliveryId);
-            Assert.Equal("Failed", failedDelivery.Status);
+            Assert.Equal(DeliveryStatus.Failed, failedDelivery.Status);
             Assert.Equal(2, failedDelivery.AttemptSummary.TotalAttempts);
             Assert.Equal("Permanent", failedDelivery.LatestFailure!.FailureCategory);
         }
@@ -538,6 +540,21 @@ namespace NuntivusServer.IntegrationTests
             Assert.Equal(2L, body!.TotalCount);
         }
 
+        [Theory]
+        [InlineData("sortBy=receivedAt&sortDirection=desc&page=1&pageSize=20")]
+        [InlineData("page=1&pageSize=6")]
+        public async Task Dashboard_event_lists_return_data_without_deliveries(string query)
+        {
+            var id = await InsertEventAsync(Guid.NewGuid(), "orders.created", DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow, "{}", "{}");
+
+            var response = await _client.GetAsync($"/v1/events?{query}");
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var page = await response.Content.ReadFromJsonAsync<PagedResponse<EventQueryDto>>();
+            Assert.Contains(page!.Items, item => item.Id == id);
+        }
+
         private async Task<string> CreateSourceAsync()
         {
             var response = await _client.PostAsJsonAsync("/v1/sources", new
@@ -613,8 +630,8 @@ namespace NuntivusServer.IntegrationTests
 
             await conn.ExecuteAsync(
                 """
-                INSERT INTO customers(id, display_name, created_at, updated_at)
-                VALUES (@id, @displayName, @createdAt, @updatedAt);
+                INSERT INTO customers(id, name, enabled, created_at, updated_at)
+                VALUES (@id, @displayName, TRUE, @createdAt, @updatedAt);
                 """,
                 new
                 {
@@ -636,8 +653,8 @@ namespace NuntivusServer.IntegrationTests
 
             await conn.ExecuteAsync(
                 """
-                INSERT INTO contracts(id, customer_id, event_type, destination_type, destination_config, is_active, created_at, updated_at)
-                VALUES (@id, @customerId, 'orders.created', 'http', '{"url":"https://example.test/hook"}'::jsonb, TRUE, @createdAt, @updatedAt);
+                INSERT INTO contracts(id, customer_id, destination_type, destination_config, enabled, created_at, updated_at)
+                VALUES (@id, @customerId, 'Http', '{"Url":"https://example.test/hook"}'::jsonb, TRUE, @createdAt, @updatedAt);
                 """,
                 new
                 {
@@ -689,8 +706,8 @@ namespace NuntivusServer.IntegrationTests
                     @customerId,
                     'orders.created',
                     '{"orderId":"x"}'::jsonb,
-                    'http',
-                    '{"url":"https://example.test/hook"}'::jsonb,
+                    'Http',
+                    '{"Url":"https://example.test/hook"}'::jsonb,
                     @status,
                     @attemptCount,
                     @lastError,
@@ -778,7 +795,7 @@ namespace NuntivusServer.IntegrationTests
             string CustomerId,
             Guid ContractId,
             string EventType,
-            string Status,
+            DeliveryStatus Status,
             int AttemptCount,
             string? LastError,
             DateTimeOffset? NextAttemptAt,

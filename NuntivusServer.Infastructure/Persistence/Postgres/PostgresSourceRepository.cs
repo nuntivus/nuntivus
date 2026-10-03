@@ -53,6 +53,10 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     """;
                 var rows = await unitOfWork.GetConnection()!.ExecuteAsync(new CommandDefinition(sql, Parameters(source),
                     unitOfWork.GetTransaction(), cancellationToken: cancellationToken));
+                if (rows != 0)
+                    await unitOfWork.GetConnection()!.ExecuteAsync(new CommandDefinition(
+                        "UPDATE source_ingestion_leases SET expires_at = now() WHERE source_id = @Id",
+                        new { Id = Guid.Parse(source.Id.Value) }, unitOfWork.GetTransaction(), cancellationToken: cancellationToken));
                 return rows == 0 ? Result.Failure(Error.NotFound($"Source '{source.Id}' was not found.")) : Result.Success();
             }
             catch (Exception ex) { return Result.Failure(ex); }
@@ -106,6 +110,19 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 return Result.Success(PagedResult<Source>.Create(rows.Select(row => row.ToDomain()).ToList(), page, pageSize, count));
             }
             catch (Exception ex) { return Result.Failure<PagedResult<Source>>(ex); }
+        }
+
+        public async Task<Result<IReadOnlyList<Source>>> ListEnabledAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await using var connection = (NpgsqlConnection)_connectionFactory.CreateConnection();
+                var rows = await connection.QueryAsync<SourceRow>(new CommandDefinition(
+                    "SELECT id, name, description, type, enabled, configuration::text AS configuration, created_at, updated_at FROM sources WHERE enabled ORDER BY id",
+                    cancellationToken: cancellationToken));
+                return Result.Success<IReadOnlyList<Source>>(rows.Select(row => row.ToDomain()).ToArray());
+            }
+            catch (Exception ex) { return Result.Failure<IReadOnlyList<Source>>(ex); }
         }
 
         private static object Parameters(Source source) => new

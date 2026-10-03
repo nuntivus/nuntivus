@@ -70,10 +70,8 @@ export function useDeleteAdminUserMutation() {
   return useMutation({
     mutationFn: (subject: string) => deleteAdminUser(subject),
     onSuccess: async (_, subject) => {
-      await invalidateQueryKeys(queryClient, [
-        ['admin', 'users'],
-        ['admin', 'users', subject],
-      ])
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'users'], exact: true })
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'users', subject], exact: true, refetchType: 'none' })
     },
   })
 }

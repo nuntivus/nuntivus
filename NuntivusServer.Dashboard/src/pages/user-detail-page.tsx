@@ -163,7 +163,7 @@ export function UserDetailPage() {
             try {
               await deleteMutation.mutateAsync(subject)
               notifications.success('User deleted.', 'User detail')
-              navigate('/users')
+              navigate('/users', { replace: true })
             } catch (error) {
               notifications.error(getApiErrorMessage(error, 'Unable to delete user.'), 'User detail')
             }

@@ -375,7 +375,8 @@ namespace NuntivusServer.Application.Contracts.Destinations
                         "Destination authentication.credential.value must be a reference like 'secret.<path>' or 'protected.<payload>' when kind is 'ref'."));
                 }
 
-                return Result.Success(new HttpAuthentication(authType, new HttpCredential("ref", credentialValue!)));
+                return Result.Success(new HttpAuthentication(authType,
+                    new HttpCredential("ref", credentialValue!, credential.Version, credential.Previous)));
             }
 
             if (credentialKind == "inline")

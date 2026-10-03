@@ -10,5 +10,6 @@ namespace NuntivusServer.Application.Persistence
         Task<Result> DeleteAsync(string id, IUnitOfWork unitOfWork, CancellationToken cancellationToken);
         Task<Result<Source?>> GetByIdAsync(string id, CancellationToken cancellationToken);
         Task<Result<PagedResult<Source>>> ListAsync(int page, int pageSize, CancellationToken cancellationToken);
+        Task<Result<IReadOnlyList<Source>>> ListEnabledAsync(CancellationToken cancellationToken);
     }
 }

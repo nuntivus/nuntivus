@@ -8,11 +8,12 @@ import { useSourceDetailQuery } from '../features/sources/use-sources'
 import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { Source } from '../services/api/sources-api'
+import { sourceFields } from '../features/sources/source-types'
 
 function HttpSourceDetails({ source }: { source: Source }) {
   const notifications = useNotifications()
   const endpoint = `${frontendConfig.apiBaseUrl}/v1/sources/${source.id}/events`
-  const tokenRequired = source.configuration.authentication.type === 'token'
+  const tokenRequired = source.configuration.authentication?.type === 'token'
   const example = [
     `curl -X POST '${endpoint}' \\`,
     "  -H 'Content-Type: application/json' \\",
@@ -39,7 +40,7 @@ function HttpSourceDetails({ source }: { source: Source }) {
         <Button size="1" variant="soft" onClick={() => void copy(endpoint, 'Endpoint')}><CopyIcon /> Copy endpoint</Button>
       </Flex>
       <Text size="2">Authentication: {tokenRequired ? 'Token (X-Nuntivus-Source-Token header)' : 'None'}</Text>
-      {tokenRequired && <Text size="2">Managed secret reference: {source.configuration.authentication.secretRef ?? 'Not configured'}. Send the secret’s value as the token, not its reference name. The value is never displayed here.</Text>}
+      {tokenRequired && <Text size="2">Managed secret reference: {source.configuration.authentication?.secretRef ?? 'Not configured'}. Send the secret’s value as the token, not its reference name. The value is never displayed here.</Text>}
     </Flex></Card>
     <Card><Flex direction="column" gap="3">
       <Heading size="4">Example request (curl, Bash)</Heading>
@@ -79,5 +80,11 @@ export function SourceDetailPage() {
       <Text size="2"><strong>Last updated:</strong> {new Date(source.updatedAt).toLocaleString()}</Text>
     </Flex></Card>
     {source.type === 'HTTP_API' && <HttpSourceDetails source={source} />}
+    {sourceFields[source.type] && <Card><Flex direction="column" gap="2">
+      <Heading size="4">{source.type} consumer</Heading>
+      <Text size="2" color="gray">The Worker reads canonical JSON event envelopes from this Source. There is no inbound HTTP endpoint for this type.</Text>
+      {sourceFields[source.type].map((field) => source.configuration[field] != null &&
+        <Text key={field} size="2"><strong>{field}:</strong> {field === 'secretRef' ? String(source.configuration[field]) : String(source.configuration[field])}</Text>)}
+    </Flex></Card>}
   </Flex>
 }

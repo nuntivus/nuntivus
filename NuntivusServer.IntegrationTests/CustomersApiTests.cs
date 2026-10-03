@@ -131,6 +131,21 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Newly_created_customer_detail_is_available_repeatedly()
+        {
+            var created = await _client.PostAsJsonAsync("/v1/customers",
+                new CreateCustomerRequest("audit-detail", "Audit Detail"));
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                var response = await _client.GetAsync("/v1/customers/audit-detail");
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                Assert.Equal("Audit Detail", (await response.Content.ReadFromJsonAsync<CustomerView>())!.Name);
+            }
+        }
+
+        [Fact]
         public async Task GetById_missing_returns_404()
         {
             var resp = await _client.GetAsync("/v1/customers/missing");
@@ -145,7 +160,7 @@ namespace NuntivusServer.IntegrationTests
         public async Task List_returns_paginated_results_with_defaults()
         {
             for (var i = 0; i < 3; i++)
-                await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest($"c{i}", $"Cust {i}"));
+                await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest($"cust{i}", $"Cust {i}"));
 
             var resp = await _client.GetAsync("/v1/customers");
             Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
@@ -163,7 +178,7 @@ namespace NuntivusServer.IntegrationTests
         public async Task List_with_custom_paging_returns_page_slice()
         {
             for (var i = 0; i < 5; i++)
-                await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest($"p{i}", $"P {i}"));
+                await _client.PostAsJsonAsync("/v1/customers", new CreateCustomerRequest($"page{i}", $"P {i}"));
 
             var resp = await _client.GetAsync("/v1/customers?page=2&pageSize=2");
             var body = await resp.Content.ReadFromJsonAsync<PagedResponse<CustomerView>>();

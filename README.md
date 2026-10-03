@@ -207,11 +207,11 @@ object `payload`, and optional JSON object `metadata` containing only string
 `traceId` or `correlationId` fields. The previous direct event publish and
 generic webhook routes are not part of the managed ingestion API.
 
-HTTP is a push adapter; no permanent Source worker is required. Kafka, SQS,
-HTTP polling, and folder are defined as future Source types, **not** operational
-consumers and cannot be created via the management API. Future active adapters
-should run in independently cancellable `BackgroundService` workers and call the
-same canonical ingestion service. External messages must only be ACKed after
+HTTP is a push adapter; no permanent Source worker is required. Managed pull
+Sources include RabbitMQ, Kafka, SQS, external NATS JetStream, HTTPS polling,
+folder and S3. The Worker supervises enabled Sources with PostgreSQL leases;
+ensure it is deployed and can reach each configured endpoint. External messages
+must only be ACKed after
 the event and its outbox entry commit, not when a message is received. Delivery
 is at least once: a process can fail between commit and external ACK, causing
 redelivery. `(sourceId, idempotencyKey)` identifies duplicates; adapters should
@@ -219,6 +219,49 @@ derive stable idempotency keys from upstream message IDs or offsets. No Source
 adapter changes routing, contracts, or destination processing.
 
 Sources exist to bring business events into Nuntivus.
+
+### Planned inbound connector contract
+
+Broker messages and polled documents use one UTF-8 JSON envelope:
+`{"idempotencyKey":"unique-upstream-id","type":"orders.created","payload":{"orderId":"123"},"timestamp":"2026-01-01T00:00:00Z","metadata":{"traceId":"trace-1"}}`.
+`idempotencyKey`, `type`, and the object `payload` are required. `timestamp` is
+optional (receipt time is used when absent); `metadata` permits only string
+`traceId` and `correlationId`. A transport may derive a stable idempotency key
+from its immutable message identity when the envelope omits one, but never
+from the delivery attempt or receipt handle. One document/message contains one
+envelope; mapping arbitrary JSON fields is not supported.
+
+Connectors must not acknowledge, delete, commit an offset, or advance a cursor
+until the event and its outbox record are committed (including deduplicated
+acceptance). Transient failures are retried with bounded backoff. Invalid
+messages remain visible and require an explicitly configured dead-letter or
+operator intervention; a failure must not silently advance progress. Kafka
+uses a stable consumer group and partition offsets, RabbitMQ manual ACKs,
+SQS visibility timeouts and delete-on-success, and external NATS a durable
+JetStream consumer separate from the internal stream. HTTP polling needs an
+explicit cursor/page contract, bounded schedule and response size. Folder
+scans are confined to a configured mounted root; S3 scans are confined to a
+bucket/prefix and track object version or ETag. Folder and S3 inputs are not
+deleted by default. Multiple worker replicas need exclusive fenced claims for
+poll/cursor/file workloads and transport-native ownership for broker workloads.
+
+For pull Sources configure only the fields for that type: RabbitMQ `uri`
+(`amqps://`) and `queue`; Kafka `bootstrapServers`, `topic`, `groupId`;
+SQS `region`, `queueUrl`; NATS `url` (`tls://`), `stream`, `subject`, `durable`;
+HTTP polling `url` (`https://`); folder `path`; S3 `region`, `bucket`, `prefix`.
+Optional `secretRef` refers to a managed secret; RabbitMQ/Kafka can also set
+`username`; SQS/S3 can use role credentials or paired `accessKeyId` and
+`secretRef`. Polling/folder/S3 accept `intervalSeconds` (10–3600; default 30).
+Folder Sources require `Sources:FolderRoot` on every Worker replica and a
+trusted shared read-only volume beneath that root; use filesystem permissions
+to prevent symlink replacement by untrusted writers. S3 roles need `ListBucket`
+and `GetObject` for the configured prefix; SQS roles need `ReceiveMessage` and
+`DeleteMessage`. Avoid configuring the same external NATS stream/durable as
+Nuntivus's internal JetStream pipeline. Monitor Worker errors, Source lease
+renewals, queue lag and poison messages; invalid input is retained for operator
+action rather than silently discarded. PostgreSQL-backed integration tests need
+Docker/Testcontainers. `migration/007_source_ingestion_state.sql` is required
+before starting the Worker with pull Sources.
 
 Nuntivus is not intended to become a general-purpose integration or anything-to-anything routing platform.
 

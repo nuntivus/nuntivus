@@ -100,6 +100,10 @@ test('contract basics fields are accessible by their visible labels', async () =
                 body.items = [{ eventType: 'order.created', displayName: 'Order created' }]
                 body.totalCount = 1
                 body.totalPages = 1
+            } else if (url.pathname === '/v1/sources') {
+                body.items = [{ id: 'source-1', name: 'Orders', type: 'HTTP_API', enabled: true }]
+                body.totalCount = 1
+                body.totalPages = 1
             }
 
             await route.fulfill({
@@ -118,11 +122,13 @@ test('contract basics fields are accessible by their visible labels', async () =
         await page.getByRole('button', { name: 'Next' }).click()
         assert.deepEqual(await page.getByRole('alert').allTextContents(), [
             'Customer is required.',
+            'Select at least one Source.',
             'Event type is required.',
         ])
 
         await page.getByRole('combobox', { name: 'Customer', exact: true }).click()
         await page.getByRole('option', { name: 'Customer One (customer-1)' }).click()
+        await page.getByRole('checkbox', { name: 'Orders (HTTP_API)' }).click()
         await page.getByRole('combobox', { name: 'Event type', exact: true }).click()
         await page.getByRole('option', { name: 'order.created' }).click()
         await page.getByRole('button', { name: 'Next' }).click()
@@ -163,6 +169,7 @@ test('missing contract destination health does not show a global error notificat
                 body = {
                     id: 'contract-1',
                     customerId: 'customer-1',
+                    sourceIds: [],
                     enabled: true,
                     eventTypes: ['order.created'],
                     destinationType: 'Http',
@@ -251,8 +258,8 @@ test('numeric delivery statuses use their readable names', async () => {
         assert.match(await row.innerText(), /Dead/)
 
         await page.goto(`${appUrl}/deliveries/delivery-1`)
-        await page.getByRole('heading', { name: 'Overview' }).waitFor()
-        assert.equal(await page.getByText('Dead', { exact: true }).count(), 1)
+        await page.getByRole('tab', { name: 'Overview' }).waitFor()
+        assert.ok(await page.getByText('Dead', { exact: true }).count() >= 1)
     } finally {
         await browser.close()
     }

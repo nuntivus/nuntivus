@@ -7,12 +7,13 @@ export interface Source {
   description: string | null
   type: string
   enabled: boolean
-  configuration: { authentication: { type: 'none' | 'token'; secretRef?: string } }
+  configuration: Record<string, unknown> & { authentication?: { type: 'none' | 'token'; secretRef?: string } }
   createdAt: string
   updatedAt: string
 }
 
 export interface SourceInput {
+  type?: string
   name: string
   description: string | null
   configuration: Source['configuration']
@@ -38,7 +39,7 @@ export async function listAllSources(options?: ApiRequestOptions) {
 }
 
 export function createSource(input: SourceInput) {
-  return apiPost<Source>('/v1/sources', { ...input, type: 'HTTP_API' })
+  return apiPost<Source>('/v1/sources', { ...input, type: input.type ?? 'HTTP_API' })
 }
 
 export function updateSource(id: string, input: SourceInput) {

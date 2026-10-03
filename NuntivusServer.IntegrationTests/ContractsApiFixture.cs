@@ -17,6 +17,7 @@ namespace NuntivusServer.IntegrationTests
     /// </summary>
     public sealed class ContractsApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
     {
+        public static readonly Guid SourceId = Guid.Parse("b58d1e9e-9035-4e4a-9876-6b661159720e");
         private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
             .WithImage("postgres:16-alpine")
             .WithDatabase("nuntivus_it")
@@ -45,6 +46,11 @@ namespace NuntivusServer.IntegrationTests
             // contract_event_types cascades from contracts; contracts cascades from customers.
             await conn.ExecuteAsync("TRUNCATE TABLE customers CASCADE;");
             await conn.ExecuteAsync("TRUNCATE TABLE managed_secrets CASCADE;");
+            await conn.ExecuteAsync("TRUNCATE TABLE sources CASCADE;");
+            await conn.ExecuteAsync("""
+                INSERT INTO sources (id, name, type, enabled, configuration, created_at, updated_at)
+                VALUES (@Id, 'Integration source', 'HTTP_API', true, '{"authentication":{"type":"none"}}'::jsonb, now(), now())
+                """, new { Id = SourceId });
             await conn.ExecuteAsync("TRUNCATE TABLE event_schema_versions, event_definitions;");
             await conn.ExecuteAsync("TRUNCATE TABLE audit_logs;");
             await ManagedSecretTestSeed.SeedAsync(conn,

@@ -15,6 +15,7 @@
         RABBITMQ,
         SQS,
         HTTP_POLLING,
-        FOLDER
+        FOLDER,
+        S3
     }
 }

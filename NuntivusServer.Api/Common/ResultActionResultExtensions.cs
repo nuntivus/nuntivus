@@ -2,6 +2,8 @@ using System;
 using NuntivusServer.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace NuntivusServer.Api.Common
 {
@@ -56,6 +58,18 @@ namespace NuntivusServer.Api.Common
             HttpContext httpContext)
         {
             var payload = ApiErrorResponse.From(errors, httpContext);
+            if (payload.Status >= StatusCodes.Status500InternalServerError)
+            {
+                var logger = httpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger(typeof(ResultActionResultExtensions));
+                foreach (var error in errors)
+                {
+                    logger.LogError(error.Exception,
+                        "Request failed for {Method} {Path} (requestId {RequestId}, correlationId {CorrelationId}): {ErrorCode}",
+                        httpContext.Request.Method, httpContext.Request.Path, httpContext.TraceIdentifier,
+                        httpContext.Request.Headers[ApiErrorResponse.CorrelationIdHeader].ToString(), error.Code);
+                }
+            }
             return new ObjectResult(payload)
             {
                 StatusCode = payload.Status

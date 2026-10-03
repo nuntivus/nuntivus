@@ -103,6 +103,7 @@ namespace NuntivusServer.IntegrationTests
             services.AddSingleton<ICacheStore, InMemoryCacheStore>();
 
             services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
+            services.AddScoped<IAuditLogRepository, PostgresAuditLogRepository>();
 
             services.AddScoped<PostgresEventRepository>();
             services.AddScoped<IEventRepository>(sp => new CachedEventRepository(

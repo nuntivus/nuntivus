@@ -36,7 +36,8 @@ namespace NuntivusServer.IntegrationTests
             await CreateCustomerAsync("acme");
             var request = new CreateContractRequest("acme", new[] { "orders.created" },
                 new NatsDestinationConfig("nats://localhost:4222", "orders.created",
-                    Credentials: new NatsCredentials(Token: new DestinationCredential("ref", "secret.acme.missing"))));
+                    Credentials: new NatsCredentials(Token: new DestinationCredential("ref", "secret.acme.missing"))),
+                SourceIds: [ContractsApiFixture.SourceId]);
 
             var response = await _client.PostAsJsonAsync("/v1/contracts", request);
 
@@ -52,7 +53,8 @@ namespace NuntivusServer.IntegrationTests
             await CreateCustomerAsync("acme");
             var createdResponse = await _client.PostAsJsonAsync("/v1/contracts", new CreateContractRequest(
                 "acme", new[] { "orders.created" },
-                new HttpDestinationConfig("https://hooks.example.com/acme", new HttpAuthentication("none"))));
+                new HttpDestinationConfig("https://hooks.example.com/acme", new HttpAuthentication("none")),
+                SourceIds: [ContractsApiFixture.SourceId]));
             Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
             var created = await createdResponse.Content.ReadFromJsonAsync<ContractCreated>();
 
@@ -63,7 +65,8 @@ namespace NuntivusServer.IntegrationTests
                 Content = JsonContent.Create(new UpdateContractRequest(
                     "Changed", originalView!.EventTypes,
                     new HttpDestinationConfig("https://hooks.example.com/acme",
-                        new HttpAuthentication("bearer", new HttpCredential("ref", "secret.acme.missing")))))
+                        new HttpAuthentication("bearer", new HttpCredential("ref", "secret.acme.missing"))),
+                    SourceIds: originalView.SourceIds))
             };
             replace.Headers.IfMatch.Add(original.Headers.ETag!);
             Assert.Equal(HttpStatusCode.BadRequest, (await _client.SendAsync(replace)).StatusCode);
@@ -92,7 +95,7 @@ namespace NuntivusServer.IntegrationTests
                     new HttpAuthentication("bearer", new HttpCredential("ref", "secret.acme.webhook"))),
                 Transformation: new ContractPayloadTransformationRequest(1,
                     new[] { new ContractPayloadFieldMappingRequest("order.id", "payload.orderId") }),
-                RateLimit: new ContractRateLimitConfig(5)));
+                RateLimit: new ContractRateLimitConfig(5), SourceIds: [ContractsApiFixture.SourceId]));
             Assert.Equal(HttpStatusCode.Created, create.StatusCode);
             var created = await create.Content.ReadFromJsonAsync<ContractCreated>();
             var get = await _client.GetAsync($"/v1/contracts/{created!.Id}");
@@ -108,7 +111,8 @@ namespace NuntivusServer.IntegrationTests
                     original.SchemaTargets.Select(t => new ContractSchemaTargetRequest(t.EventType, t.Version)).ToArray(),
                     RateLimit: original.RateLimit,
                     Transformation: new ContractPayloadTransformationRequest(1,
-                        new[] { new ContractPayloadFieldMappingRequest("order.id", "payload.orderId") })))
+                        new[] { new ContractPayloadFieldMappingRequest("order.id", "payload.orderId") }),
+                    SourceIds: original.SourceIds))
             };
             update.Headers.IfMatch.Add(get.Headers.ETag!);
             var put = await _client.SendAsync(update);
@@ -145,7 +149,8 @@ namespace NuntivusServer.IntegrationTests
                     "https://hooks.example.com/acme",
                     new HttpAuthentication("hmac", new HttpCredential("ref", "secret.acme.webhook")),
                     Headers: null,
-                    TimeoutSeconds: 30));
+                    TimeoutSeconds: 30),
+                SourceIds: [ContractsApiFixture.SourceId]);
 
         [Fact]
         public async Task Test_event_preview_and_send_target_only_selected_contract()
@@ -180,7 +185,7 @@ namespace NuntivusServer.IntegrationTests
 
             await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
             Assert.Equal(0, await conn.ExecuteScalarAsync<long>(
-                "SELECT COUNT(*) FROM events WHERE source_id = @id;", new { id = target.Id }));
+                "SELECT COUNT(*) FROM events WHERE source_id = @id;", new { id = ContractsApiFixture.SourceId }));
 
             var request = new ContractTestEventRequest(
                 "orders.created", JsonSerializer.SerializeToElement(new { orderId = "matching" }),
@@ -188,7 +193,7 @@ namespace NuntivusServer.IntegrationTests
             var acceptedPreview = await _client.PostAsJsonAsync($"/v1/contracts/{target.Id:D}/test/preview", request);
             Assert.True((await acceptedPreview.Content.ReadFromJsonAsync<ContractTestPreviewView>())!.Matches);
             Assert.Equal(0, await conn.ExecuteScalarAsync<long>(
-                "SELECT COUNT(*) FROM events WHERE source_id = @id;", new { id = target.Id }));
+                "SELECT COUNT(*) FROM events WHERE source_id = @id;", new { id = ContractsApiFixture.SourceId }));
 
             _client.DefaultRequestHeaders.Add("X-Operator-Id", "contract-test-operator");
             var sent = await _client.PostAsJsonAsync($"/v1/contracts/{target.Id:D}/test/send", request);
@@ -417,7 +422,7 @@ namespace NuntivusServer.IntegrationTests
                     PayloadRules: new[]
                     {
                         new ContractFilterRuleRequest("order.amount", ContractFilterOperator.GreaterThan, Value: "100"),
-                    }));
+                    }), SourceIds: [ContractsApiFixture.SourceId]);
 
             var createResp = await _client.PostAsJsonAsync("/v1/contracts", req);
 
@@ -449,7 +454,7 @@ namespace NuntivusServer.IntegrationTests
                 RateLimit: new ContractRateLimitConfig(
                     PerSecond: 5,
                     PerMinute: 120,
-                    Burst: 10));
+                    Burst: 10), SourceIds: [ContractsApiFixture.SourceId]);
 
             var createResp = await _client.PostAsJsonAsync("/v1/contracts", req);
 
@@ -482,7 +487,7 @@ namespace NuntivusServer.IntegrationTests
                 new HttpDestinationConfig(
                     "https://hooks.example.com/acme",
                     new HttpAuthentication("none")),
-                Ordering: new ContractOrderingConfig("order.id"));
+                Ordering: new ContractOrderingConfig("order.id"), SourceIds: [ContractsApiFixture.SourceId]);
 
             var createResp = await _client.PostAsJsonAsync("/v1/contracts", req);
 
@@ -518,7 +523,7 @@ namespace NuntivusServer.IntegrationTests
                     {
                         new ContractPayloadFieldMappingRequest("order.id", "payload.orderId"),
                         new ContractPayloadFieldMappingRequest("order.amount", "payload.amount")
-                    }));
+                    }), SourceIds: [ContractsApiFixture.SourceId]);
 
             var createResp = await _client.PostAsJsonAsync("/v1/contracts", req);
 
@@ -607,12 +612,14 @@ namespace NuntivusServer.IntegrationTests
         {
             await CreateCustomerAsync("acme");
 
-            await _client.PostAsJsonAsync("/v1/event-definitions",
+            var definition = await _client.PostAsJsonAsync("/v1/event-definitions",
                 new CreateEventDefinitionRequest("orders.created", "Order Created", null));
+            Assert.Equal(HttpStatusCode.Created, definition.StatusCode);
 
-            await _client.PostAsJsonAsync(
+            var draft = await _client.PostAsJsonAsync(
                 "/v1/event-definitions/orders.created/schemas",
                 new CreateEventSchemaVersionRequest(1, "{}", SchemaCompatibilityMode.Backward));
+            Assert.Equal(HttpStatusCode.Created, draft.StatusCode);
 
             var req = new CreateContractRequest(
                 "acme",
@@ -620,7 +627,7 @@ namespace NuntivusServer.IntegrationTests
                 new HttpDestinationConfig(
                     "https://hooks.example.com/acme",
                     new HttpAuthentication("none")),
-                new[] { new ContractSchemaTargetRequest("orders.created", 1) });
+                new[] { new ContractSchemaTargetRequest("orders.created", 1) }, SourceIds: [ContractsApiFixture.SourceId]);
 
             var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
 
@@ -651,7 +658,7 @@ namespace NuntivusServer.IntegrationTests
                 new HttpDestinationConfig(
                     "https://hooks.example.com/acme",
                     new HttpAuthentication("none")),
-                new[] { new ContractSchemaTargetRequest("orders.created", 99) });
+                new[] { new ContractSchemaTargetRequest("orders.created", 99) }, SourceIds: [ContractsApiFixture.SourceId]);
 
             var resp = await _client.PostAsJsonAsync("/v1/contracts", req);
 
@@ -720,6 +727,22 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Contract_detail_remains_available_across_repeated_requests()
+        {
+            await CreateCustomerAsync("acme");
+            var created = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme"));
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+            var contract = await created.Content.ReadFromJsonAsync<ContractCreated>();
+
+            for (var attempt = 0; attempt < 3; attempt++)
+            {
+                var response = await _client.GetAsync($"/v1/contracts/{contract!.Id}");
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                Assert.Equal(contract.Id, (await response.Content.ReadFromJsonAsync<ContractView>())!.Id);
+            }
+        }
+
+        [Fact]
         public async Task Create_with_inline_bearer_secret_persists_protected_and_get_redacts_secret()
         {
             await CreateCustomerAsync("acme");
@@ -733,7 +756,7 @@ namespace NuntivusServer.IntegrationTests
                     new HttpAuthentication("bearer", new HttpCredential("inline", inlineSecret)),
                     Headers: new Dictionary<string, string> { ["X-App"] = "nuntivus" },
                     SecretHeaders: new Dictionary<string, string> { ["X-Api-Key"] = "abc123" },
-                    TimeoutSeconds: 30));
+                    TimeoutSeconds: 30), SourceIds: [ContractsApiFixture.SourceId]);
 
             var createResp = await _client.PostAsJsonAsync("/v1/contracts", createRequest);
             Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
@@ -814,7 +837,7 @@ namespace NuntivusServer.IntegrationTests
                     new HttpDestinationConfig(
                         "https://hooks.example.com/acme",
                         new HttpAuthentication("hmac", new HttpCredential("ref", "secret.acme.v1", Version: 1)),
-                        TimeoutSeconds: 30)));
+                        TimeoutSeconds: 30), SourceIds: [ContractsApiFixture.SourceId]));
 
             Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
             var created = await createResp.Content.ReadFromJsonAsync<ContractCreated>();
@@ -1009,7 +1032,8 @@ namespace NuntivusServer.IntegrationTests
                 Filter: null,
                 Transformation: null,
                 RateLimit: new ContractRateLimitConfig(10, 60, 20),
-                Ordering: new ContractOrderingConfig("order.id"));
+                Ordering: new ContractOrderingConfig("order.id"),
+                SourceIds: [ContractsApiFixture.SourceId]);
 
             using var req = new HttpRequestMessage(HttpMethod.Put, $"/v1/contracts/{created.Id}")
             {
@@ -1066,7 +1090,8 @@ namespace NuntivusServer.IntegrationTests
             var update = new UpdateContractRequest(
                 Name: "n2",
                 EventTypes: new[] { "orders.created" },
-                Configuration: new HttpDestinationConfig("https://hooks.example.com/v2", new HttpAuthentication("none")));
+                Configuration: new HttpDestinationConfig("https://hooks.example.com/v2", new HttpAuthentication("none")),
+                SourceIds: [ContractsApiFixture.SourceId]);
 
             using var req = new HttpRequestMessage(HttpMethod.Put, $"/v1/contracts/{created.Id}")
             {

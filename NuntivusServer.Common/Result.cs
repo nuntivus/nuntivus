@@ -31,13 +31,13 @@ namespace NuntivusServer.Common
 
         public static Result Failure(string code, string message) => Failure(new Error(code, message));
         
-        public static Result Failure(Exception ex) => Failure(new Error("unexpected", "An unexpected error occurred."));
+        public static Result Failure(Exception ex) => Failure(Error.Unexpected("An unexpected error occurred.") with { Exception = ex });
 
         public static Result<T> Success<T>(T value) => Result<T>.Ok(value);
 
         public static Result<T> Failure<T>(Error error) => Result<T>.Fail(error);
 
-        public static Result<T> Failure<T>(Exception ex) => Result<T>.Fail(new Error("unexpected", "An unexpected error occurred."));
+        public static Result<T> Failure<T>(Exception ex) => Result<T>.Fail(Error.Unexpected("An unexpected error occurred.") with { Exception = ex });
 
         public static Result<T> Failure<T>(string code, string message) => Result<T>.Fail(new Error(code, message));
 
@@ -95,6 +95,8 @@ namespace NuntivusServer.Common
     /// </summary>
     public sealed record Error(string Code, string Message)
     {
+        public Exception? Exception { get; init; }
+
         public static readonly Error None = new(string.Empty, string.Empty);
 
         public static Error NotFound(string message) => new("not_found", message);
@@ -113,7 +115,7 @@ namespace NuntivusServer.Common
     public sealed class ResultFailureException : Exception
     {
         public ResultFailureException(IReadOnlyList<Error> errors)
-            : base(BuildMessage(errors))
+            : base(BuildMessage(errors), errors?.FirstOrDefault(error => error.Exception != null)?.Exception)
         {
             Errors = errors ?? [];
         }

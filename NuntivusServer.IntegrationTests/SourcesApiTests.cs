@@ -37,6 +37,18 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Unreferenced_source_can_be_created_and_deleted()
+        {
+            var source = await CreateAsync();
+
+            var deleted = await _client.DeleteAsync($"/v1/sources/{source.Id}");
+
+            Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await _client.GetAsync($"/v1/sources/{source.Id}")).StatusCode);
+        }
+
+        [Fact]
         public async Task ManagesSourceAndRejectsIngestionWhenDisabled()
         {
             var source = await CreateAsync();
@@ -70,7 +82,7 @@ namespace NuntivusServer.IntegrationTests
         [Fact]
         public async Task InvalidAndNonOperationalTypesAreRejected()
         {
-            foreach (var type in new[] { "NOT_REAL", "KAFKA", "SQS", "HTTP_POLLING", "FOLDER" })
+            foreach (var type in new[] { "NOT_REAL", "GENERIC_WEBHOOK", "SDK_APPLICATION", "STRIPE_WEBHOOK_INTEGRATION" })
             {
                 var response = await _client.PostAsJsonAsync("/v1/sources", new
                 {

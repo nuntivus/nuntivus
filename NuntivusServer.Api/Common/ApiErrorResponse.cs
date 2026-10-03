@@ -20,7 +20,7 @@ namespace NuntivusServer.Api.Common
         public static ApiErrorResponse From(
             IReadOnlyList<Error> errors,
             HttpContext? httpContext = null,
-            bool sanitizeUnexpected = true)
+            bool sanitizeUnexpected = false)
         {
             var primary = errors.Count > 0 ? errors[0] : new Error("unexpected", "The operation failed.");
 

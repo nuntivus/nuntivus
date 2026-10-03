@@ -41,14 +41,17 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 await connection.OpenAsync(cancellationToken);
                 await using var tx = await connection.BeginTransactionAsync(cancellationToken);
 
+                await connection.ExecuteAsync(new CommandDefinition(
+                    """
+                    INSERT INTO contract_delivery_ordering_state (ordering_key, active_delivery_id, lease_expires_at, updated_at)
+                    VALUES (@OrderingKey, NULL, NULL, @Now)
+                    ON CONFLICT (ordering_key) DO NOTHING;
+                    """,
+                    new { delivery.OrderingKey, Now = now }, tx, cancellationToken: cancellationToken));
+
                 var gate = await connection.QuerySingleAsync<GateDecisionRow>(new CommandDefinition(
                     """
-                    WITH ensure_state AS (
-                        INSERT INTO contract_delivery_ordering_state (ordering_key, active_delivery_id, lease_expires_at, updated_at)
-                        VALUES (@OrderingKey, NULL, NULL, @Now)
-                        ON CONFLICT (ordering_key) DO NOTHING
-                    ),
-                    state_row AS (
+                    WITH state_row AS (
                         SELECT ordering_key,
                                active_delivery_id,
                                lease_expires_at

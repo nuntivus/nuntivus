@@ -12,10 +12,12 @@ import {
 import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { FieldErrorText } from '../components/forms/form-feedback'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
 import { DetailAction, NavigableTableRow } from '../components/tables/table-actions'
 import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
+import { deliveryIdError } from '../features/deliveries/delivery-filter-validation'
 import { useDeliveriesQuery } from '../features/deliveries/use-deliveries'
 import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
@@ -62,6 +64,8 @@ export function DeliveriesPage() {
   const [eventIdInput, setEventIdInput] = useState(eventIdParam)
   const [customerIdInput, setCustomerIdInput] = useState(customerIdParam)
   const [contractIdInput, setContractIdInput] = useState(contractIdParam)
+  const [filterErrors, setFilterErrors] = useState({ eventId: null as string | null, contractId: null as string | null })
+  const invalidQuery = !!deliveryIdError(eventIdParam, 'Event ID') || !!deliveryIdError(contractIdParam, 'Contract ID')
 
   const query = useMemo<DeliveryListQuery>(
     () => ({
@@ -92,10 +96,17 @@ export function DeliveriesPage() {
     ],
   )
 
-  const deliveriesQuery = useDeliveriesQuery(query)
+  const deliveriesQuery = useDeliveriesQuery(query, !invalidQuery)
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    const errors = {
+      eventId: deliveryIdError(eventIdInput, 'Event ID'),
+      contractId: deliveryIdError(contractIdInput, 'Contract ID'),
+    }
+    setFilterErrors(errors)
+    if (errors.eventId || errors.contractId) return
 
     updateParams({
       eventId: eventIdInput.trim() || null,
@@ -159,10 +170,16 @@ export function DeliveriesPage() {
             <Flex wrap="wrap" gap="2">
               <TextField.Root
                 aria-label="Event ID"
+                aria-invalid={!!filterErrors.eventId}
+                aria-describedby={filterErrors.eventId ? 'delivery-event-id-error' : undefined}
                 placeholder="Event ID"
                 value={eventIdInput}
-                onChange={(event) => setEventIdInput(event.target.value)}
+                onChange={(event) => {
+                  setEventIdInput(event.target.value)
+                  setFilterErrors((previous) => ({ ...previous, eventId: null }))
+                }}
               />
+              <FieldErrorText id="delivery-event-id-error" message={filterErrors.eventId} />
               <TextField.Root
                 aria-label="Customer ID"
                 placeholder="Customer ID"
@@ -171,10 +188,16 @@ export function DeliveriesPage() {
               />
               <TextField.Root
                 aria-label="Contract ID"
+                aria-invalid={!!filterErrors.contractId}
+                aria-describedby={filterErrors.contractId ? 'delivery-contract-id-error' : undefined}
                 placeholder="Contract ID"
                 value={contractIdInput}
-                onChange={(event) => setContractIdInput(event.target.value)}
+                onChange={(event) => {
+                  setContractIdInput(event.target.value)
+                  setFilterErrors((previous) => ({ ...previous, contractId: null }))
+                }}
               />
+              <FieldErrorText id="delivery-contract-id-error" message={filterErrors.contractId} />
             </Flex>
 
             <Flex wrap="wrap" gap="2">

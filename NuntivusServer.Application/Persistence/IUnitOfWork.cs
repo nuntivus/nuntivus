@@ -12,7 +12,7 @@ namespace NuntivusServer.Application.Persistence
         IDbConnection? GetConnection();
         IDbTransaction? GetTransaction();
 
-        public bool IsConnectionOpen => GetTransaction() != null;
+        public bool IsConnectionOpen => GetConnection()?.State == ConnectionState.Open;
         public bool IsTransactionOpen => GetTransaction() != null;
 
         void Begin(bool inTransaction = true);

@@ -1,14 +1,18 @@
 using System.Net;
+using Dapper;
+using Npgsql;
 
 namespace NuntivusServer.IntegrationTests
 {
     [Collection(nameof(CustomersApiCollection))]
     public sealed class HealthApiTests
     {
+        private readonly CustomersApiFixture _fixture;
         private readonly HttpClient _client;
 
         public HealthApiTests(CustomersApiFixture fixture)
         {
+            _fixture = fixture;
             _client = fixture.CreateClient();
         }
 
@@ -22,8 +26,17 @@ namespace NuntivusServer.IntegrationTests
         [Fact]
         public async Task Ready_returns_503_when_required_tables_are_missing()
         {
-            var response = await _client.GetAsync("/health/ready");
-            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            await conn.ExecuteAsync("ALTER TABLE sources RENAME TO sources_not_ready;");
+            try
+            {
+                var response = await _client.GetAsync("/health/ready");
+                Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            }
+            finally
+            {
+                await conn.ExecuteAsync("ALTER TABLE sources_not_ready RENAME TO sources;");
+            }
         }
     }
 

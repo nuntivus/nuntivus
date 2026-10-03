@@ -65,7 +65,8 @@ namespace NuntivusServer.IntegrationTests
                 schemaTargets: null,
                 filter: null,
                 new Destination(DestinationType.Http, "{\"Url\":\"https://x.example.com\"}"),
-                DateTimeOffset.UtcNow);
+                DateTimeOffset.UtcNow,
+                sourceIds: [MatcherFixture.TestSourceId]);
 
             await using var scope = _services.CreateAsyncScope();
             var repo = scope.ServiceProvider.GetRequiredService<IContractRepository>();
@@ -82,7 +83,7 @@ namespace NuntivusServer.IntegrationTests
             var @event = Event.Create(
                 idempotencyKey: Guid.NewGuid().ToString(),
                 type: type,
-                sourceId: Guid.NewGuid().ToString(),
+                sourceId: MatcherFixture.TestSourceId.ToString("D"),
                 occurredAt: DateTimeOffset.UtcNow,
                 payload: payload,
                 metadata: (string?)null);

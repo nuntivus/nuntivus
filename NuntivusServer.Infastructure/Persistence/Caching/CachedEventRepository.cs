@@ -55,11 +55,7 @@ namespace NuntivusServer.Infastructure.Persistence.Caching
             Guid sourceEventId,
             string replayKey,
             CancellationToken cancellationToken) =>
-            _cache.GetOrCreateAsync(
-                $"{CacheKeys.EventReplays}:{sourceEventId}:{replayKey}",
-                _ttl,
-                ct => _inner.GetReplayAsync(sourceEventId, replayKey, ct),
-                cancellationToken);
+            _inner.GetReplayAsync(sourceEventId, replayKey, cancellationToken);
 
         public Task<Result> InsertReplayAsync(
             EventReplay replay,

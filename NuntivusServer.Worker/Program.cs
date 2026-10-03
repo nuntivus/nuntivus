@@ -9,6 +9,9 @@ using NuntivusServer.Application.Observability;
 using NuntivusServer.Application.Persistence;
 using NuntivusServer.Application.Retention;
 using NuntivusServer.Application.Security;
+using NuntivusServer.Application.Sources;
+using NuntivusServer.Application.Events;
+using NuntivusServer.Domain.Sources;
 using NuntivusServer.Domain.Deliveries;
 using NuntivusServer.Infastructure.Caching;
 using NuntivusServer.Infastructure.Configuration;
@@ -25,6 +28,7 @@ using NuntivusServer.Worker.Deliveries;
 using NuntivusServer.Worker.Matching;
 using NuntivusServer.Worker.Outbox;
 using NuntivusServer.Worker.Retention;
+using NuntivusServer.Worker.Sources;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Hosting;
@@ -241,6 +245,26 @@ builder.Services.AddSingleton<ICacheStore, InMemoryCacheStore>();
 
 // Matcher pipeline: scoped repos + UoW, wrapped in TTL cache decorators.
 builder.Services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
+builder.Services.AddScoped<ISourceRepository, PostgresSourceRepository>();
+builder.Services.AddSingleton<ISourceIngestionStateRepository, PostgresSourceIngestionStateRepository>();
+builder.Services.AddScoped<IEventService, EventService>();
+builder.Services.AddScoped<ISourceIngestionService, SourceIngestionService>();
+builder.Services.AddScoped<ISourceEventProcessor, SourceEventProcessor>();
+builder.Services.AddScoped<ISourceAdapter, HttpApiSourceAdapter>();
+foreach (var type in new[] { SourceType.RABBITMQ, SourceType.KAFKA, SourceType.SQS, SourceType.NATS,
+    SourceType.HTTP_POLLING, SourceType.FOLDER, SourceType.S3 })
+{
+    builder.Services.AddScoped<ISourceAdapter>(_ => new InboundSourceAdapter(type));
+    builder.Services.AddScoped<ISourceRunner>(sp => type switch
+    {
+        SourceType.RABBITMQ or SourceType.KAFKA or SourceType.SQS or SourceType.NATS =>
+            new BrokerSourceRunner(type, sp.GetRequiredService<ISourceEventProcessor>(), sp.GetRequiredService<ISecretResolver>()),
+        _ => new ScanSourceRunner(type, sp.GetRequiredService<ISourceEventProcessor>(),
+            sp.GetRequiredService<ISourceIngestionStateRepository>(),
+            sp.GetRequiredService<ISecretResolver>(), sp.GetRequiredService<IConfiguration>())
+    });
+}
+builder.Services.AddScoped<ISourceAdapterRegistry, SourceAdapterRegistry>();
 
 builder.Services.AddScoped<PostgresEventRepository>();
 builder.Services.AddScoped<IEventRepository>(sp => new CachedEventRepository(
@@ -353,6 +377,8 @@ if (workerRuntime.EnableRetentionCleanup)
 {
     builder.Services.AddHostedService<RetentionCleanupWorker>();
 }
+
+builder.Services.AddHostedService<SourceSupervisorWorker>();
 
 var app = builder.Build();
 

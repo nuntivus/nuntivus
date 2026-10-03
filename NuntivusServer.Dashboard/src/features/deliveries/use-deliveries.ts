@@ -11,14 +11,15 @@ import {
   type ManualDeliveryOperationRequest,
 } from '../../services/api/deliveries-api'
 
-export function useDeliveriesQuery(query: DeliveryListQuery) {
+export function useDeliveriesQuery(query: DeliveryListQuery, enabled = true) {
   return useQuery({
     queryKey: ['deliveries', query],
     queryFn: ({ signal }) => listDeliveries(query, { signal }),
+    enabled,
   })
 }
 
-export function useFailedDeliveriesQuery(query: DeliveryListQuery) {
+export function useFailedDeliveriesQuery(query: DeliveryListQuery, enabled = true) {
   return useQuery({
     queryKey: ['deliveries', 'failed', query],
     queryFn: ({ signal }) =>
@@ -26,6 +27,7 @@ export function useFailedDeliveriesQuery(query: DeliveryListQuery) {
         ...query,
         status: query.status ?? 'Failed',
       }, { signal }),
+    enabled,
   })
 }
 

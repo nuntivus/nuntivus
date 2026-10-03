@@ -73,22 +73,14 @@ namespace NuntivusServer.Infastructure.Persistence.Caching
             string eventType,
             int version,
             CancellationToken cancellationToken) =>
-            _cache.GetOrCreateAsync(
-                $"{CacheKeys.EventSchemaVersionByTypeAndVersion}:{eventType}:{version}",
-                _ttl,
-                ct => _inner.GetSchemaVersionAsync(eventType, version, ct),
-                cancellationToken);
+            _inner.GetSchemaVersionAsync(eventType, version, cancellationToken);
 
         public Task<Result<PagedResult<EventSchemaVersion>>> ListSchemaVersionsAsync(
             string eventType,
             int page,
             int pageSize,
             CancellationToken cancellationToken) =>
-            _cache.GetOrCreateAsync(
-                $"{CacheKeys.EventSchemaVersionsList}:{eventType}:{page}:{pageSize}",
-                _ttl,
-                ct => _inner.ListSchemaVersionsAsync(eventType, page, pageSize, ct),
-                cancellationToken);
+            _inner.ListSchemaVersionsAsync(eventType, page, pageSize, cancellationToken);
 
         public Task<Result> ActivateSchemaVersionAsync(
             string eventType,
