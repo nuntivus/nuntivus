@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using NuntivusServer.Application.Caching;
+using NuntivusServer.Common;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace NuntivusServer.Infastructure.Caching
@@ -39,10 +40,13 @@ namespace NuntivusServer.Infastructure.Caching
 
             var value = await factory(cancellationToken).ConfigureAwait(false);
 
-            _cache.Set(key, value, new MemoryCacheEntryOptions
+            if (value is not Result { IsFailure: true })
             {
-                AbsoluteExpirationRelativeToNow = ttl,
-            });
+                _cache.Set(key, value, new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = ttl,
+                });
+            }
 
             return value;
         }

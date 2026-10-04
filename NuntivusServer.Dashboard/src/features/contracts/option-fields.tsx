@@ -16,7 +16,7 @@ export function OptionField({ label, path, value, onChange, errors, type, min, m
   hint?: string
 }) {
   const errorId = `${path.replace(/[^a-z0-9]/gi, '-')}-error`
-  return <Flex direction="column" gap="1" style={{ flex: '1 1 160px' }}>
+  return <Flex direction="column" gap="1">
     <Text as="label" size="2" weight="medium">{label}
       <TextField.Root type={type} min={min} max={max} step={type === 'number' ? 1 : undefined} list={list} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} aria-invalid={!!errors[path]} aria-describedby={errors[path] ? errorId : undefined} />
     </Text>

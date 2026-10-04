@@ -85,7 +85,7 @@ export function PayloadFieldPicker({ label, path, value, onChange, fields, hint,
     setOpen(false)
   }
 
-  return <Flex direction="column" gap="1" style={{ flex: '1 1 260px' }}>
+  return <Flex direction="column" gap="1">
     <Text as="label" htmlFor={inputId} size="2" weight="medium">{label}</Text>
     <div className="payload-field-control">
       <TextField.Root id={inputId} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} placeholder="customer.email or a custom path" aria-invalid={!!errors[path]} aria-describedby={errors[path] ? errorId : undefined} />

@@ -879,7 +879,6 @@
 }
 
 .contract-empty-activity>span {
-  width: 50px;
   height: 50px;
   margin-bottom: 4px;
   background: var(--surface-2);
