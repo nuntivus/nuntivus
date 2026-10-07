@@ -9,6 +9,7 @@ using Dapper;
 using NuntivusServer.Api.Common;
 using NuntivusServer.Api.Controllers.Events;
 using NuntivusServer.Contracts.CustomerContracts;
+using NuntivusServer.Contracts.Destinations;
 using NuntivusServer.Contracts.Customers;
 using NuntivusServer.Contracts.Events;
 using NuntivusServer.Domain.Outbox;
@@ -1056,6 +1057,198 @@ namespace NuntivusServer.IntegrationTests
 
             Assert.Equal("Orders Contract v2", row.Name);
             Assert.Equal("secret.acme.v2", row.AuthRef);
+        }
+
+        [Fact]
+        public async Task Put_response_etag_can_be_used_for_next_update()
+        {
+            await CreateCustomerAsync("acme");
+            var create = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme", "orders.created"));
+            var created = await create.Content.ReadFromJsonAsync<ContractCreated>();
+            var url = $"/v1/contracts/{created!.Id}";
+
+            var get = await _client.GetAsync(url);
+            Assert.Equal(HttpStatusCode.OK, get.StatusCode);
+
+            using var firstRequest = new HttpRequestMessage(HttpMethod.Put, url)
+            {
+                Content = JsonContent.Create(new UpdateContractRequest(
+                    "First update", new[] { "orders.created" },
+                    new HttpDestinationConfig("https://hooks.example.com/v2", new HttpAuthentication("none")),
+                    SourceIds: [ContractsApiFixture.SourceId]))
+            };
+            firstRequest.Headers.IfMatch.Add(get.Headers.ETag!);
+
+            var first = await _client.SendAsync(firstRequest);
+            Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+            Assert.NotNull(first.Headers.ETag);
+
+            var persisted = await _client.GetAsync(url);
+            Assert.Equal(first.Headers.ETag, persisted.Headers.ETag);
+
+            using var secondRequest = new HttpRequestMessage(HttpMethod.Put, url)
+            {
+                Content = JsonContent.Create(new UpdateContractRequest(
+                    "Second update", new[] { "orders.created" },
+                    new HttpDestinationConfig("https://hooks.example.com/v3", new HttpAuthentication("none")),
+                    SourceIds: [ContractsApiFixture.SourceId]))
+            };
+            secondRequest.Headers.IfMatch.Add(first.Headers.ETag!);
+
+            var second = await _client.SendAsync(secondRequest);
+            Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+            var updated = await second.Content.ReadFromJsonAsync<ContractView>();
+            Assert.Equal("Second update", updated!.Name);
+        }
+
+        [Fact]
+        public async Task Shared_destination_edit_does_not_change_contract_snapshots_until_refreshed()
+        {
+            await CreateCustomerAsync("acme");
+            await CreateCustomerAsync("beta");
+            var createDestination = await _client.PostAsJsonAsync("/v1/destinations", new CreateDestinationRequest(
+                "Shared hook", null, new HttpDestinationConfig("https://hooks.example.com/one", new HttpAuthentication("none"))));
+            Assert.Equal(HttpStatusCode.Created, createDestination.StatusCode);
+            var destination = await createDestination.Content.ReadFromJsonAsync<DestinationResourceView>();
+
+            var first = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme") with
+            { Configuration = null, DestinationIds = [destination!.Id] });
+            var second = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("beta") with
+            { Configuration = null, DestinationIds = [destination.Id] });
+            Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+            Assert.Equal(HttpStatusCode.Created, second.StatusCode);
+            var firstContract = await first.Content.ReadFromJsonAsync<ContractCreated>();
+            var secondContract = await second.Content.ReadFromJsonAsync<ContractCreated>();
+
+            var update = await _client.PutAsJsonAsync($"/v1/destinations/{destination.Id}",
+                new UpdateDestinationRequest("Shared hook", null,
+                    new HttpDestinationConfig("https://hooks.example.com/two", new HttpAuthentication("none"))));
+            Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+
+            var firstGet = await _client.GetAsync($"/v1/contracts/{firstContract!.Id}");
+            var firstSnapshot = await firstGet.Content.ReadFromJsonAsync<ContractView>();
+            var secondSnapshot = await _client.GetFromJsonAsync<ContractView>($"/v1/contracts/{secondContract!.Id}");
+            Assert.Contains("/one", firstSnapshot!.Destinations!.Single().Configuration);
+            Assert.Contains("/one", secondSnapshot!.Destinations!.Single().Configuration);
+
+            using var refresh = new HttpRequestMessage(HttpMethod.Put, $"/v1/contracts/{firstContract.Id}")
+            {
+                Content = JsonContent.Create(new UpdateContractRequest(null, ["orders.created"], null,
+                    SourceIds: [ContractsApiFixture.SourceId], DestinationIds: [destination.Id],
+                    RefreshDestinationIds: [destination.Id]))
+            };
+            refresh.Headers.IfMatch.Add(firstGet.Headers.ETag!);
+            var refreshedResponse = await _client.SendAsync(refresh);
+            Assert.Equal(HttpStatusCode.OK, refreshedResponse.StatusCode);
+            var refreshed = await refreshedResponse.Content.ReadFromJsonAsync<ContractView>();
+            Assert.Contains("/two", refreshed!.Destinations!.Single().Configuration);
+            Assert.Contains("/one", (await _client.GetFromJsonAsync<ContractView>($"/v1/contracts/{secondContract.Id}"))!
+                .Destinations!.Single().Configuration);
+        }
+
+        [Fact]
+        public async Task Destination_disable_and_delete_choices_keep_or_remove_bindings()
+        {
+            await CreateCustomerAsync("acme");
+            var createdDestination = await _client.PostAsJsonAsync("/v1/destinations", new CreateDestinationRequest(
+                "First hook", null, new HttpDestinationConfig("https://hooks.example.com/one", new HttpAuthentication("none"))));
+            var first = await createdDestination.Content.ReadFromJsonAsync<DestinationResourceView>();
+            var secondResponse = await _client.PostAsJsonAsync("/v1/destinations", new CreateDestinationRequest(
+                "Second hook", null, new HttpDestinationConfig("https://hooks.example.com/two", new HttpAuthentication("none"))));
+            var second = await secondResponse.Content.ReadFromJsonAsync<DestinationResourceView>();
+            var created = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme") with
+            { Configuration = null, DestinationIds = [first!.Id, second!.Id] });
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+            var contract = await created.Content.ReadFromJsonAsync<ContractCreated>();
+
+            Assert.Equal(HttpStatusCode.OK, (await _client.PostAsJsonAsync($"/v1/destinations/{first.Id}/disable",
+                new DisableDestinationRequest(false))).StatusCode);
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            Assert.True(await conn.ExecuteScalarAsync<bool>(
+                "SELECT delivery_enabled FROM contract_destinations WHERE destination_id = @Id", new { first.Id }));
+            Assert.Equal(HttpStatusCode.OK, (await _client.PostAsJsonAsync($"/v1/destinations/{first.Id}/disable",
+                new DisableDestinationRequest(true))).StatusCode);
+            Assert.False(await conn.ExecuteScalarAsync<bool>(
+                "SELECT delivery_enabled FROM contract_destinations WHERE destination_id = @Id", new { first.Id }));
+            Assert.Equal(HttpStatusCode.OK, (await _client.PostAsync($"/v1/destinations/{first.Id}/enable", null)).StatusCode);
+            Assert.True(await conn.ExecuteScalarAsync<bool>(
+                "SELECT delivery_enabled FROM contract_destinations WHERE destination_id = @Id", new { first.Id }));
+
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await _client.DeleteAsync($"/v1/destinations/{first.Id}?removeBindings=false")).StatusCode);
+            var detachedResponse = await _client.GetAsync($"/v1/contracts/{contract!.Id}");
+            var detached = await detachedResponse.Content.ReadFromJsonAsync<ContractView>();
+            Assert.Contains(detached!.Destinations!, binding => binding.DestinationId is null);
+            using var edit = new HttpRequestMessage(HttpMethod.Put, $"/v1/contracts/{contract.Id}")
+            {
+                Content = JsonContent.Create(new UpdateContractRequest("Edited", ["orders.created"], null,
+                    SourceIds: [ContractsApiFixture.SourceId], DestinationIds: [second.Id]))
+            };
+            edit.Headers.IfMatch.Add(detachedResponse.Headers.ETag!);
+            var edited = await _client.SendAsync(edit);
+            Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+            Assert.Equal(2, (await edited.Content.ReadFromJsonAsync<ContractView>())!.Destinations!.Count);
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await _client.DeleteAsync($"/v1/destinations/{second.Id}?removeBindings=true")).StatusCode);
+            var remaining = await _client.GetFromJsonAsync<ContractView>($"/v1/contracts/{contract.Id}");
+            Assert.Single(remaining!.Destinations!);
+            Assert.Null(remaining.Destinations.Single().DestinationId);
+        }
+
+        [Fact]
+        public async Task Test_event_send_fans_out_to_all_selected_destinations()
+        {
+            await CreateCustomerAsync("acme");
+            var one = await _client.PostAsJsonAsync("/v1/destinations", new CreateDestinationRequest(
+                "One", null, new HttpDestinationConfig("https://hooks.example.com/one", new HttpAuthentication("none"))));
+            var two = await _client.PostAsJsonAsync("/v1/destinations", new CreateDestinationRequest(
+                "Two", null, new HttpDestinationConfig("https://hooks.example.com/two", new HttpAuthentication("none"))));
+            var first = await one.Content.ReadFromJsonAsync<DestinationResourceView>();
+            var second = await two.Content.ReadFromJsonAsync<DestinationResourceView>();
+            var create = await _client.PostAsJsonAsync("/v1/contracts", ValidRequest("acme") with
+            { Configuration = null, DestinationIds = [first!.Id, second!.Id] });
+            var contract = await create.Content.ReadFromJsonAsync<ContractCreated>();
+
+            var send = await _client.PostAsJsonAsync($"/v1/contracts/{contract!.Id}/test/send",
+                new ContractTestEventRequest("orders.created", JsonSerializer.SerializeToElement(new { orderId = "sample" }), null));
+            Assert.Equal(HttpStatusCode.OK, send.StatusCode);
+            var result = await send.Content.ReadFromJsonAsync<ContractTestSendView>();
+            Assert.Equal(2, result!.DeliveryIds!.Count);
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            Assert.Equal(2, await conn.ExecuteScalarAsync<long>(
+                "SELECT count(*) FROM deliveries WHERE event_id = @Id AND contract_id = @ContractId",
+                new { Id = result.EventId, ContractId = contract.Id }));
+        }
+
+        [Fact]
+        public async Task Destination_management_redacts_credentials_and_requires_operator_for_writes()
+        {
+            var created = await _client.PostAsJsonAsync("/v1/destinations", new CreateDestinationRequest(
+                "Secure hook", null, new HttpDestinationConfig("https://hooks.example.com/secure",
+                    new HttpAuthentication("bearer", new HttpCredential("ref", "secret.acme.webhook")))));
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+            var destination = await created.Content.ReadFromJsonAsync<DestinationResourceView>();
+            Assert.Contains("***", destination!.Configuration);
+            Assert.DoesNotContain("secret.acme.webhook", destination.Configuration);
+
+            var updated = await _client.PutAsJsonAsync($"/v1/destinations/{destination.Id}",
+                new UpdateDestinationRequest("Secure hook", null,
+                    new HttpDestinationConfig("https://hooks.example.com/updated",
+                        new HttpAuthentication("bearer", new HttpCredential("ref", "***")))));
+            Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            var configuration = await conn.ExecuteScalarAsync<string>(
+                "SELECT configuration::text FROM destinations WHERE id = @Id", new { destination.Id });
+            Assert.Contains("secret.acme.webhook", configuration);
+            Assert.DoesNotContain("***", configuration);
+
+            using var viewer = _fixture.CreateClient();
+            viewer.DefaultRequestHeaders.Add("X-Test-Auth", "on");
+            viewer.DefaultRequestHeaders.Add("X-Test-Role", "Viewer");
+            Assert.Equal(HttpStatusCode.OK, (await viewer.GetAsync($"/v1/destinations/{destination.Id}")).StatusCode);
+            var denied = await viewer.PostAsJsonAsync("/v1/destinations", new CreateDestinationRequest(
+                "Denied", null, new HttpDestinationConfig("https://hooks.example.com/denied", new HttpAuthentication("none"))));
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         }
 
         [Fact]

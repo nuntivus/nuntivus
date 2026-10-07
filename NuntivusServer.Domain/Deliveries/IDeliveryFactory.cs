@@ -19,6 +19,7 @@ namespace NuntivusServer.Domain.Deliveries
             string? authenticationReference = null,
             int? authenticationVersion = null,
             int? transformationVersion = null,
-            int? schemaVersion = null);
+            int? schemaVersion = null,
+            Guid destinationBindingId = default);
     }
 }

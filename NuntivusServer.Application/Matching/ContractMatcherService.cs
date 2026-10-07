@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -128,7 +129,8 @@ namespace NuntivusServer.Application.Matching
                         match.AuthenticationReference,
                         match.AuthenticationVersion,
                         match.TransformationVersion,
-                        match.SchemaVersion);
+                        match.SchemaVersion,
+                        match.DestinationBindingId);
 
                     var insertResult = await _deliveries.InsertPendingAsync(
                         new[] { delivery },
@@ -164,9 +166,9 @@ namespace NuntivusServer.Application.Matching
 
                 _logger.Information(
                     "Matched event {EventId} (type {Type}): {MatchedCount} contract(s), {InsertedCount} delivery row(s) inserted.",
-                    authoritative.Id, authoritative.Type, filteredMatches.Count, inserted);
+                    authoritative.Id, authoritative.Type, filteredMatches.Select(match => match.ContractId).Distinct().Count(), inserted);
 
-                return Result.Success(new MatchResult(filteredMatches.Count, inserted));
+                return Result.Success(new MatchResult(filteredMatches.Select(match => match.ContractId).Distinct().Count(), inserted));
             }
             catch (Exception ex)
             {

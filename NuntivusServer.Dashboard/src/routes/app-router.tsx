@@ -28,6 +28,8 @@ const SettingsPage = lazy(() => import('../pages/settings-page').then((module) =
 const SecretsPage = lazy(() => import('../pages/secrets-page').then((module) => ({ default: module.SecretsPage })))
 const SourcesPage = lazy(() => import('../pages/sources-page').then((module) => ({ default: module.SourcesPage })))
 const SourceDetailPage = lazy(() => import('../pages/source-detail-page').then((module) => ({ default: module.SourceDetailPage })))
+const DestinationsPage = lazy(() => import('../pages/destinations-page').then((module) => ({ default: module.DestinationsPage })))
+const DestinationDetailPage = lazy(() => import('../pages/destination-detail-page').then((module) => ({ default: module.DestinationDetailPage })))
 const UserDetailPage = lazy(() => import('../pages/user-detail-page').then((module) => ({ default: module.UserDetailPage })))
 const UsersPage = lazy(() => import('../pages/users-page').then((module) => ({ default: module.UsersPage })))
 
@@ -72,6 +74,8 @@ const router = createBrowserRouter(createRoutesFromElements(
                 <Route path="contracts" element={<ContractsPage />} />
                 <Route path="sources" element={<SourcesPage />} />
                 <Route path="sources/:id" element={<SourceDetailPage />} />
+                <Route path="destinations" element={<DestinationsPage />} />
+                <Route path="destinations/:id" element={<DestinationDetailPage />} />
                 <Route path="contracts/:id" element={<ContractDetailPage />} />
                 <Route path="test-events" element={<TestEventsPage />} />
               </Route>

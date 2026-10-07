@@ -62,6 +62,7 @@ export interface Contract {
   eventTypes: string[]
   destinationType: DestinationType
   destinationConfiguration: string
+  destinations?: { id: string; destinationId: string | null; type: DestinationType; configuration: string; deliveryEnabled: boolean }[]
   createdAt: string
   updatedAt: string
   name?: string | null
@@ -75,6 +76,7 @@ export interface ContractDetail extends ContractOptions {
   eventTypes: string[]
   destinationType: DestinationType
   destinationConfiguration: string
+  destinations?: { id: string; destinationId: string | null; type: DestinationType; configuration: string; deliveryEnabled: boolean }[]
   createdAt: string
   updatedAt: string
   name?: string | null
@@ -97,6 +99,9 @@ export interface CreateContractRequest extends ContractOptions {
   eventTypes: string[]
   name?: string | null
   destination?: DestinationConfigInput
+  destinationIds?: string[]
+  refreshDestinationIds?: string[]
+  removeDestinationBindingIds?: string[]
 
   // Legacy HTTP-only fields kept temporarily for backward compatibility while pages migrate.
   url: string
@@ -261,7 +266,7 @@ function buildDestinationConfig(request: CreateContractRequest): DestinationConf
   }
 }
 
-function mapDestinationToApi(destination: DestinationConfigInput) {
+export function mapDestinationToApi(destination: DestinationConfigInput) {
   switch (destination.type) {
     case 'http':
       return {
@@ -374,13 +379,14 @@ export async function listContracts(query: ContractListQuery, options?: ApiReque
 }
 
 export async function createContract(request: CreateContractRequest) {
-  const destination = buildDestinationConfig(request)
+  const destination = request.destinationIds?.length ? null : buildDestinationConfig(request)
 
   return apiPost<Contract>('/v1/contracts', {
     customerId: request.customerId,
     sourceIds: request.sourceIds,
     eventTypes: request.eventTypes,
-    configuration: mapDestinationToApi(destination),
+    ...(destination ? { configuration: mapDestinationToApi(destination) } : {}),
+    destinationIds: request.destinationIds,
     name: request.name ?? null,
     schemaTargets: request.schemaTargets ?? null,
     filter: request.filter ?? null,
@@ -419,7 +425,7 @@ export async function replaceContract(
   etag: string,
   request: UpdateContractRequest,
 ) {
-  const destination = buildDestinationConfig(request)
+  const destination = request.destinationIds?.length ? null : buildDestinationConfig(request)
 
   const response = await apiPutWithResponse<ContractDetail>(
     `/v1/contracts/${encodeURIComponent(id)}`,
@@ -427,7 +433,10 @@ export async function replaceContract(
       name: request.name ?? null,
       sourceIds: request.sourceIds,
       eventTypes: request.eventTypes,
-      configuration: mapDestinationToApi(destination),
+      ...(destination ? { configuration: mapDestinationToApi(destination) } : {}),
+      destinationIds: request.destinationIds,
+      refreshDestinationIds: request.refreshDestinationIds,
+      removeDestinationBindingIds: request.removeDestinationBindingIds,
       schemaTargets: request.schemaTargets ?? null,
       filter: request.filter ?? null,
       transformation: request.transformation ?? null,

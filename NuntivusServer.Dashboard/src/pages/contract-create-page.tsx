@@ -14,13 +14,8 @@ import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback
 import { getServerValidation } from '../components/forms/form-validation'
 import { ContractOptionsForm } from '../features/contracts/contract-options-form'
 import { ContractSourceSelector } from '../features/contracts/contract-source-selector'
+import { ContractDestinationSelector } from '../features/contracts/contract-destination-selector'
 import { backendConfigToFormState, formStateToBackendConfig, validateAdvancedContractOptions } from '../features/contracts/contract-options'
-import { DestinationConfigurationForm } from '../features/contracts/destination-forms/destination-configuration-form'
-import {
-  createDefaultDestinationFormState,
-  mapDestinationFormToConfig,
-  validateDestinationFormState,
-} from '../features/contracts/destination-forms/types'
 import { useCreateContractMutation } from '../features/contracts/use-contracts'
 import { useCustomersQuery } from '../features/customers/use-customers'
 import { useEventDefinitionsQuery } from '../features/event-definitions/use-event-definitions'
@@ -55,7 +50,7 @@ export function ContractCreatePage() {
   const [name, setName] = useState('')
   const [selectedEventType, setSelectedEventType] = useState('')
   const [newEventType, setNewEventType] = useState('')
-  const [destination, setDestination] = useState(createDefaultDestinationFormState())
+  const [destinationIds, setDestinationIds] = useState<string[]>([])
   const [optionsDraft, setOptionsDraft] = useState(() => backendConfigToFormState())
   const [rawEditing, setRawEditing] = useState<string[]>([])
   const [step, setStep] = useState<0 | 1 | 2>(0)
@@ -69,23 +64,8 @@ export function ContractCreatePage() {
   const customerError = !customerId ? 'Customer is required.' : null
   const sourceError = sourceIds.length === 0 ? 'Select at least one Source.' : null
   const eventTypeError = !eventType ? 'Event type is required.' : null
-  const destinationError = validateDestinationFormState(destination)
+  const destinationError = destinationIds.length === 0 ? 'Select at least one Destination.' : null
   const optionErrors = validateAdvancedContractOptions(optionsDraft, eventType ? [eventType] : [])
-
-  const destinationSummary = (() => {
-    switch (destination.type) {
-      case 'Http':
-        return destination.http.url.trim() ? 'Endpoint configured' : ''
-      case 'Kafka':
-        return destination.kafka.topic.trim()
-      case 'Nats':
-        return destination.nats.subject.trim()
-      case 'RabbitMq':
-        return `${destination.rabbitMq.exchange.trim()} / ${destination.rabbitMq.routingKey.trim()}`
-      case 'Sqs':
-        return destination.sqs.region.trim()
-    }
-  })()
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -127,7 +107,7 @@ export function ContractCreatePage() {
         sourceIds,
         name: name.trim() || null,
         eventTypes: [eventType],
-        destination: mapDestinationFormToConfig(destination),
+        destinationIds,
         ...formStateToBackendConfig(optionsDraft),
         url: '',
         authenticationType: 'none',
@@ -233,7 +213,7 @@ export function ContractCreatePage() {
 
             {step === 1 ? (
               <>
-                <DestinationConfigurationForm value={destination} onChange={setDestination} />
+                <ContractDestinationSelector value={destinationIds} onChange={setDestinationIds} />
                 {destinationAttempted ? (
                   <FieldErrorText id="contract-create-destination-error" message={destinationError} />
                 ) : null}
@@ -251,8 +231,7 @@ export function ContractCreatePage() {
                     <Text size="2"><strong>Sources:</strong> {sourceIds.join(', ')}</Text>
                     <Text size="2"><strong>Name:</strong> {name.trim() || '—'}</Text>
                     <Text size="2"><strong>Event type:</strong> {eventType}</Text>
-                    <Text size="2"><strong>Destination:</strong> {destination.type}</Text>
-                    <Text size="2"><strong>Route:</strong> {destinationSummary}</Text>
+                    <Text size="2"><strong>Destinations:</strong> {destinationIds.join(', ')}</Text>
                   </Flex>
                 </Card>
                 <FormErrorText

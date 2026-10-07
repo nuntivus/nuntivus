@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using NuntivusServer.Contracts.Destinations;
 
 namespace NuntivusServer.Contracts.CustomerContracts
 {
@@ -18,5 +19,6 @@ namespace NuntivusServer.Contracts.CustomerContracts
         DateTimeOffset CreatedAt,
         DateTimeOffset UpdatedAt,
         string? Name = null,
-        IReadOnlyCollection<Guid>? SourceIds = null);
+        IReadOnlyCollection<Guid>? SourceIds = null,
+        IReadOnlyCollection<ContractDestinationView>? Destinations = null);
 }

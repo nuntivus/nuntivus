@@ -305,6 +305,7 @@ builder.Services.AddSingleton<ICacheStore, InMemoryCacheStore>();
 
 builder.Services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
 builder.Services.AddScoped<ISourceRepository, PostgresSourceRepository>();
+builder.Services.AddScoped<IDestinationRepository, PostgresDestinationRepository>();
 builder.Services.AddScoped<IOutboxRepository, PostgresOutboxRepository>();
 builder.Services.AddScoped<IAuditLogRepository, PostgresAuditLogRepository>();
 builder.Services.AddScoped<IAdminUserRoleRepository, PostgresAdminUserRoleRepository>();
@@ -352,6 +353,7 @@ builder.Services.AddSingleton<ISourceConfigurationRegistry, SourceConfigurationR
 builder.Services.AddScoped<ISourceAdapterRegistry, SourceAdapterRegistry>();
 builder.Services.AddScoped<ISourceIngestionService, SourceIngestionService>();
 builder.Services.AddScoped<ISourceService, SourceService>();
+builder.Services.AddScoped<IDestinationService, DestinationService>();
 builder.Services.AddScoped<IHttpSourceAuthenticator, HttpSourceAuthenticator>();
 builder.Services.AddScoped<IEventDefinitionService, EventDefinitionService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();

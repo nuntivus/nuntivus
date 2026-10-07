@@ -17,6 +17,7 @@ namespace NuntivusServer.Domain.Deliveries
         public Guid Id { get; }
         public Guid EventId { get; }
         public Guid ContractId { get; }
+        public Guid DestinationBindingId { get; }
         public string CustomerId { get; }
         public string EventType { get; }
         public string Payload { get; }
@@ -59,11 +60,13 @@ namespace NuntivusServer.Domain.Deliveries
             string? lastError,
             DateTimeOffset? nextAttemptAt,
             DateTimeOffset createdAt,
-            DateTimeOffset updatedAt)
+            DateTimeOffset updatedAt,
+            Guid destinationBindingId = default)
         {
             Id = id;
             EventId = eventId;
             ContractId = contractId;
+            DestinationBindingId = destinationBindingId;
             CustomerId = customerId;
             EventType = eventType;
             Payload = payload;
@@ -99,7 +102,8 @@ namespace NuntivusServer.Domain.Deliveries
             string? authenticationReference = null,
             int? authenticationVersion = null,
             int? transformationVersion = null,
-            int? schemaVersion = null)
+            int? schemaVersion = null,
+            Guid destinationBindingId = default)
         {
             if (eventId == Guid.Empty)
                 throw new ArgumentException("EventId cannot be empty.", nameof(eventId));
@@ -135,7 +139,8 @@ namespace NuntivusServer.Domain.Deliveries
                 lastError: null,
                 nextAttemptAt: null,
                 createdAt: now,
-                updatedAt: now);
+                updatedAt: now,
+                destinationBindingId: destinationBindingId);
         }
 
         private static string ResolveOrderingKey(Guid contractId, ContractOrdering ordering)
@@ -305,14 +310,15 @@ namespace NuntivusServer.Domain.Deliveries
             string? lastError,
             DateTimeOffset? nextAttemptAt,
             DateTimeOffset createdAt,
-            DateTimeOffset updatedAt) =>
+            DateTimeOffset updatedAt,
+            Guid destinationBindingId = default) =>
             new(id, eventId, contractId, customerId, eventType, payload,
                 authenticationReference,
                 authenticationVersion,
                 transformationVersion,
                 schemaVersion,
                 transformationConfiguration, rateLimit, orderingEnabled, orderingKey, destinationType, destinationConfiguration, status,
-                attemptCount, lastError, nextAttemptAt, createdAt, updatedAt);
+                attemptCount, lastError, nextAttemptAt, createdAt, updatedAt, destinationBindingId);
 
         public static Delivery Rehydrate(
             Guid id,

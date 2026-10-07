@@ -21,5 +21,6 @@ namespace NuntivusServer.Application.Persistence
         string? AuthenticationReference = null,
         int? AuthenticationVersion = null,
         int? TransformationVersion = null,
-        int? SchemaVersion = null);
+        int? SchemaVersion = null,
+        Guid DestinationBindingId = default);
 }

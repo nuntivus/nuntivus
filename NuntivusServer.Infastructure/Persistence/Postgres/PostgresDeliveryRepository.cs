@@ -43,6 +43,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         id,
                         event_id,
                         contract_id,
+                        destination_binding_id,
                         customer_id,
                         event_type,
                         payload,
@@ -70,6 +71,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         @Id,
                         @EventId,
                         @ContractId,
+                        COALESCE(NULLIF(@DestinationBindingId, '00000000-0000-0000-0000-000000000000'::uuid),
+                            (SELECT id FROM contract_destinations WHERE contract_id = @ContractId LIMIT 1)),
                         @CustomerId,
                         @EventType,
                         CAST(@Payload AS jsonb),
@@ -92,7 +95,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         @CreatedAt,
                         @UpdatedAt
                     )
-                    ON CONFLICT (event_id, contract_id) DO NOTHING;
+                    ON CONFLICT (event_id, contract_id, destination_binding_id) DO NOTHING;
                     """;
 
                 var connection = uow.GetConnection()!;
@@ -113,6 +116,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                             delivery.Id,
                             delivery.EventId,
                             delivery.ContractId,
+                            delivery.DestinationBindingId,
                             delivery.CustomerId,
                             delivery.EventType,
                             delivery.Payload,
@@ -247,6 +251,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         id,
                         event_id AS EventId,
                         contract_id AS ContractId,
+                        destination_binding_id AS DestinationBindingId,
                         customer_id AS CustomerId,
                         event_type AS EventType,
                         payload::text AS Payload,
@@ -523,6 +528,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         d.id,
                         d.event_id AS EventId,
                         d.contract_id AS ContractId,
+                        d.destination_binding_id AS DestinationBindingId,
                         d.customer_id AS CustomerId,
                         d.event_type AS EventType,
                         d.payload::text AS Payload,
@@ -1341,6 +1347,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         ordering_key          AS OrderingKey,
                         destination_type    AS DestinationType,
                         destination_config::text AS DestinationConfig,
+                        destination_binding_id AS DestinationBindingId,
                         status,
                         attempt_count       AS AttemptCount,
                         last_error          AS LastError,
@@ -1406,6 +1413,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         ordering_key          AS OrderingKey,
                         destination_type    AS DestinationType,
                         destination_config::text AS DestinationConfig,
+                        destination_binding_id AS DestinationBindingId,
                         status,
                         attempt_count       AS AttemptCount,
                         last_error          AS LastError,
@@ -1625,6 +1633,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
             public Guid Id { get; set; }
             public Guid EventId { get; set; }
             public Guid ContractId { get; set; }
+            public Guid DestinationBindingId { get; set; }
             public string CustomerId { get; set; } = string.Empty;
             public string EventType { get; set; } = string.Empty;
             public string Payload { get; set; } = string.Empty;
@@ -1671,7 +1680,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 row.LastError,
                 row.NextAttemptAt,
                 row.CreatedAt,
-                row.UpdatedAt);
+                row.UpdatedAt,
+                row.DestinationBindingId);
 
         private sealed class DeliveryAttemptRow
         {

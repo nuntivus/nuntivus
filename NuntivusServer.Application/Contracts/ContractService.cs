@@ -9,6 +9,7 @@ using NuntivusServer.Application.Persistence;
 using NuntivusServer.Common;
 using NuntivusServer.Common.Logging;
 using NuntivusServer.Contracts.CustomerContracts;
+using NuntivusServer.Contracts.Destinations;
 using NuntivusServer.Domain.Auditing;
 using NuntivusServer.Domain.Contracts;
 using NuntivusServer.Domain.Sources;
@@ -23,6 +24,7 @@ namespace NuntivusServer.Application.Contracts
         private readonly IContractRepository _repository;
         private readonly ICustomerRepository _customers;
         private readonly ISourceRepository _sources;
+        private readonly IDestinationRepository _destinationResources;
         private readonly IEventDefinitionRepository _eventDefinitions;
         private readonly IAuditLogRepository _auditLogs;
         private readonly IUnitOfWork _unitOfWork;
@@ -34,6 +36,7 @@ namespace NuntivusServer.Application.Contracts
             IContractRepository repository,
             ICustomerRepository customers,
             ISourceRepository sources,
+            IDestinationRepository destinationResources,
             IEventDefinitionRepository eventDefinitions,
             IAuditLogRepository auditLogs,
             IUnitOfWork unitOfWork,
@@ -44,6 +47,7 @@ namespace NuntivusServer.Application.Contracts
             _repository = repository;
             _customers = customers;
             _sources = sources;
+            _destinationResources = destinationResources;
             _eventDefinitions = eventDefinitions;
             _auditLogs = auditLogs;
             _unitOfWork = unitOfWork;
@@ -133,8 +137,9 @@ namespace NuntivusServer.Application.Contracts
             if (orderingValidation.IsFailure)
                 return Result<ContractCreated>.Fail(orderingValidation.Errors);
 
-            var destinationResult = _destinations.Build(request.Configuration);
-            if (destinationResult.IsFailure)
+            var destinationResult = request.DestinationIds is { Count: > 0 }
+                ? null : _destinations.Build(request.Configuration);
+            if (destinationResult?.IsFailure == true)
                 return Result<ContractCreated>.Fail(destinationResult.Errors);
 
             var sourcesValidation = await ValidateSourcesAsync(request.SourceIds, [], cancellationToken);
@@ -150,7 +155,10 @@ namespace NuntivusServer.Application.Contracts
 
             try
             {
-                var now = DateTimeOffset.UtcNow;
+                var now = GetPersistedUtcNow();
+                var bindingsResult = await ResolveBindingsAsync(request.DestinationIds, null, null, now, cancellationToken);
+                if (bindingsResult.IsFailure)
+                    return Result<ContractCreated>.Fail(bindingsResult.Errors);
                 var domainSchemaTargets = new System.Collections.Generic.List<ContractSchemaTarget>(schemaTargets.Count);
                 foreach (var target in schemaTargets)
                     domainSchemaTargets.Add(new ContractSchemaTarget(target.EventType, target.Version));
@@ -160,13 +168,15 @@ namespace NuntivusServer.Application.Contracts
                     request.EventTypes,
                     domainSchemaTargets,
                     request.Filter.ToDomain(),
-                    destinationResult.Value,
+                    bindingsResult.Value.Count > 0 ? bindingsResult.Value[0].Destination : destinationResult!.Value,
                     now,
                     request.Transformation.ToDomain(),
                     request.RateLimit.ToDomain(),
                     request.Ordering.ToDomain(),
                     request.Name,
                     request.SourceIds);
+                if (bindingsResult.Value.Count > 0)
+                    contract.SetDestinations(bindingsResult.Value);
 
                 _unitOfWork.Begin(true);
                 var insert = await _repository.InsertAsync(contract, _unitOfWork, cancellationToken);
@@ -481,15 +491,24 @@ namespace NuntivusServer.Application.Contracts
                 if (sourcesValidation.IsFailure)
                     return Result<ContractView>.Fail(sourcesValidation.Errors);
 
-                var resolvedConfiguration = _destinationUpdates.Resolve(request.Configuration, existing.Destination);
-                if (resolvedConfiguration.IsFailure)
-                    return Result<ContractView>.Fail(resolvedConfiguration.Errors);
+                Result<Destination>? destinationResult = null;
+                if (request.DestinationIds is not { Count: > 0 } && request.Configuration is not null)
+                {
+                    var resolved = _destinationUpdates.Resolve(request.Configuration, existing.Destination);
+                    if (resolved.IsFailure)
+                        return Result<ContractView>.Fail(resolved.Errors);
+                    destinationResult = _destinations.Build(resolved.Value);
+                    if (destinationResult.IsFailure)
+                        return Result<ContractView>.Fail(destinationResult.Errors);
+                }
 
-                var destinationResult = _destinations.Build(resolvedConfiguration.Value);
-                if (destinationResult.IsFailure)
-                    return Result<ContractView>.Fail(destinationResult.Errors);
-
-                var now = DateTimeOffset.UtcNow;
+                var now = GetPersistedUtcNow();
+                var bindingsResult = await ResolveBindingsAsync(request.DestinationIds, existing.Destinations,
+                    request.RefreshDestinationIds, now, cancellationToken, request.RemoveDestinationBindingIds);
+                if (bindingsResult.IsFailure)
+                    return Result<ContractView>.Fail(bindingsResult.Errors);
+                if (bindingsResult.Value.Count == 0)
+                    return Result.Failure<ContractView>(Error.Validation("Select at least one Destination."));
                 var domainSchemaTargets = new List<ContractSchemaTarget>(schemaTargets.Count);
                 foreach (var target in schemaTargets)
                     domainSchemaTargets.Add(new ContractSchemaTarget(target.EventType, target.Version));
@@ -502,13 +521,18 @@ namespace NuntivusServer.Application.Contracts
                     request.EventTypes,
                     domainSchemaTargets,
                     request.Filter.ToDomain(),
-                    destinationResult.Value,
+                    bindingsResult.Value.Count > 0 ? bindingsResult.Value[0].Destination : destinationResult?.Value ?? existing.Destination,
                     existing.CreatedAt,
                     now,
                     request.Transformation.ToDomain(),
                     request.RateLimit.ToDomain(),
                     request.Ordering.ToDomain(),
                     request.SourceIds);
+                var updatedBindings = bindingsResult.Value;
+                if (request.DestinationIds is null && destinationResult is not null && updatedBindings.Count > 0)
+                    updatedBindings = updatedBindings.Select((binding, index) => index == 0
+                        ? binding with { Destination = destinationResult.Value } : binding).ToArray();
+                updated.SetDestinations(updatedBindings);
 
                 _unitOfWork.Begin(true);
                 var update = await _repository.UpdateAsync(updated, _unitOfWork, cancellationToken);
@@ -591,7 +615,7 @@ namespace NuntivusServer.Application.Contracts
                 if (contract is null)
                     return Result.Failure<ContractView>(Error.NotFound($"Contract '{id}' was not found."));
 
-                var now = DateTimeOffset.UtcNow;
+                var now = GetPersistedUtcNow();
                 if (enable) contract.Enable(now); else contract.Disable(now);
 
                 _unitOfWork.Begin(true);
@@ -677,7 +701,7 @@ namespace NuntivusServer.Application.Contracts
                     destinationToApply = rotation.Value;
                 }
 
-                var now = DateTimeOffset.UtcNow;
+                var now = GetPersistedUtcNow();
                 contract.UpdateDestination(destinationToApply, now);
 
                 _unitOfWork.Begin(true);
@@ -721,6 +745,63 @@ namespace NuntivusServer.Application.Contracts
             }
         }
 
+        private async Task<Result<IReadOnlyList<ContractDestinationBinding>>> ResolveBindingsAsync(
+            IReadOnlyCollection<Guid>? ids,
+            IReadOnlyCollection<ContractDestinationBinding>? existing,
+            IReadOnlyCollection<Guid>? refreshIds,
+            DateTimeOffset now,
+            CancellationToken cancellationToken,
+            IReadOnlyCollection<Guid>? removeBindingIds = null)
+        {
+            if (removeBindingIds is not null && removeBindingIds.Any(id =>
+                existing?.Any(binding => binding.Id == id && binding.DestinationId is null) != true))
+                return Result.Failure<IReadOnlyList<ContractDestinationBinding>>(
+                    Error.Validation("Only detached Destination bindings can be removed."));
+            var detached = existing?.Where(binding => binding.DestinationId is null &&
+                removeBindingIds?.Contains(binding.Id) != true).ToArray() ?? [];
+            if (ids is null)
+                return Result.Success<IReadOnlyList<ContractDestinationBinding>>(
+                    existing?.Where(binding => removeBindingIds?.Contains(binding.Id) != true).ToArray() ?? []);
+            if ((ids.Count == 0 && detached.Length == 0) || ids.Contains(Guid.Empty) || ids.Distinct().Count() != ids.Count)
+                return Result.Failure<IReadOnlyList<ContractDestinationBinding>>(
+                    Error.Validation("Select at least one unique Destination ID."));
+            if (refreshIds is not null && refreshIds.Except(ids).Any())
+                return Result.Failure<IReadOnlyList<ContractDestinationBinding>>(
+                    Error.Validation("Only selected destinations can be refreshed."));
+
+            var bindings = new List<ContractDestinationBinding>();
+            foreach (var id in ids)
+            {
+                var saved = existing?.FirstOrDefault(item => item.DestinationId == id);
+                if (saved is not null && refreshIds?.Contains(id) != true)
+                {
+                    bindings.Add(saved);
+                    continue;
+                }
+
+                var result = await _destinationResources.GetByIdAsync(id, cancellationToken);
+                if (result.IsFailure) return Result<IReadOnlyList<ContractDestinationBinding>>.Fail(result.Errors);
+                if (result.Value is null)
+                    return Result.Failure<IReadOnlyList<ContractDestinationBinding>>(
+                        Error.NotFound($"Destination '{id}' was not found."));
+                if (!result.Value.Enabled)
+                    return Result.Failure<IReadOnlyList<ContractDestinationBinding>>(
+                        Error.Validation($"Destination '{id}' is disabled."));
+                bindings.Add(new ContractDestinationBinding(saved?.Id ?? Guid.NewGuid(), id,
+                    result.Value.Destination, true, saved?.CreatedAt ?? now));
+            }
+
+            bindings.AddRange(detached);
+            return Result.Success<IReadOnlyList<ContractDestinationBinding>>(bindings);
+        }
+
+        private static DateTimeOffset GetPersistedUtcNow()
+        {
+            var now = DateTimeOffset.UtcNow;
+            // PostgreSQL timestamps have microsecond precision; ETags must use the persisted value.
+            return now.AddTicks(-(now.Ticks % 10));
+        }
+
         private static AuditLogEntry BuildAudit(
             string action,
             string? actorId,
@@ -749,6 +830,16 @@ namespace NuntivusServer.Application.Contracts
             if (redactedConfig.IsFailure)
                 return Result<ContractView>.Fail(redactedConfig.Errors);
 
+            var bindings = new List<ContractDestinationView>();
+            foreach (var binding in contract.Destinations)
+            {
+                var redacted = _destinations.Redact(binding.Destination);
+                if (redacted.IsFailure) return Result<ContractView>.Fail(redacted.Errors);
+                bindings.Add(new ContractDestinationView(binding.Id, binding.DestinationId,
+                    ContractMapping.MapDestinationType(binding.Destination.Type), redacted.Value,
+                    binding.DeliveryEnabled));
+            }
+
             return Result.Success(new ContractView(
                 contract.Id,
                 contract.CustomerId,
@@ -764,7 +855,8 @@ namespace NuntivusServer.Application.Contracts
                 contract.CreatedAt,
                 contract.UpdatedAt,
                 contract.Name,
-                new List<Guid>(contract.SourceIds)));
+                new List<Guid>(contract.SourceIds),
+                bindings));
         }
 
         private async Task<Result> ValidateSourcesAsync(

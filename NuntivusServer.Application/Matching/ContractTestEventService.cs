@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -70,52 +71,45 @@ namespace NuntivusServer.Application.Matching
             if (evaluation.IsFailure)
                 return Result<ContractTestSendView>.Fail(evaluation.Errors);
 
-            var (preview, match, @event) = evaluation.Value;
-            if (!preview.Matches || match is null)
+            var (preview, matches, @event) = evaluation.Value;
+            if (!preview.Matches || matches is null || matches.Count == 0)
                 return Result.Failure<ContractTestSendView>(Error.Conflict(preview.Reason));
 
             try
             {
                 var now = DateTimeOffset.UtcNow;
-                var delivery = _deliveryFactory.CreatePending(
-                    @event.Id,
-                    match.ContractId,
-                    match.CustomerId,
-                    @event.Type,
-                    @event.Payload,
-                    match.Destination,
-                    now,
-                    match.Transformation is null ? null : JsonSerializer.Serialize(match.Transformation),
-                    match.RateLimit,
-                    match.Ordering,
-                    match.AuthenticationReference,
-                    match.AuthenticationVersion,
-                    match.TransformationVersion,
-                    match.SchemaVersion);
-
                 _unitOfWork.Begin(true);
                 (await _events.InsertAsync(@event, _unitOfWork, cancellationToken)).EnsureSuccess();
-
-                var inserted = (await _deliveries.InsertPendingAsync(
-                    new[] { delivery }, _unitOfWork, cancellationToken)).EnsureValue();
-                if (inserted != 1)
+                var deliveryIds = new List<Guid>(matches.Count);
+                foreach (var match in matches)
                 {
-                    _unitOfWork.Rollback();
-                    return Result.Failure<ContractTestSendView>(Error.Conflict("Test delivery could not be created."));
+                    var delivery = _deliveryFactory.CreatePending(
+                        @event.Id, match.ContractId, match.CustomerId, @event.Type, @event.Payload,
+                        match.Destination, now,
+                        match.Transformation is null ? null : JsonSerializer.Serialize(match.Transformation),
+                        match.RateLimit, match.Ordering, match.AuthenticationReference,
+                        match.AuthenticationVersion, match.TransformationVersion, match.SchemaVersion,
+                        match.DestinationBindingId);
+
+                    var inserted = (await _deliveries.InsertPendingAsync(
+                        [delivery], _unitOfWork, cancellationToken)).EnsureValue();
+                    if (inserted != 1)
+                    {
+                        _unitOfWork.Rollback();
+                        return Result.Failure<ContractTestSendView>(Error.Conflict("Test delivery could not be created."));
+                    }
+                    deliveryIds.Add(delivery.Id);
+
+                    var ready = new DeliveryReady(delivery.Id, @event.Id, match.ContractId, match.CustomerId,
+                        @event.Type, @event.Payload, @event.OccurredAt);
+                    (await _outbox.InsertAsync(
+                        OutboxMessage.Create(@event.Id, OutboxMessageType.DeliveryReady,
+                            JsonSerializer.Serialize(ready), now), _unitOfWork, cancellationToken)).EnsureSuccess();
                 }
-
-                var ready = new DeliveryReady(
-                    delivery.Id, @event.Id, match.ContractId, match.CustomerId,
-                    @event.Type, @event.Payload, @event.OccurredAt);
-                (await _outbox.InsertAsync(
-                    OutboxMessage.Create(@event.Id, OutboxMessageType.DeliveryReady,
-                        JsonSerializer.Serialize(ready), now),
-                    _unitOfWork, cancellationToken)).EnsureSuccess();
-
-                var response = new ContractTestSendView(@event.Id, delivery.Id);
+                var response = new ContractTestSendView(@event.Id, deliveryIds[0], deliveryIds);
                 var audit = AuditLogEntry.Create(
-                    "contract", "test_event_sent", actorId, match.CustomerId,
-                    match.ContractId, delivery.Id, @event.Id, null,
+                    "contract", "test_event_sent", actorId, matches[0].CustomerId,
+                    matches[0].ContractId, deliveryIds[0], @event.Id, null,
                     JsonSerializer.Serialize(new { Request = request, Response = response }),
                     now, now.AddDays(90));
                 (await _auditLogs.AddAsync(audit, _unitOfWork, cancellationToken)).EnsureValue();
@@ -186,20 +180,20 @@ namespace NuntivusServer.Application.Matching
             var matches = await _contracts.ListEnabledMatchingAsync(@event.Type, @event.SourceId, cancellationToken);
             if (matches.IsFailure)
                 return Result<Evaluation>.Fail(matches.Errors);
-            var match = matches.Value.FirstOrDefault(item => item.ContractId == contractId);
-            if (match is null)
+            var contractMatches = matches.Value.Where(item => item.ContractId == contractId).ToArray();
+            if (contractMatches.Length == 0)
                 return Result.Success(new Evaluation(new(false, "Contract or customer is disabled."), null, @event));
 
-            var filter = _filterEvaluator.Evaluate(match.Filter, @event);
+            var filter = _filterEvaluator.Evaluate(contractMatches[0].Filter, @event);
             if (filter.IsFailure)
                 return Result<Evaluation>.Fail(filter.Errors);
             return Result.Success(new Evaluation(
                 filter.Value
-                    ? new ContractTestPreviewView(true, "Contract matches this event. Sending will deliver to this contract only.")
+                    ? new ContractTestPreviewView(true, "Contract matches this event. Sending will deliver to every active destination on this contract.")
                     : new ContractTestPreviewView(false, "Event does not satisfy the contract filter."),
-                match, @event));
+                contractMatches, @event));
         }
 
-        private sealed record Evaluation(ContractTestPreviewView Preview, ContractMatch? Match, Event Event);
+        private sealed record Evaluation(ContractTestPreviewView Preview, IReadOnlyList<ContractMatch>? Matches, Event Event);
     }
 }

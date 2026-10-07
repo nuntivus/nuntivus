@@ -11,12 +11,13 @@ namespace NuntivusServer.Contracts.CustomerContracts
     public sealed record CreateContractRequest(
         string CustomerId,
         IReadOnlyCollection<string> EventTypes,
-        DestinationConfig Configuration,
+        DestinationConfig? Configuration = null,
         IReadOnlyCollection<ContractSchemaTargetRequest>? SchemaTargets = null,
         ContractFilterRequest? Filter = null,
         ContractPayloadTransformationRequest? Transformation = null,
         ContractRateLimitConfig? RateLimit = null,
         ContractOrderingConfig? Ordering = null,
         string? Name = null,
-        IReadOnlyCollection<Guid>? SourceIds = null);
+        IReadOnlyCollection<Guid>? SourceIds = null,
+        IReadOnlyCollection<Guid>? DestinationIds = null);
 }

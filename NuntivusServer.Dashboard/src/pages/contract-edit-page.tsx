@@ -16,11 +16,13 @@ import { getServerValidation } from '../components/forms/form-validation'
 import { ContractsIcon } from '../components/icons/nav-icons'
 import { ContractOptionsForm } from '../features/contracts/contract-options-form'
 import { ContractSourceSelector } from '../features/contracts/contract-source-selector'
+import { ContractDestinationSelector } from '../features/contracts/contract-destination-selector'
 import { backendConfigToFormState, formStateToBackendConfig, validateAdvancedContractOptions } from '../features/contracts/contract-options'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
 import { useUnsavedChangesGuard } from '../hooks/use-unsaved-changes-guard'
 import { DestinationConfigurationForm } from '../features/contracts/destination-forms/destination-configuration-form'
+import { normalizeConfiguration } from '../features/contracts/destination-forms/normalize-configuration'
 import {
   createDefaultSecretFieldState,
   createDefaultDestinationFormState,
@@ -46,39 +48,9 @@ type EditorInitialState = {
   enabled: boolean
   destination: DestinationFormState
   destinationConfiguration: string
+  destinationIds: string[]
+  detached: { id: string; type: string }[]
   options: ContractOptions
-}
-
-function normalizeConfigurationKey(key: string): string {
-  const words = key
-    .replace(/[_\s-]+/g, ' ')
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-    .trim()
-    .split(' ')
-    .filter((word) => word.length > 0)
-
-  if (words.length === 0) {
-    return key
-  }
-
-  return words
-    .map((word, index) =>
-      index === 0
-        ? word.toLowerCase()
-        : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
-    )
-    .join('')
-}
-
-function normalizeConfiguration(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(normalizeConfiguration)
-  if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
-      normalizeConfigurationKey(key), normalizeConfiguration(entry),
-    ]))
-  }
-  return value
 }
 
 function parseEventTypes(value: string) {
@@ -387,6 +359,9 @@ function ContractEditorForm({
   const [eventTypesInput, setEventTypesInput] = useState(initial.eventTypesInput)
   const [enabled, setEnabled] = useState(initial.enabled)
   const [destination, setDestination] = useState(initial.destination)
+  const [destinationIds, setDestinationIds] = useState(initial.destinationIds)
+  const [refreshDestinationIds, setRefreshDestinationIds] = useState<string[]>([])
+  const [retainedDetachedIds, setRetainedDetachedIds] = useState(initial.detached.map(binding => binding.id))
   const [optionsDraft, setOptionsDraft] = useState(() => backendConfigToFormState(initial.options))
   const [rawEditing, setRawEditing] = useState<string[]>([])
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -410,13 +385,14 @@ function ContractEditorForm({
       errors.options = 'Correct the advanced contract options before saving.'
     }
 
-    const destinationError = validateDestinationFormState(destination)
+    const destinationError = destinationIds.length || retainedDetachedIds.length
+      ? null : initial.destinationIds.length ? 'Select at least one Destination.' : validateDestinationFormState(destination)
     if (destinationError) {
       errors.destination = destinationError
     }
 
     return errors
-  }, [destination, eventTypes.length, optionErrors, sourceIds])
+  }, [destination, destinationIds, retainedDetachedIds, initial.destinationIds.length, eventTypes.length, optionErrors, sourceIds])
 
   const hasValidationError = Object.keys(fieldErrors).length > 0
 
@@ -427,6 +403,9 @@ function ContractEditorForm({
       eventTypes,
       enabled,
       destination: mapDestinationFormToConfig(destination),
+      destinationIds,
+      refreshDestinationIds,
+      retainedDetachedIds,
       options: optionsDraft,
     })
 
@@ -436,12 +415,20 @@ function ContractEditorForm({
       eventTypes: parseEventTypes(initial.eventTypesInput),
       enabled: initial.enabled,
       destination: mapDestinationFormToConfig(initial.destination),
+      destinationIds: initial.destinationIds,
+      refreshDestinationIds: [],
+      retainedDetachedIds: initial.detached.map(binding => binding.id),
       options: backendConfigToFormState(initial.options),
     })
 
     return currentSnapshot !== initialSnapshot
   }, [
     destination,
+    destinationIds,
+    refreshDestinationIds,
+    retainedDetachedIds,
+    initial.detached,
+    initial.destinationIds,
     enabled,
     eventTypes,
     initial.destination,
@@ -470,7 +457,7 @@ function ContractEditorForm({
       return
     }
 
-    if (hasCredentialRotationChange(destination)) {
+    if (!destinationIds.length && hasCredentialRotationChange(destination)) {
       const confirmed = await confirm({
         title: 'Confirm credential rotation',
         description:
@@ -519,6 +506,9 @@ function ContractEditorForm({
           name: name.trim() || null,
           eventTypes,
           destination: destinationPayload as typeof destinationConfig,
+          destinationIds: destinationIds.length || initial.destinationIds.length ? destinationIds : undefined,
+          refreshDestinationIds: refreshDestinationIds.length ? refreshDestinationIds : undefined,
+          removeDestinationBindingIds: initial.detached.filter(binding => !retainedDetachedIds.includes(binding.id)).map(binding => binding.id),
           ...formStateToBackendConfig(optionsDraft),
           url: '',
           authenticationType: 'none',
@@ -579,7 +569,12 @@ function ContractEditorForm({
             <Text size="1" color="gray">Enable or disable this contract.</Text>
           </label>
           <div className="contract-edit-destination-fields">
-            <DestinationConfigurationForm value={destination} onChange={setDestination} />
+            <ContractDestinationSelector value={destinationIds} onChange={setDestinationIds}
+              refreshIds={refreshDestinationIds} onRefreshChange={setRefreshDestinationIds}
+              detached={initial.detached} retainedDetachedIds={retainedDetachedIds}
+              onRetainedDetachedChange={setRetainedDetachedIds}
+              disabled={!canWriteContracts || replaceMutation.isPending} />
+            {!destinationIds.length && !initial.destinationIds.length && <DestinationConfigurationForm value={destination} onChange={setDestination} />}
           </div>
           <FieldErrorText id="contract-edit-destination-error" message={fieldErrors.destination} />
         </div>
@@ -685,6 +680,8 @@ export function ContractEditPage() {
           enabled: contract.enabled,
           destination,
           destinationConfiguration: contract.destinationConfiguration,
+          destinationIds: contract.destinations?.flatMap(binding => binding.destinationId ? [binding.destinationId] : []) ?? [],
+          detached: contract.destinations?.filter(binding => !binding.destinationId).map(binding => ({ id: binding.id, type: String(binding.type) })) ?? [],
           options: {
             schemaTargets: contract.schemaTargets,
             filter: contract.filter,

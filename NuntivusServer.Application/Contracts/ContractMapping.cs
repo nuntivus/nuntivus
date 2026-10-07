@@ -43,7 +43,9 @@ namespace NuntivusServer.Application.Contracts
                 MapDestinationType(c.Destination.Type),
                 c.CreatedAt,
                 c.Name,
-                new System.Collections.Generic.List<System.Guid>(c.SourceIds));
+                new System.Collections.Generic.List<System.Guid>(c.SourceIds),
+                c.Destinations.Where(binding => binding.DestinationId.HasValue)
+                    .Select(binding => binding.DestinationId!.Value).ToArray());
 
         public static ContractFilter? ToDomain(this ContractFilterRequest? filter)
         {

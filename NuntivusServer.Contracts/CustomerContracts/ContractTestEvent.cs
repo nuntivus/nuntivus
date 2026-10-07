@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 
 namespace NuntivusServer.Contracts.CustomerContracts
@@ -14,5 +15,6 @@ namespace NuntivusServer.Contracts.CustomerContracts
 
     public sealed record ContractTestSendView(
         Guid EventId,
-        Guid DeliveryId);
+        Guid DeliveryId,
+        IReadOnlyCollection<Guid>? DeliveryIds = null);
 }

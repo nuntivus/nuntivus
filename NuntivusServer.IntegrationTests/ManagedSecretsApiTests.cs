@@ -4,6 +4,7 @@ using Dapper;
 using Npgsql;
 using NuntivusServer.Application.Persistence;
 using NuntivusServer.Contracts.CustomerContracts;
+using NuntivusServer.Contracts.Destinations;
 using NuntivusServer.Domain.Contracts;
 using NuntivusServer.Infastructure.Persistence.Postgres;
 
@@ -93,8 +94,40 @@ namespace NuntivusServer.IntegrationTests
             Assert.Equal(HttpStatusCode.Conflict, deliveryConflict.StatusCode);
 
             await connection.ExecuteAsync("UPDATE deliveries SET status = 'Delivered' WHERE id = @DeliveryId", new { DeliveryId = deliveryId });
+            Assert.Equal(HttpStatusCode.Conflict,
+                (await _client.DeleteAsync("/v1/admin/secrets/secret.acme.token")).StatusCode);
+            await connection.ExecuteAsync("DELETE FROM deliveries WHERE id = @DeliveryId", new { DeliveryId = deliveryId });
+            Assert.Equal(HttpStatusCode.Conflict,
+                (await _client.DeleteAsync("/v1/admin/secrets/secret.acme.token")).StatusCode);
+            await connection.ExecuteAsync("DELETE FROM contract_destinations WHERE contract_id = @ContractId",
+                new { ContractId = contractId });
             var deleted = await _client.DeleteAsync("/v1/admin/secrets/secret.acme.token");
             Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
+        }
+
+        [Fact]
+        public async Task Shared_destination_prevents_secret_deletion_until_registry_and_snapshots_are_removed()
+        {
+            var name = "secret.acme.shared";
+            (await _client.PostAsJsonAsync("/v1/admin/secrets", new { name, value = "value" })).EnsureSuccessStatusCode();
+            (await _client.PostAsJsonAsync("/v1/customers", new { id = "acme", name = "Acme" })).EnsureSuccessStatusCode();
+            var create = await _client.PostAsJsonAsync("/v1/destinations", new CreateDestinationRequest(
+                "Shared", null, new HttpDestinationConfig("https://hooks.example.com/shared",
+                    new HttpAuthentication("bearer", new HttpCredential("ref", name)))));
+            Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+            var destination = await create.Content.ReadFromJsonAsync<DestinationResourceView>();
+            var contract = await _client.PostAsJsonAsync("/v1/contracts", new CreateContractRequest(
+                "acme", ["orders.created"], null, SourceIds: [ContractsApiFixture.SourceId],
+                DestinationIds: [destination!.Id]));
+            Assert.Equal(HttpStatusCode.Created, contract.StatusCode);
+
+            Assert.Equal(HttpStatusCode.Conflict, (await _client.DeleteAsync($"/v1/admin/secrets/{name}")).StatusCode);
+            Assert.Equal(HttpStatusCode.NoContent,
+                (await _client.DeleteAsync($"/v1/destinations/{destination.Id}?removeBindings=false")).StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, (await _client.DeleteAsync($"/v1/admin/secrets/{name}")).StatusCode);
+            await using var connection = new NpgsqlConnection(_fixture.ConnectionString);
+            await connection.ExecuteAsync("DELETE FROM contract_destinations WHERE destination_id IS NULL");
+            Assert.Equal(HttpStatusCode.NoContent, (await _client.DeleteAsync($"/v1/admin/secrets/{name}")).StatusCode);
         }
 
         [Fact]

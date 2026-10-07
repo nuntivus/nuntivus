@@ -15,12 +15,14 @@ namespace NuntivusServer.Domain.Contracts
         private readonly HashSet<string> _eventTypes;
         private readonly IReadOnlyCollection<Guid> _sourceIds;
         private readonly IReadOnlyCollection<ContractSchemaTarget> _schemaTargets;
+        private IReadOnlyCollection<ContractDestinationBinding> _destinations;
 
         public Guid Id { get; }
         public string CustomerId { get; }
         public string? Name { get; }
         public bool Enabled { get; private set; }
         public Destination Destination { get; private set; }
+        public IReadOnlyCollection<ContractDestinationBinding> Destinations => _destinations;
         public IReadOnlyCollection<string> EventTypes => _eventTypes;
         public IReadOnlyCollection<Guid> SourceIds => _sourceIds;
         public IReadOnlyCollection<ContractSchemaTarget> SchemaTargets => _schemaTargets;
@@ -45,7 +47,8 @@ namespace NuntivusServer.Domain.Contracts
             Destination destination,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt,
-            IEnumerable<Guid> sourceIds)
+            IEnumerable<Guid> sourceIds,
+            IEnumerable<ContractDestinationBinding>? destinations = null)
         {
             Id = id;
             CustomerId = customerId;
@@ -69,6 +72,10 @@ namespace NuntivusServer.Domain.Contracts
             Destination = destination;
             CreatedAt = createdAt;
             UpdatedAt = updatedAt;
+            _destinations = destinations?.ToArray() ??
+                [new ContractDestinationBinding(Guid.NewGuid(), null, destination, true, createdAt)];
+            if (_destinations.Count > 0)
+                Destination = _destinations.First().Destination;
         }
 
         public static Contract Create(
@@ -162,7 +169,8 @@ namespace NuntivusServer.Domain.Contracts
             ContractPayloadTransformation? transformation = null,
             ContractRateLimit? rateLimit = null,
             ContractOrdering? ordering = null,
-            IEnumerable<Guid>? sourceIds = null) =>
+            IEnumerable<Guid>? sourceIds = null,
+            IEnumerable<ContractDestinationBinding>? destinations = null) =>
             new(
                 id,
                 customerId,
@@ -177,7 +185,15 @@ namespace NuntivusServer.Domain.Contracts
                 destination,
                 createdAt,
                 updatedAt,
-                sourceIds ?? []);
+                sourceIds ?? [],
+                destinations);
+
+        public void SetDestinations(IEnumerable<ContractDestinationBinding> destinations)
+        {
+            _destinations = destinations.ToArray();
+            if (_destinations.Count > 0)
+                Destination = _destinations.First().Destination;
+        }
 
         public void Enable(DateTimeOffset now)
         {
@@ -200,6 +216,8 @@ namespace NuntivusServer.Domain.Contracts
 
             Destination = destination;
             UpdatedAt = now;
+            _destinations = _destinations.Select((binding, index) => index == 0
+                ? binding with { Destination = destination } : binding).ToArray();
         }
     }
 }

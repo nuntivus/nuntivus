@@ -275,7 +275,7 @@ export function ContractDetailPage() {
           action={<IconButton size="1" variant="ghost" aria-label="Open customer" onClick={() => navigate(`/customers/${encodeURIComponent(contract.customerId)}`)}><CustomersIcon /></IconButton>}
         />
         <ContractMetric icon={EventsIcon} label="Event types" value={contract.eventTypes.join(', ') || '-'} supporting={`${contract.eventTypes.length} event type${contract.eventTypes.length === 1 ? '' : 's'} configured`} tone="danger" />
-        <ContractMetric icon={DeliveriesIcon} label="Destination" value={contract.destinationType} supporting="Destination type" tone="success" />
+        <ContractMetric icon={DeliveriesIcon} label="Destinations" value={String(contract.destinations?.length ?? 1)} supporting="Delivery routes" tone="success" />
         <ContractMetric icon={SettingsIcon} label="Authentication" value={authentication.type === 'none' ? 'None' : authentication.type} supporting={authentication.details} tone="violet" />
       </div>
 
@@ -287,7 +287,11 @@ export function ContractDetailPage() {
             <ContractInfoRow icon={CustomersIcon} label="Customer" action={<IconButton size="1" variant="ghost" color="gray" aria-label="Copy customer ID" onClick={() => void copyValue(contract.customerId, 'Customer ID')}><CopyIcon /></IconButton>}><Link asChild><NavLink to={`/customers/${encodeURIComponent(contract.customerId)}`}>{contract.customerId}</NavLink></Link></ContractInfoRow>
             <ContractInfoRow icon={EventsIcon} label="Sources"><Flex gap="1" wrap="wrap">{contract.sourceIds.map((sourceId) => <Link asChild key={sourceId}><NavLink to="/sources">{sourcesQuery.data?.find((source) => source.id === sourceId)?.name ?? sourceId}</NavLink></Link>)}</Flex></ContractInfoRow>
             <ContractInfoRow icon={EventsIcon} label="Event types"><Flex gap="1" wrap="wrap">{contract.eventTypes.map((eventType) => <Badge key={eventType} variant="soft">{eventType}</Badge>)}</Flex></ContractInfoRow>
-            <ContractInfoRow icon={DeliveriesIcon} label="Destination">{contract.destinationType}</ContractInfoRow>
+            <ContractInfoRow icon={DeliveriesIcon} label="Destinations"><Flex gap="2" wrap="wrap">
+              {contract.destinations?.map(binding => <Badge key={binding.id} variant="soft" color={binding.deliveryEnabled ? 'green' : 'gray'}>
+                {binding.destinationId ? <NavLink to={`/destinations/${encodeURIComponent(binding.destinationId)}`}>{binding.type}</NavLink> : `${binding.type} (detached)`}
+              </Badge>)}
+            </Flex></ContractInfoRow>
             <ContractInfoRow icon={CheckCircleIcon} label="Enabled state"><div><Badge color={contract.enabled ? 'green' : 'gray'} variant="soft">{contract.enabled ? 'Enabled' : 'Disabled'}</Badge><Text as="p" size="1" color="gray">This contract is currently {contract.enabled ? 'active and can receive events' : 'inactive'}.</Text></div></ContractInfoRow>
             <ContractInfoRow icon={CalendarIcon} label="Created at"><div>{new Date(contract.createdAt).toLocaleString()}<Text as="p" size="1" color="gray">Last updated {new Date(contract.updatedAt).toLocaleString()}</Text></div></ContractInfoRow>
           </div>

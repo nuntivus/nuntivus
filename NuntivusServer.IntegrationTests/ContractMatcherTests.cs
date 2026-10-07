@@ -65,7 +65,8 @@ namespace NuntivusServer.IntegrationTests
             ContractFilter? filter = null,
             Destination? destination = null,
             IReadOnlyCollection<ContractSchemaTarget>? schemaTargets = null,
-            ContractPayloadTransformation? transformation = null)
+            ContractPayloadTransformation? transformation = null,
+            IReadOnlyCollection<ContractDestinationBinding>? destinations = null)
         {
             var now = DateTimeOffset.UtcNow;
             var contract = Contract.Create(
@@ -77,6 +78,7 @@ namespace NuntivusServer.IntegrationTests
                 now,
                 transformation: transformation,
                 sourceIds: [MatcherFixture.TestSourceId]);
+            if (destinations is not null) contract.SetDestinations(destinations);
             if (!enabled) contract.Disable(now);
 
             await using var scope = _services.CreateAsyncScope();
@@ -128,6 +130,32 @@ namespace NuntivusServer.IntegrationTests
         }
 
         // ---- service-level tests ---------------------------------------------
+
+        [Fact]
+        public async Task Fans_out_to_each_destination_snapshot_and_replay_is_idempotent()
+        {
+            await SeedCustomerAsync("acme");
+            var now = DateTimeOffset.UtcNow;
+            var first = new ContractDestinationBinding(Guid.NewGuid(), null,
+                new Destination(DestinationType.Http, "{\"Url\":\"https://one.example.com\"}"), true, now);
+            var second = new ContractDestinationBinding(Guid.NewGuid(), null,
+                new Destination(DestinationType.Http, "{\"Url\":\"https://two.example.com\"}"), true, now);
+            await SeedContractAsync("acme", ["orders.created"], destinations: [first, second]);
+            var @event = await SeedEventAsync("orders.created");
+            var accepted = new EventAccepted(@event.Id, @event.Type, @event.SourceId, @event.OccurredAt);
+            var matcher = _services.GetRequiredService<IContractMatcherService>();
+
+            var firstMatch = await matcher.MatchAsync(accepted, CancellationToken.None);
+            var replay = await matcher.MatchAsync(accepted, CancellationToken.None);
+
+            firstMatch.EnsureSuccess();
+            replay.EnsureSuccess();
+            Assert.Equal(1, firstMatch.Value.MatchedContracts);
+            Assert.Equal(2, firstMatch.Value.InsertedDeliveries);
+            Assert.Equal(0, replay.Value.InsertedDeliveries);
+            Assert.Equal(2, await CountDeliveriesAsync(@event.Id));
+            Assert.Equal(2, await CountDeliveryReadyOutboxAsync(@event.Id));
+        }
 
         [Fact]
         public async Task Matches_enabled_contract_and_creates_pending_delivery()

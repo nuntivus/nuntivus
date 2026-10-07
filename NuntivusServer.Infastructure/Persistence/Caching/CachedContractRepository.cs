@@ -12,8 +12,8 @@ namespace NuntivusServer.Infastructure.Persistence.Caching
 {
     /// <summary>
     /// TTL-caching decorator for <see cref="IContractRepository"/>.
-    /// Reads are cached under stable prefixes; writes pass through and rely on
-    /// the TTL for eventual consistency (max staleness == <see cref="CacheOption.Ttl"/>).
+    /// List reads are cached under stable prefixes; by-ID reads bypass the cache
+    /// to preserve optimistic concurrency after writes.
     /// </summary>
     public sealed class CachedContractRepository : IContractRepository
     {
@@ -35,11 +35,7 @@ namespace NuntivusServer.Infastructure.Persistence.Caching
             _inner.UpdateAsync(contract, uow, cancellationToken);
 
         public Task<Result<Contract?>> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
-            _cache.GetOrCreateAsync(
-                $"{CacheKeys.ContractsById}:{id}",
-                _ttl,
-                ct => _inner.GetByIdAsync(id, ct),
-                cancellationToken);
+            _inner.GetByIdAsync(id, cancellationToken);
 
         public Task<Result<PagedResult<Contract>>> ListByCustomerAsync(
             ContractListQuery query,
@@ -61,10 +57,6 @@ namespace NuntivusServer.Infastructure.Persistence.Caching
 
         public Task<Result<IReadOnlyList<ContractMatch>>> ListEnabledMatchingAsync(
             string eventType, string sourceId, CancellationToken cancellationToken) =>
-            _cache.GetOrCreateAsync(
-                $"{CacheKeys.ContractsMatch}:{eventType}:{sourceId}",
-                _ttl,
-                ct => _inner.ListEnabledMatchingAsync(eventType, sourceId, ct),
-                cancellationToken);
+            _inner.ListEnabledMatchingAsync(eventType, sourceId, cancellationToken);
     }
 }
