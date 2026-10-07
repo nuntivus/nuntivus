@@ -12,8 +12,9 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { FormDialog } from '../components/dialogs/form-dialog'
 import { getServerValidation } from '../components/forms/form-validation'
-import { ContractsIcon } from '../components/icons/nav-icons'
+import { ContractsIcon, DeliveriesIcon, EventsIcon } from '../components/icons/nav-icons'
 import { ContractOptionsForm } from '../features/contracts/contract-options-form'
 import { ContractSourceSelector } from '../features/contracts/contract-source-selector'
 import { ContractDestinationSelector } from '../features/contracts/contract-destination-selector'
@@ -21,7 +22,6 @@ import { backendConfigToFormState, formStateToBackendConfig, validateAdvancedCon
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
 import { useUnsavedChangesGuard } from '../hooks/use-unsaved-changes-guard'
-import { DestinationConfigurationForm } from '../features/contracts/destination-forms/destination-configuration-form'
 import { normalizeConfiguration } from '../features/contracts/destination-forms/normalize-configuration'
 import {
   createDefaultSecretFieldState,
@@ -29,7 +29,6 @@ import {
   mapDestinationFormToConfig,
   normalizeDestinationType,
   type DestinationFormState,
-  validateDestinationFormState,
 } from '../features/contracts/destination-forms/types'
 import {
   useContractDetailQuery,
@@ -37,6 +36,8 @@ import {
   useEnableContractMutation,
   useReplaceContractMutation,
 } from '../features/contracts/use-contracts'
+import { useSourcesQuery } from '../features/sources/use-sources'
+import { useDestinationsQuery } from '../features/destinations/use-destinations'
 import { getApiErrorMessage } from '../services/api/api-client'
 import type { ContractOptions, DestinationType } from '../services/api/contracts-api'
 import { useAppSelector } from '../store/hooks'
@@ -49,7 +50,7 @@ type EditorInitialState = {
   destination: DestinationFormState
   destinationConfiguration: string
   destinationIds: string[]
-  detached: { id: string; type: string }[]
+  detached: { id: string; type: string; configuration: string }[]
   options: ContractOptions
 }
 
@@ -353,12 +354,14 @@ function ContractEditorForm({
   const replaceMutation = useReplaceContractMutation(id)
   const enableMutation = useEnableContractMutation()
   const disableMutation = useDisableContractMutation()
+  const sourcesQuery = useSourcesQuery()
+  const destinationsQuery = useDestinationsQuery()
 
   const [name, setName] = useState(initial.name)
   const [sourceIds, setSourceIds] = useState(initial.sourceIds)
   const [eventTypesInput, setEventTypesInput] = useState(initial.eventTypesInput)
   const [enabled, setEnabled] = useState(initial.enabled)
-  const [destination, setDestination] = useState(initial.destination)
+  const destination = initial.destination
   const [destinationIds, setDestinationIds] = useState(initial.destinationIds)
   const [refreshDestinationIds, setRefreshDestinationIds] = useState<string[]>([])
   const [retainedDetachedIds, setRetainedDetachedIds] = useState(initial.detached.map(binding => binding.id))
@@ -366,6 +369,8 @@ function ContractEditorForm({
   const [rawEditing, setRawEditing] = useState<string[]>([])
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [savedContractId, setSavedContractId] = useState<string | null>(null)
+  const [addDialog, setAddDialog] = useState<'source' | 'destination' | null>(null)
+  const [saveAttempted, setSaveAttempted] = useState(false)
 
   const eventTypes = useMemo(() => parseEventTypes(eventTypesInput), [eventTypesInput])
   const optionErrors = useMemo(() => validateAdvancedContractOptions(optionsDraft, eventTypes), [optionsDraft, eventTypes])
@@ -386,13 +391,13 @@ function ContractEditorForm({
     }
 
     const destinationError = destinationIds.length || retainedDetachedIds.length
-      ? null : initial.destinationIds.length ? 'Select at least one Destination.' : validateDestinationFormState(destination)
+      ? null : 'Select at least one Destination.'
     if (destinationError) {
       errors.destination = destinationError
     }
 
     return errors
-  }, [destination, destinationIds, retainedDetachedIds, initial.destinationIds.length, eventTypes.length, optionErrors, sourceIds])
+  }, [destinationIds, retainedDetachedIds, eventTypes.length, optionErrors, sourceIds])
 
   const hasValidationError = Object.keys(fieldErrors).length > 0
 
@@ -452,6 +457,7 @@ function ContractEditorForm({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    setSaveAttempted(true)
 
     if (!canWriteContracts || replaceMutation.isPending || enableMutation.isPending || disableMutation.isPending || hasValidationError || rawEditing.length > 0) {
       return
@@ -506,7 +512,7 @@ function ContractEditorForm({
           name: name.trim() || null,
           eventTypes,
           destination: destinationPayload as typeof destinationConfig,
-          destinationIds: destinationIds.length || initial.destinationIds.length ? destinationIds : undefined,
+          destinationIds,
           refreshDestinationIds: refreshDestinationIds.length ? refreshDestinationIds : undefined,
           removeDestinationBindingIds: initial.detached.filter(binding => !retainedDetachedIds.includes(binding.id)).map(binding => binding.id),
           ...formStateToBackendConfig(optionsDraft),
@@ -542,48 +548,78 @@ function ContractEditorForm({
               onChange={(event) => setName(event.target.value)}
               disabled={!canWriteContracts || replaceMutation.isPending}
             />
+            <Text size="1" color="gray">A clear name to identify this contract.</Text>
           </label>
           <label className="contract-edit-field">
             <Text size="2" weight="medium">Customer <span aria-hidden="true">*</span></Text>
             <TextField.Root value={customerId} readOnly disabled />
+            <Text size="1" color="gray">The customer this contract belongs to.</Text>
           </label>
-          <div className="contract-edit-field">
-            <ContractSourceSelector value={sourceIds} onChange={setSourceIds} disabled={!canWriteContracts || replaceMutation.isPending} />
-            <FieldErrorText id="contract-edit-sources-error" message={fieldErrors.sources} />
-          </div>
           <label className="contract-edit-field">
-            <Text size="2" weight="medium">Event types <span aria-hidden="true">*</span></Text>
+            <Text size="2" weight="medium">Event type <span aria-hidden="true">*</span></Text>
             <TextArea
               value={eventTypesInput}
               onChange={(event) => setEventTypesInput(event.target.value)}
               rows={1}
               disabled={!canWriteContracts || replaceMutation.isPending}
-              aria-invalid={fieldErrors.eventTypes ? 'true' : 'false'}
-              aria-describedby={fieldErrors.eventTypes ? 'contract-edit-event-types-error' : undefined}
+              aria-invalid={saveAttempted && !!fieldErrors.eventTypes}
+              aria-describedby={saveAttempted && fieldErrors.eventTypes ? 'contract-edit-event-types-error' : undefined}
             />
-            <FieldErrorText id="contract-edit-event-types-error" message={fieldErrors.eventTypes} />
+            <FieldErrorText id="contract-edit-event-types-error" message={saveAttempted ? fieldErrors.eventTypes : undefined} />
+            <Text size="1" color="gray">Enter one or more event types, separated by commas.</Text>
           </label>
           <label className="contract-edit-enabled-field">
             <Text size="2" weight="medium">Enabled</Text>
             <Switch checked={enabled} onCheckedChange={setEnabled} disabled={!canWriteContracts || replaceMutation.isPending || enableMutation.isPending || disableMutation.isPending} aria-label="Enabled" />
             <Text size="1" color="gray">Enable or disable this contract.</Text>
           </label>
-          <div className="contract-edit-destination-fields">
-            <ContractDestinationSelector value={destinationIds} onChange={setDestinationIds}
-              refreshIds={refreshDestinationIds} onRefreshChange={setRefreshDestinationIds}
-              detached={initial.detached} retainedDetachedIds={retainedDetachedIds}
-              onRetainedDetachedChange={setRetainedDetachedIds}
-              disabled={!canWriteContracts || replaceMutation.isPending} />
-            {!destinationIds.length && !initial.destinationIds.length && <DestinationConfigurationForm value={destination} onChange={setDestination} />}
-          </div>
-          <FieldErrorText id="contract-edit-destination-error" message={fieldErrors.destination} />
         </div>
       </Card>
 
+      <Card className="contract-edit-selection-card">
+        <Flex align="center" justify="between" gap="3" className="contract-edit-selection-heading">
+          <Flex align="center" gap="3" className="contract-edit-card-title">
+            <span><EventsIcon /></span><div><Heading size="4">Sources</Heading><Text size="2" color="gray">Select the sources to receive events from.</Text></div>
+          </Flex>
+          <Button type="button" variant="outline" size="2" disabled={!canWriteContracts || replaceMutation.isPending} onClick={() => setAddDialog('source')}>+ Add source</Button>
+        </Flex>
+        <ContractSourceSelector table value={sourceIds} onChange={setSourceIds} disabled={!canWriteContracts || replaceMutation.isPending} />
+        <FieldErrorText id="contract-edit-sources-error" message={saveAttempted ? fieldErrors.sources : undefined} />
+      </Card>
+
+      <Card className="contract-edit-selection-card">
+        <Flex align="center" justify="between" gap="3" className="contract-edit-selection-heading">
+          <Flex align="center" gap="3" className="contract-edit-card-title contract-edit-destinations-title">
+            <span><DeliveriesIcon /></span><div><Heading size="4">Destinations</Heading><Text size="2" color="gray">Each selected destination will receive all matching events.</Text></div>
+          </Flex>
+          <Button type="button" variant="outline" size="2" disabled={!canWriteContracts || replaceMutation.isPending} onClick={() => setAddDialog('destination')}>+ Add destination</Button>
+        </Flex>
+        <ContractDestinationSelector table value={destinationIds} onChange={(ids) => { setDestinationIds(ids); setRefreshDestinationIds((current) => current.filter((id) => ids.includes(id))) }}
+          refreshIds={refreshDestinationIds} onRefreshChange={setRefreshDestinationIds}
+          detached={initial.detached} retainedDetachedIds={retainedDetachedIds}
+          onRetainedDetachedChange={setRetainedDetachedIds}
+          disabled={!canWriteContracts || replaceMutation.isPending} />
+        <FieldErrorText id="contract-edit-destination-error" message={saveAttempted ? fieldErrors.destination : undefined} />
+      </Card>
+
       <ContractOptionsForm standalone value={optionsDraft} onChange={setOptionsDraft} eventTypes={eventTypes} disabled={!canWriteContracts || replaceMutation.isPending} onRawEditingChange={(key, editing) => setRawEditing((current) => editing ? [...current.filter((item) => item !== key), key] : current.filter((item) => item !== key))} />
-      <FieldErrorText id="contract-edit-options-error" message={fieldErrors.options} />
+      <FieldErrorText id="contract-edit-options-error" message={saveAttempted ? fieldErrors.options : undefined} />
       <FormErrorText id="contract-edit-submit-error" message={submitError ?? (replaceMutation.isError ? getApiErrorMessage(replaceMutation.error, 'Unable to update contract.') : null)} />
       <input type="hidden" value={String(enabled)} readOnly />
+      <FormDialog open={addDialog !== null} onOpenChange={(open) => { if (!open) setAddDialog(null) }} title={`Add ${addDialog ?? 'item'}`} description={`Choose an existing ${addDialog ?? 'item'} to link to this contract.`} footer={<Button type="button" onClick={() => setAddDialog(null)}>Done</Button>}>
+        {addDialog === 'source' && <Flex direction="column" gap="2">
+          {sourcesQuery.isLoading && <Text size="2" color="gray">Loading sources...</Text>}
+          {sourcesQuery.isError && <Text size="2" color="red">Unable to load sources.</Text>}
+          {sourcesQuery.data?.filter((source) => source.enabled && !sourceIds.includes(source.id)).map((source) => <Button key={source.id} type="button" variant="soft" onClick={() => { setSourceIds((ids) => [...ids, source.id]); setAddDialog(null) }}>{source.name} ({source.type})</Button>)}
+          {sourcesQuery.data?.every((source) => !source.enabled || sourceIds.includes(source.id)) && <Text size="2" color="gray">No more active sources available. <NavLink to="/sources">Manage sources</NavLink></Text>}
+        </Flex>}
+        {addDialog === 'destination' && <Flex direction="column" gap="2">
+          {destinationsQuery.isLoading && <Text size="2" color="gray">Loading destinations...</Text>}
+          {destinationsQuery.isError && <Text size="2" color="red">Unable to load destinations.</Text>}
+          {destinationsQuery.data?.filter((destination) => destination.enabled && destination.configured && !destinationIds.includes(destination.id)).map((destination) => <Button key={destination.id} type="button" variant="soft" onClick={() => { setDestinationIds((ids) => [...ids, destination.id]); setAddDialog(null) }}>{destination.name}</Button>)}
+          {destinationsQuery.data?.every((destination) => !destination.enabled || !destination.configured || destinationIds.includes(destination.id)) && <Text size="2" color="gray">No more active destinations available. <NavLink to="/destinations">Manage destinations</NavLink></Text>}
+        </Flex>}
+      </FormDialog>
     </form>
   )
 }
@@ -681,7 +717,7 @@ export function ContractEditPage() {
           destination,
           destinationConfiguration: contract.destinationConfiguration,
           destinationIds: contract.destinations?.flatMap(binding => binding.destinationId ? [binding.destinationId] : []) ?? [],
-          detached: contract.destinations?.filter(binding => !binding.destinationId).map(binding => ({ id: binding.id, type: String(binding.type) })) ?? [],
+          detached: contract.destinations?.filter(binding => !binding.destinationId).map(binding => ({ id: binding.id, type: String(binding.type), configuration: binding.configuration })) ?? [],
           options: {
             schemaTargets: contract.schemaTargets,
             filter: contract.filter,

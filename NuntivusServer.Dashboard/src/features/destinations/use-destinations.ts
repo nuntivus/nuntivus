@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  createDestination, deleteDestination, disableDestination, enableDestination,
+  createDestination, createDestinationDraft, deleteDestination, disableDestination, enableDestination,
   getDestinationById, listAllDestinations, updateDestination,
-  type DestinationInput,
+  type DestinationInput, type DestinationDraftInput,
 } from '../../services/api/destinations-api'
 
 export function useDestinationsQuery(enabled = true) {
@@ -17,7 +17,7 @@ export function useDestinationDetailQuery(id: string | undefined) {
   })
 }
 
-function useDestinationMutation<T>(mutationFn: (input: T) => Promise<unknown>) {
+function useDestinationMutation<T, TResult>(mutationFn: (input: T) => Promise<TResult>) {
   const client = useQueryClient()
   return useMutation({
     mutationFn,
@@ -30,6 +30,11 @@ function useDestinationMutation<T>(mutationFn: (input: T) => Promise<unknown>) {
 
 export function useCreateDestinationMutation() {
   return useDestinationMutation((input: DestinationInput) => createDestination(input))
+}
+
+export function useCreateDestinationDraftMutation() {
+  return useDestinationMutation((input: DestinationDraftInput) =>
+    createDestinationDraft(input))
 }
 
 export function useUpdateDestinationMutation() {

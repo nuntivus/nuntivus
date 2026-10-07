@@ -10,5 +10,6 @@ namespace NuntivusServer.Domain.Contracts
         bool Enabled,
         string DisablePolicy,
         DateTimeOffset CreatedAt,
-        DateTimeOffset UpdatedAt);
+        DateTimeOffset UpdatedAt,
+        bool Configured = true);
 }

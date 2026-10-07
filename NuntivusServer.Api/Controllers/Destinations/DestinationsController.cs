@@ -42,8 +42,14 @@ namespace NuntivusServer.Api.Controllers.Destinations
         [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
         public async Task<IActionResult> Create([FromBody] CreateDestinationRequest request, CancellationToken cancellationToken)
         {
-            var result = await _destinations.CreateAsync(request.Name, request.Description, request.Configuration,
-                cancellationToken, ActorId());
+            var result = request.Configuration is not null
+                ? await _destinations.CreateAsync(request.Name, request.Description, request.Configuration,
+                    cancellationToken, ActorId())
+                : request.Type is { } type
+                    ? await _destinations.CreateDraftAsync(request.Name, request.Description,
+                        (NuntivusServer.Domain.Contracts.DestinationType)type, cancellationToken, ActorId())
+                    : NuntivusServer.Common.Result.Failure<DestinationResource>(
+                        NuntivusServer.Common.Error.Validation("Destination type is required."));
             return result.ToActionResult(HttpContext, item => CreatedAtAction(nameof(GetById), new { item.Id }, Map(item)));
         }
 
@@ -86,8 +92,8 @@ namespace NuntivusServer.Api.Controllers.Destinations
         private DestinationResourceView Map(DestinationResource item) =>
             new(item.Id, item.Name, item.Description,
                 Enum.Parse<NuntivusServer.Contracts.CustomerContracts.DestinationType>(item.Destination.Type.ToString()),
-                _configs.Redact(item.Destination).EnsureValue(), item.Enabled, item.DisablePolicy,
-                item.CreatedAt, item.UpdatedAt);
+                item.Configured ? _configs.Redact(item.Destination).EnsureValue() : "{}", item.Enabled, item.DisablePolicy,
+                item.CreatedAt, item.UpdatedAt, item.Configured);
 
         private string? ActorId() => User.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? User.FindFirstValue(ClaimTypes.Name) ?? User.Identity?.Name;

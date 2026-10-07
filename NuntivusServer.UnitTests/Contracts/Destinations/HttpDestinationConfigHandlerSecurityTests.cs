@@ -98,6 +98,23 @@ namespace NuntivusServer.UnitTests.Contracts.Destinations
             Assert.Contains("configuration exceeds maximum", result.Errors[0].Message, StringComparison.OrdinalIgnoreCase);
         }
 
+        [Fact]
+        public void Update_preserves_protected_headers_when_typed_editor_omits_them()
+        {
+            var stored = new HttpDestinationConfig("https://hooks.example.com/old", new HttpAuthentication("none"),
+                ProtectedHeaders: new Dictionary<string, string> { ["X-Token"] = "secret.acme.token" });
+            var handler = new HttpDestinationConfigHandler(new PassthroughProtector());
+            var existing = handler.Build(stored);
+            Assert.True(existing.IsSuccess);
+
+            var requested = new HttpDestinationConfig("https://hooks.example.com/new", new HttpAuthentication("none"));
+            var resolved = new DestinationConfigUpdateResolver().Resolve(requested, existing.Value);
+
+            Assert.True(resolved.IsSuccess);
+            var updated = Assert.IsType<HttpDestinationConfig>(resolved.Value);
+            Assert.Equal("secret.acme.token", updated.ProtectedHeaders!["X-Token"]);
+        }
+
         private sealed class PassthroughProtector : IDestinationCredentialProtector
         {
             public Result<string> Protect(string value) => Result.Success(value);

@@ -11,6 +11,7 @@
     <File Path="migration/005_create_sources.sql" />
     <File Path="migration/006_contract_sources.sql" />
     <File Path="migration/007_source_ingestion_state.sql" />
+    <File Path="migration/008_shared_destinations.sql" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path="../../../Desktop/AI_CONTEXT.md" />

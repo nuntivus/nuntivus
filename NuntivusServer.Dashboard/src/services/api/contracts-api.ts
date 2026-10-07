@@ -379,7 +379,7 @@ export async function listContracts(query: ContractListQuery, options?: ApiReque
 }
 
 export async function createContract(request: CreateContractRequest) {
-  const destination = request.destinationIds?.length ? null : buildDestinationConfig(request)
+  const destination = request.destinationIds !== undefined ? null : buildDestinationConfig(request)
 
   return apiPost<Contract>('/v1/contracts', {
     customerId: request.customerId,

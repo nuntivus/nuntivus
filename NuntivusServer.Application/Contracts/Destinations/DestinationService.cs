@@ -41,19 +41,34 @@ namespace NuntivusServer.Application.Contracts.Destinations
                 cancellationToken, actorId);
         }
 
+        public async Task<Result<DestinationResource>> CreateDraftAsync(string name, string? description,
+            NuntivusServer.Domain.Contracts.DestinationType type, CancellationToken cancellationToken, string? actorId = null)
+        {
+            if (string.IsNullOrWhiteSpace(name) || name.Length > 200 || description?.Length > 1000
+                || !Enum.IsDefined(type))
+                return Result.Failure<DestinationResource>(Error.Validation("Destination name, description or type is invalid."));
+            var now = DateTimeOffset.UtcNow;
+            var resource = new DestinationResource(Guid.NewGuid(), name.Trim(), description?.Trim(),
+                new Destination(type, "{}"), false, "continue", now, now, false);
+            return await SaveAsync(resource, "created_draft", () => _repository.InsertAsync(resource, _uow, cancellationToken),
+                cancellationToken, actorId);
+        }
+
         public async Task<Result<DestinationResource>> UpdateAsync(Guid id, string name, string? description,
             DestinationConfig configuration, CancellationToken cancellationToken, string? actorId = null)
         {
             var existing = await GetByIdAsync(id, cancellationToken);
             if (existing.IsFailure) return existing;
-            var resolved = _updates.Resolve(configuration, existing.Value.Destination);
+            var resolved = existing.Value.Configured
+                ? _updates.Resolve(configuration, existing.Value.Destination)
+                : Result.Success(configuration);
             if (resolved.IsFailure) return Result<DestinationResource>.Fail(resolved.Errors);
             var validation = Validate(name, description, resolved.Value);
             if (validation.IsFailure) return Result<DestinationResource>.Fail(validation.Errors);
             if (validation.Value.Type != existing.Value.Destination.Type)
                 return Result.Failure<DestinationResource>(Error.Validation("Destination type cannot be changed."));
             var resource = existing.Value with { Name = name.Trim(), Description = description?.Trim(),
-                Destination = validation.Value, UpdatedAt = DateTimeOffset.UtcNow };
+                Destination = validation.Value, Configured = true, UpdatedAt = DateTimeOffset.UtcNow };
             return await SaveAsync(resource, "updated", () => _repository.UpdateAsync(resource, _uow, cancellationToken),
                 cancellationToken, actorId);
         }
@@ -63,6 +78,8 @@ namespace NuntivusServer.Application.Contracts.Destinations
         {
             var existing = await GetByIdAsync(id, cancellationToken);
             if (existing.IsFailure) return existing;
+            if (enabled && !existing.Value.Configured)
+                return Result.Failure<DestinationResource>(Error.Validation("Configure this Destination before enabling it."));
             var resource = existing.Value with { Enabled = enabled,
                 DisablePolicy = enabled ? "continue" : pauseExistingBindings ? "pause" : "continue",
                 UpdatedAt = DateTimeOffset.UtcNow };

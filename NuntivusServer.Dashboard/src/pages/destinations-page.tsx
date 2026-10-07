@@ -1,45 +1,39 @@
-import { Badge, Button, Card, Flex, Heading, Table, Text, TextArea, TextField } from '@radix-ui/themes'
+import { Badge, Button, Card, Flex, Heading, Table, Text, TextField } from '@radix-ui/themes'
 import { useState, type FormEvent } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FormDialog } from '../components/dialogs/form-dialog'
-import { DestinationConfigurationForm } from '../features/contracts/destination-forms/destination-configuration-form'
-import { createDefaultDestinationFormState, mapDestinationFormToConfig, validateDestinationFormState } from '../features/contracts/destination-forms/types'
-import { normalizeConfiguration } from '../features/contracts/destination-forms/normalize-configuration'
-import { useCreateDestinationMutation, useDeleteDestinationMutation, useDestinationsQuery, useToggleDestinationMutation, useUpdateDestinationMutation } from '../features/destinations/use-destinations'
+import { DestinationTypeSelector } from '../features/contracts/destination-forms/destination-type-selector'
+import { normalizeDestinationType } from '../features/contracts/destination-forms/types'
+import { useCreateDestinationDraftMutation, useDeleteDestinationMutation, useDestinationsQuery, useToggleDestinationMutation } from '../features/destinations/use-destinations'
 import { useNotifications } from '../hooks/use-notifications'
 import { useUnsavedChangesGuard } from '../hooks/use-unsaved-changes-guard'
 import { getApiErrorMessage } from '../services/api/api-client'
-import type { DestinationConfigInput } from '../services/api/contracts-api'
+import type { DestinationType } from '../services/api/contracts-api'
 import type { DestinationResource } from '../services/api/destinations-api'
 import { useAppSelector } from '../store/hooks'
 
 export function DestinationsPage() {
+  const navigate = useNavigate()
   const { currentUser } = useAppSelector((state) => state.auth)
   const canWrite = hasPermission(currentUser, 'contracts.write')
   const list = useDestinationsQuery()
-  const create = useCreateDestinationMutation()
-  const update = useUpdateDestinationMutation()
+  const create = useCreateDestinationDraftMutation()
   const toggle = useToggleDestinationMutation()
   const remove = useDeleteDestinationMutation()
   const notifications = useNotifications()
-  const [editing, setEditing] = useState<DestinationResource | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [choice, setChoice] = useState<{ kind: 'disable' | 'delete'; item: DestinationResource } | null>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [form, setForm] = useState(createDefaultDestinationFormState())
-  const [json, setJson] = useState('')
+  const [type, setType] = useState<DestinationType>('Http')
   const [error, setError] = useState<string | null>(null)
-  useUnsavedChangesGuard({ when: formOpen && !!(name || description || json) })
+  useUnsavedChangesGuard({ when: formOpen && !!(name || description || type !== 'Http') })
 
-  function open(item: DestinationResource | null) {
-    setEditing(item)
-    setName(item?.name ?? '')
-    setDescription(item?.description ?? '')
-    setJson(item ? JSON.stringify({ ...normalizeConfiguration(JSON.parse(item.configuration)) as Record<string, unknown>,
-      type: item.type.toLowerCase() }, null, 2) : '')
-    setForm(createDefaultDestinationFormState())
+  function open() {
+    setName('')
+    setDescription('')
+    setType('Http')
     setError(null)
     setFormOpen(true)
   }
@@ -48,24 +42,10 @@ export function DestinationsPage() {
     event.preventDefault()
     if (!name.trim()) { setError('Name is required.'); return }
     try {
-      let configuration: DestinationConfigInput | Record<string, unknown>
-      if (editing) {
-        configuration = normalizeConfiguration(JSON.parse(json)) as Record<string, unknown>
-        if (configuration.type !== editing.type.toLowerCase()) {
-          setError('Changing the destination type is not supported.')
-          return
-        }
-      } else {
-        const validation = validateDestinationFormState(form)
-        if (validation) { setError(validation); return }
-        configuration = mapDestinationFormToConfig(form)
-      }
-      const input = { name: name.trim(), description: description.trim() || null, configuration,
-        rawConfiguration: !!editing }
-      if (editing) await update.mutateAsync({ id: editing.id, input })
-      else await create.mutateAsync(input)
+      const result = await create.mutateAsync({ name: name.trim(), description: description.trim() || null, type })
       setFormOpen(false)
-      notifications.success('Destination saved.', 'Destinations')
+      notifications.success('Destination created. Configure it before enabling.', 'Destinations')
+      navigate(`/destinations/${encodeURIComponent(result.id)}?edit=1`)
     } catch (cause) { setError(getApiErrorMessage(cause, 'Unable to save Destination.')) }
   }
 
@@ -81,7 +61,7 @@ export function DestinationsPage() {
 
   return <Flex direction="column" gap="4">
     <Flex justify="between" align="center"><Heading size="6">Destinations</Heading>
-      {canWrite && <Button onClick={() => open(null)}>Add Destination</Button>}
+      {canWrite && <Button onClick={open}>Add Destination</Button>}
     </Flex>
     <Text size="2" color="gray">Destinations are global. Contracts copy their configuration when linked; changes here do not update existing contract snapshots.</Text>
     {list.isLoading && <Text>Loading Destinations...</Text>}
@@ -90,22 +70,20 @@ export function DestinationsPage() {
       <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Type</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
     </Table.Row></Table.Header><Table.Body>{list.data.map(item => <Table.Row key={item.id}>
       <Table.Cell><NavLink to={`/destinations/${encodeURIComponent(item.id)}`}>{item.name}</NavLink><Text as="p" size="1" color="gray">{item.description}</Text></Table.Cell>
-      <Table.Cell>{item.type}</Table.Cell><Table.Cell><Badge color={item.enabled ? 'green' : 'gray'}>{item.enabled ? 'Enabled' : 'Disabled'}</Badge></Table.Cell>
+      <Table.Cell>{normalizeDestinationType(item.type) ?? String(item.type)}</Table.Cell><Table.Cell><Badge color={item.configured ? item.enabled ? 'green' : 'gray' : 'amber'}>{item.configured ? item.enabled ? 'Enabled' : 'Disabled' : 'Needs configuration'}</Badge></Table.Cell>
       <Table.Cell><Flex gap="2" wrap="wrap">{canWrite && <>
-        <Button size="1" variant="soft" onClick={() => open(item)}>Edit</Button>
+        <Button asChild size="1" variant="soft"><NavLink to={`/destinations/${encodeURIComponent(item.id)}?edit=1`}>Edit</NavLink></Button>
         {item.enabled ? <Button size="1" variant="soft" onClick={() => setChoice({ kind: 'disable', item })}>Disable</Button>
-          : <Button size="1" variant="soft" onClick={() => void toggle.mutateAsync({ id: item.id, enabled: true, pauseExistingBindings: false })}>Enable</Button>}
+          : item.configured && <Button size="1" variant="soft" onClick={() => void toggle.mutateAsync({ id: item.id, enabled: true, pauseExistingBindings: false })}>Enable</Button>}
         <Button size="1" color="red" variant="soft" onClick={() => setChoice({ kind: 'delete', item })}>Delete</Button>
       </>}</Flex></Table.Cell>
     </Table.Row>)}</Table.Body></Table.Root></Card>}
-    <FormDialog open={formOpen} onOpenChange={setFormOpen} title={editing ? 'Edit Destination' : 'Add Destination'}
-      footer={<><Button variant="soft" type="button" onClick={() => setFormOpen(false)}>Cancel</Button><Button type="submit" form="destination-form" disabled={create.isPending || update.isPending}>Save</Button></>}>
+    <FormDialog open={formOpen} onOpenChange={setFormOpen} title="Add Destination"
+      footer={<><Button variant="soft" type="button" onClick={() => setFormOpen(false)}>Cancel</Button><Button type="submit" form="destination-form" disabled={create.isPending}>Save</Button></>}>
       <form id="destination-form" onSubmit={(event) => void submit(event)}><Flex direction="column" gap="3">
         <TextField.Root placeholder="Name" aria-label="Destination name" value={name} onChange={event => setName(event.target.value)} required />
         <TextField.Root placeholder="Description" aria-label="Description" value={description} onChange={event => setDescription(event.target.value)} />
-        {editing ? <><Text size="2">{editing.type} configuration (secrets are redacted). Changes affect future contract links only.</Text>
-          <TextArea aria-label="Destination configuration JSON" rows={10} value={json} onChange={event => setJson(event.target.value)} /></>
-          : <DestinationConfigurationForm value={form} onChange={setForm} />}
+        <DestinationTypeSelector value={type} onChange={setType} />
         {error && <Text color="red">{error}</Text>}
       </Flex></form>
     </FormDialog>

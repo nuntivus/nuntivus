@@ -10,18 +10,20 @@ import type { DestinationFormState } from './types'
 type DestinationConfigurationFormProps = {
   value: DestinationFormState
   onChange: (next: DestinationFormState) => void
+  fixedType?: boolean
 }
 
 export function DestinationConfigurationForm({
   value,
   onChange,
+  fixedType = false,
 }: DestinationConfigurationFormProps) {
   return (
     <Flex direction="column" gap="3">
-      <DestinationTypeSelector
+      {!fixedType && <DestinationTypeSelector
         value={value.type}
         onChange={(type) => onChange({ ...value, type })}
-      />
+      />}
 
       {value.type === 'Http' ? (
         <HttpDestinationForm

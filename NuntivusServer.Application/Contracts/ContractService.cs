@@ -784,9 +784,9 @@ namespace NuntivusServer.Application.Contracts
                 if (result.Value is null)
                     return Result.Failure<IReadOnlyList<ContractDestinationBinding>>(
                         Error.NotFound($"Destination '{id}' was not found."));
-                if (!result.Value.Enabled)
+                if (!result.Value.Enabled || !result.Value.Configured)
                     return Result.Failure<IReadOnlyList<ContractDestinationBinding>>(
-                        Error.Validation($"Destination '{id}' is disabled."));
+                        Error.Validation($"Destination '{id}' is disabled or not configured."));
                 bindings.Add(new ContractDestinationBinding(saved?.Id ?? Guid.NewGuid(), id,
                     result.Value.Destination, true, saved?.CreatedAt ?? now));
             }

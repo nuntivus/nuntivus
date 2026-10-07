@@ -293,6 +293,10 @@
   align-items: start;
 }
 
+.destination-detail-page {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .detail-page-header,
 .detail-overview-card,
 .detail-panel-wide {
@@ -2130,6 +2134,114 @@
   min-width: 0;
 }
 
+.contract-edit-selection-card {
+  min-width: 0;
+}
+
+.contract-edit-selection-heading {
+  margin-bottom: 12px;
+}
+
+.contract-edit-selection-heading .contract-edit-card-title {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.contract-edit-selection-heading .contract-edit-card-title>span {
+  width: 42px;
+  height: 42px;
+}
+
+.contract-edit-destinations-title>span {
+  color: #0f766e;
+  background: #e5f7f0;
+}
+
+.contract-selection-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.contract-selection-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  white-space: nowrap;
+  font-size: var(--font-size-2);
+}
+
+.contract-selection-table th,
+.contract-selection-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.contract-selection-table th {
+  background: var(--accent-bg);
+  font-weight: 600;
+}
+
+.contract-selection-table th:first-child,
+.contract-selection-table td:first-child {
+  text-align: left;
+}
+
+.contract-selection-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.contract-selection-table .contract-selection-empty {
+  padding: 14px;
+  text-align: center;
+}
+
+.contract-selection-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.contract-selection-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.contract-selection-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+
+.contract-selection-status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.contract-selection-status.is-active {
+  background: #e5f7f0;
+  color: #047857;
+}
+
+.contract-selection-status.is-active::before {
+  background: #059669;
+}
+
+.contract-selection-detached {
+  padding: 12px;
+}
+
 .contract-edit-card-title {
   margin-bottom: 14px;
   padding-bottom: 10px;
@@ -2158,7 +2270,7 @@
 
 .contract-edit-details-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.85fr) minmax(0, 1.1fr) minmax(130px, 0.55fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.1fr) minmax(130px, 0.75fr);
   align-items: start;
   gap: 14px 16px;
 }
@@ -2243,5 +2355,10 @@
 
   .contract-edit-header {
     align-items: flex-start;
+  }
+
+  .contract-edit-selection-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

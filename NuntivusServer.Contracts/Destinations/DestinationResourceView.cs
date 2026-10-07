@@ -5,9 +5,10 @@ namespace NuntivusServer.Contracts.Destinations
 {
     public sealed record DestinationResourceView(Guid Id, string Name, string? Description,
         DestinationType Type, string Configuration, bool Enabled, string DisablePolicy,
-        DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+        DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, bool Configured = true);
 
-    public sealed record CreateDestinationRequest(string Name, string? Description, DestinationConfig Configuration);
+    public sealed record CreateDestinationRequest(string Name, string? Description, DestinationConfig? Configuration,
+        DestinationType? Type = null);
     public sealed record UpdateDestinationRequest(string Name, string? Description, DestinationConfig Configuration);
     public sealed record DisableDestinationRequest(bool PauseExistingBindings);
     public sealed record DeleteDestinationRequest(bool RemoveBindings);

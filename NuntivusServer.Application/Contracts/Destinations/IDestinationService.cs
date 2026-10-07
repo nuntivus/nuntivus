@@ -8,6 +8,8 @@ namespace NuntivusServer.Application.Contracts.Destinations
     {
         Task<Result<DestinationResource>> CreateAsync(string name, string? description, DestinationConfig configuration,
             CancellationToken cancellationToken, string? actorId = null);
+        Task<Result<DestinationResource>> CreateDraftAsync(string name, string? description,
+            NuntivusServer.Domain.Contracts.DestinationType type, CancellationToken cancellationToken, string? actorId = null);
         Task<Result<DestinationResource>> UpdateAsync(Guid id, string name, string? description, DestinationConfig configuration,
             CancellationToken cancellationToken, string? actorId = null);
         Task<Result<DestinationResource>> SetEnabledAsync(Guid id, bool enabled, bool pauseExistingBindings,

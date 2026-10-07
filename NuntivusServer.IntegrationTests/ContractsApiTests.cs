@@ -1102,6 +1102,39 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Draft_destination_cannot_be_linked_until_configured_and_enabled()
+        {
+            await CreateCustomerAsync("acme");
+            var created = await _client.PostAsJsonAsync("/v1/destinations", new CreateDestinationRequest(
+                "Draft hook", "Created without settings", null, DestinationType.Http));
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+            var draft = await created.Content.ReadFromJsonAsync<DestinationResourceView>();
+            Assert.NotNull(draft);
+            Assert.False(draft.Configured);
+            Assert.False(draft.Enabled);
+            Assert.Equal("{}", draft.Configuration);
+
+            var link = ValidRequest("acme") with { Configuration = null, DestinationIds = [draft.Id] };
+            Assert.Equal(HttpStatusCode.BadRequest, (await _client.PostAsJsonAsync("/v1/contracts", link)).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await _client.PostAsync($"/v1/destinations/{draft.Id}/enable", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await _client.PutAsJsonAsync($"/v1/destinations/{draft.Id}",
+                new UpdateDestinationRequest(draft.Name, draft.Description,
+                    new HttpDestinationConfig("", new HttpAuthentication("none"))))).StatusCode);
+
+            var configured = await _client.PutAsJsonAsync($"/v1/destinations/{draft.Id}",
+                new UpdateDestinationRequest(draft.Name, draft.Description,
+                    new HttpDestinationConfig("https://hooks.example.com/draft", new HttpAuthentication("none"))));
+            Assert.Equal(HttpStatusCode.OK, configured.StatusCode);
+            var ready = await configured.Content.ReadFromJsonAsync<DestinationResourceView>();
+            Assert.True(ready!.Configured);
+            Assert.False(ready.Enabled);
+            Assert.Equal(HttpStatusCode.BadRequest, (await _client.PostAsJsonAsync("/v1/contracts", link)).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await _client.PostAsync($"/v1/destinations/{draft.Id}/enable", null)).StatusCode);
+            Assert.Equal(HttpStatusCode.Created, (await _client.PostAsJsonAsync("/v1/contracts", link)).StatusCode);
+
+        }
+
+        [Fact]
         public async Task Shared_destination_edit_does_not_change_contract_snapshots_until_refreshed()
         {
             await CreateCustomerAsync("acme");

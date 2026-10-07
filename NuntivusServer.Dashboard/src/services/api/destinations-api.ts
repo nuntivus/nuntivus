@@ -6,12 +6,24 @@ export interface DestinationResource {
   id: string
   name: string
   description: string | null
-  type: string
+  type: string | number
   configuration: string
   enabled: boolean
+  configured: boolean
   disablePolicy: 'continue' | 'pause'
   createdAt: string
   updatedAt: string
+}
+
+export interface DestinationDraftInput {
+  name: string
+  description: string | null
+  type: 'Http' | 'Kafka' | 'Nats' | 'RabbitMq' | 'Sqs'
+}
+
+export function createDestinationDraft(input: DestinationDraftInput) {
+  const types = { Http: 1, Kafka: 2, Nats: 3, RabbitMq: 4, Sqs: 5 } as const
+  return apiPost<DestinationResource>('/v1/destinations', { ...input, type: types[input.type] })
 }
 
 export interface DestinationInput {
