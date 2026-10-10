@@ -222,22 +222,25 @@ namespace NuntivusServer.Domain.Deliveries
 
         /// <summary>
         /// Manual retry operation: reactivates a dead or failed delivery by resetting
-        /// attempt count and clearing error/scheduling state. Returns false when
-        /// already pending.
+        /// attempt count and scheduling immediate dispatch. An already-attempted pending
+        /// delivery without a scheduled retry may also be explicitly rescheduled.
         /// </summary>
         public bool ManualRetryReset(DateTimeOffset now)
         {
             if (Status == DeliveryStatus.Pending)
-                return false;
+            {
+                if (AttemptCount == 0 || NextAttemptAt is not null)
+                    return false;
+            }
 
-            if (Status is not (DeliveryStatus.Dead or DeliveryStatus.Failed))
+            if (Status is not (DeliveryStatus.Pending or DeliveryStatus.Dead or DeliveryStatus.Failed))
                 throw new InvalidOperationException(
                     $"Cannot manually retry delivery from {Status}.");
 
             Status = DeliveryStatus.Pending;
             AttemptCount = 0;
             LastError = null;
-            NextAttemptAt = null;
+            NextAttemptAt = now;
             UpdatedAt = now;
             return true;
         }

@@ -181,13 +181,33 @@ namespace NuntivusServer.UnitTests.Deliveries
             delivery.MarkInFlight(now);
             delivery.MarkDead("fatal", now.AddSeconds(1));
 
-            var changed = delivery.ManualRetryReset(now.AddSeconds(2));
+            var retryAt = now.AddSeconds(2);
+            var changed = delivery.ManualRetryReset(retryAt);
 
             Assert.True(changed);
             Assert.Equal(DeliveryStatus.Pending, delivery.Status);
             Assert.Equal(0, delivery.AttemptCount);
             Assert.Null(delivery.LastError);
-            Assert.Null(delivery.NextAttemptAt);
+            Assert.Equal(retryAt, delivery.NextAttemptAt);
+        }
+
+        [Fact]
+        public void ManualRetryReset_From_Attempted_Unscheduled_Pending_Reschedules()
+        {
+            var original = NewPending(out var now);
+            var delivery = Delivery.Rehydrate(
+                original.Id, original.EventId, original.ContractId, original.CustomerId,
+                original.EventType, original.Payload, original.DestinationType,
+                original.DestinationConfiguration, DeliveryStatus.Pending, 1, null, null,
+                original.CreatedAt, now);
+
+            var retryAt = now.AddSeconds(2);
+            Assert.True(delivery.ManualRetryReset(retryAt));
+            Assert.Equal(DeliveryStatus.Pending, delivery.Status);
+            Assert.Equal(0, delivery.AttemptCount);
+            Assert.Equal(retryAt, delivery.NextAttemptAt);
+            Assert.False(delivery.ManualRetryReset(retryAt.AddSeconds(1)));
+            Assert.Equal(retryAt, delivery.NextAttemptAt);
         }
 
         [Fact]

@@ -73,6 +73,8 @@ function httpStatusFromMetadata(metadata: Record<string, string>) {
   )
 }
 
+const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 type DetailIcon = ComponentType<SVGProps<SVGSVGElement>>
 
 function DeliveryMetric({
@@ -176,8 +178,12 @@ export function DeliveryDetailPage() {
 
   const [retryReason, setRetryReason] = useState('')
   const [requeueReason, setRequeueReason] = useState('')
-  const [operationKey, setOperationKey] = useState('')
+  const [operationKey, setOperationKey] = useState<string>(() => crypto.randomUUID())
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  const operationKeyError = operationKey.trim() && !guidPattern.test(operationKey.trim())
+    ? 'Operation ID must be a valid GUID.'
+    : null
+  const canSubmitOperation = guidPattern.test(operationKey.trim())
 
   const operationError = useMemo(
     () =>
@@ -187,7 +193,7 @@ export function DeliveryDetailPage() {
   )
 
   async function handleRetry() {
-    if (!id || !canOperateDeliveries || retryMutation.isPending || !operationKey.trim()) {
+    if (!id || !canOperateDeliveries || retryMutation.isPending || !canSubmitOperation) {
       return
     }
 
@@ -211,6 +217,7 @@ export function DeliveryDetailPage() {
       })
 
       setRetryReason('')
+      setOperationKey(crypto.randomUUID())
       notifications.success('Delivery retry requested.', 'Delivery operation')
     } catch (error) {
       notifications.error(getApiErrorMessage(error, 'Unable to retry delivery.'), 'Delivery operation')
@@ -218,7 +225,7 @@ export function DeliveryDetailPage() {
   }
 
   async function handleRequeue() {
-    if (!id || !canOperateDeliveries || requeueMutation.isPending || !operationKey.trim()) {
+    if (!id || !canOperateDeliveries || requeueMutation.isPending || !canSubmitOperation) {
       return
     }
 
@@ -242,6 +249,7 @@ export function DeliveryDetailPage() {
       })
 
       setRequeueReason('')
+      setOperationKey(crypto.randomUUID())
       notifications.success('Delivery requeue requested.', 'Delivery operation')
     } catch (error) {
       notifications.error(getApiErrorMessage(error, 'Unable to requeue delivery.'), 'Delivery operation')
@@ -311,6 +319,8 @@ export function DeliveryDetailPage() {
   const failed = normalizedStatus === 'failed' || normalizedStatus === 'dead'
   const delivered = normalizedStatus === 'delivered'
   const inFlight = normalizedStatus === 'inflight'
+  const attemptCount = Math.max(delivery.attemptCount, attempts.length)
+  const failedStepIndex = failed ? (attemptCount > 0 ? 2 : 0) : -1
   const statusTone = failed ? 'danger' : delivered ? 'success' : 'accent'
   const statusDescription = normalizedStatus === 'dead'
     ? 'Delivery failed permanently'
@@ -393,12 +403,12 @@ export function DeliveryDetailPage() {
           <div className={`delivery-status-track delivery-status-${normalizedStatus}`}>
             {[
               ['Created', new Date(delivery.createdAt).toLocaleString(), true],
-              ['Processing', attempts.length ? `${attempts.length} attempt${attempts.length === 1 ? '' : 's'}` : 'Waiting', inFlight || delivered],
-              ['Delivered', delivered ? new Date(delivery.updatedAt).toLocaleString() : 'Pending', delivered],
-              ['Completed', delivered ? 'Done' : 'Pending', delivered],
+              ['Processing', attemptCount ? `${attemptCount} attempt${attemptCount === 1 ? '' : 's'}` : 'Waiting', inFlight || delivered || attemptCount > 0],
+              ['Delivered', delivered ? new Date(delivery.updatedAt).toLocaleString() : normalizedStatus === 'dead' || failed && attemptCount > 0 ? 'Not delivered' : 'Pending', delivered],
+              ['Completed', delivered ? 'Done' : normalizedStatus === 'dead' ? 'Not completed' : 'Pending', delivered],
             ].map(([label, detail, active], index) => (
-              <div className={`delivery-status-step ${active ? 'active' : ''} ${failed && index === 0 ? 'failed' : ''}`} key={String(label)}>
-                <span className="delivery-status-dot">{failed && index === 0 ? '×' : active ? '✓' : index + 1}</span>
+              <div className={`delivery-status-step ${active ? 'active' : ''} ${index === failedStepIndex ? 'failed' : ''}`} key={String(label)}>
+                <span className="delivery-status-dot">{index === failedStepIndex ? '×' : active ? '✓' : index + 1}</span>
                 <Text size="2" weight="medium">{label}</Text>
                 <Text size="1" color="gray">{detail}</Text>
               </div>
@@ -553,7 +563,10 @@ export function DeliveryDetailPage() {
                 value={operationKey}
                 onChange={(event) => setOperationKey(event.target.value)}
                 disabled={retryMutation.isPending || requeueMutation.isPending}
+                aria-invalid={!!operationKeyError}
+                aria-describedby={operationKeyError ? 'operation-id-error' : undefined}
               />
+              {operationKeyError ? <Text id="operation-id-error" size="2" color="red">{operationKeyError}</Text> : null}
 
               <Text size="2" color="gray">Retry reason</Text>
               <TextArea
@@ -580,7 +593,7 @@ export function DeliveryDetailPage() {
               <Flex gap="2" wrap="wrap">
                 <Button
                   type="button"
-                  disabled={!operationKey.trim() || retryMutation.isPending || requeueMutation.isPending}
+                  disabled={!canSubmitOperation || retryMutation.isPending || requeueMutation.isPending}
                   onClick={() => void handleRetry()}
                 >
                   {retryMutation.isPending ? 'Retrying...' : 'Retry'}
@@ -588,7 +601,7 @@ export function DeliveryDetailPage() {
                 <Button
                   type="button"
                   variant="soft"
-                  disabled={!operationKey.trim() || retryMutation.isPending || requeueMutation.isPending}
+                  disabled={!canSubmitOperation || retryMutation.isPending || requeueMutation.isPending}
                   onClick={() => void handleRequeue()}
                 >
                   {requeueMutation.isPending ? 'Submitting...' : 'Redelivery (requeue)'}

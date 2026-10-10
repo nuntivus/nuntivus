@@ -40,12 +40,63 @@ namespace NuntivusServer.IntegrationTests
 
             Assert.Equal(DeliveryStatus.Pending, first.Value.Status);
             Assert.Equal(0, first.Value.AttemptCount);
+            Assert.NotNull(first.Value.NextAttemptAt);
             Assert.Equal(DeliveryStatus.Pending, second.Value.Status);
             Assert.Equal(0, second.Value.AttemptCount);
+            Assert.NotNull(second.Value.NextAttemptAt);
+            Assert.InRange(
+                (first.Value.NextAttemptAt.Value - second.Value.NextAttemptAt.Value).Duration(),
+                TimeSpan.Zero,
+                TimeSpan.FromMilliseconds(1));
+
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            var repo = new PostgresDeliveryRepository(factory);
+            using (var uow = new PostgresUnitOfWork(factory))
+            {
+                uow.Begin(true);
+                var due = await repo.ClaimDueForSchedulingAsync(DateTimeOffset.UtcNow.AddMinutes(1), 10, uow, CancellationToken.None);
+                due.EnsureSuccess();
+                Assert.Single(due.Value);
+                Assert.Equal(delivery.Id, due.Value[0].Id);
+                uow.Commit();
+            }
+
+            using (var uow = new PostgresUnitOfWork(factory))
+            {
+                uow.Begin(true);
+                var dueAgain = await repo.ClaimDueForSchedulingAsync(DateTimeOffset.UtcNow.AddMinutes(1), 10, uow, CancellationToken.None);
+                dueAgain.EnsureSuccess();
+                Assert.Empty(dueAgain.Value);
+                uow.Commit();
+            }
 
             var attempts = await ReadAttemptsAsync(delivery.Id);
             Assert.Single(attempts);
             Assert.Equal(1, await ReadAuditCountAsync(delivery.Id));
+        }
+
+        [Fact]
+        public async Task ManualRetryAsync_Reschedules_Previously_Attempted_Pending_Delivery()
+        {
+            var delivery = await SeedDeadDeliveryAsync();
+            var service = BuildService();
+            (await service.ManualRequeueAsync(delivery.Id, NewRequest("requeue"), CancellationToken.None)).EnsureSuccess();
+
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            using (var uow = new PostgresUnitOfWork(factory))
+            {
+                uow.Begin(true);
+                var claimed = await new PostgresDeliveryRepository(factory).ClaimDueForSchedulingAsync(
+                    DateTimeOffset.UtcNow.AddMinutes(1), 10, uow, CancellationToken.None);
+                Assert.Single(claimed.EnsureValue());
+                uow.Commit();
+            }
+
+            var result = await service.ManualRetryAsync(delivery.Id, NewRequest("retry pending"), CancellationToken.None);
+            result.EnsureSuccess();
+            Assert.Equal(DeliveryStatus.Pending, result.Value.Status);
+            Assert.Equal(0, result.Value.AttemptCount);
+            Assert.NotNull(result.Value.NextAttemptAt);
         }
 
         [Fact]
