@@ -1,9 +1,20 @@
 import { Button, Card, Flex, Select, Text, TextField } from '@radix-ui/themes'
 import { useState, type FormEvent } from 'react'
 import { NavLink, useSearchParams } from 'react-router-dom'
+import { useEntityLabel } from '../components/links/use-entity-label'
 import { ContractTestEventForm } from '../features/contracts/contract-test-event-form'
 import { useContractDetailQuery, useContractsQuery } from '../features/contracts/use-contracts'
 import { getApiErrorMessage } from '../services/api/api-client'
+import type { Contract } from '../services/api/contracts-api'
+
+function ContractOption({ contract }: { contract: Pick<Contract, 'id' | 'name' | 'customerId'> }) {
+  const customerName = useEntityLabel('customer', contract.customerId)
+  return (
+    <Select.Item value={contract.id}>
+      {contract.name ?? contract.id} ({customerName ?? contract.customerId})
+    </Select.Item>
+  )
+}
 
 export function TestEventsPage() {
   const [params, setParams] = useSearchParams()
@@ -51,12 +62,10 @@ export function TestEventsPage() {
             <Select.Trigger id="test-contract" placeholder="Choose contract" />
             <Select.Content>
               {selected && !selectedIsListed ? (
-                <Select.Item value={selected.id}>{selected.name ?? selected.id} ({selected.customerId})</Select.Item>
+                <ContractOption contract={selected} />
               ) : null}
               {contracts.map((contract) => (
-                <Select.Item key={contract.id} value={contract.id}>
-                  {contract.name ?? contract.id} ({contract.customerId})
-                </Select.Item>
+                <ContractOption key={contract.id} contract={contract} />
               ))}
             </Select.Content>
           </Select.Root>

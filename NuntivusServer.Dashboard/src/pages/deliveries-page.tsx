@@ -13,6 +13,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText } from '../components/forms/form-feedback'
+import { EntityReference } from '../components/links/entity-reference'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
 import { DetailAction, NavigableTableRow } from '../components/tables/table-actions'
@@ -394,9 +395,9 @@ export function DeliveriesPage() {
                               {displayStatus}
                             </Badge>
                           </Table.Cell>
-                          <Table.Cell>{delivery.customerId}</Table.Cell>
-                          <Table.Cell>{delivery.contractId}</Table.Cell>
-                          <Table.Cell>{delivery.eventId}</Table.Cell>
+                          <Table.Cell><EntityReference kind="customer" id={delivery.customerId} /></Table.Cell>
+                          <Table.Cell><EntityReference kind="contract" id={delivery.contractId} /></Table.Cell>
+                          <Table.Cell><EntityReference kind="event" id={delivery.eventId} label={delivery.eventType} /></Table.Cell>
                           <Table.Cell>{delivery.destinationType}</Table.Cell>
                           <Table.Cell>{new Date(delivery.createdAt).toLocaleString()}</Table.Cell>
                           <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>

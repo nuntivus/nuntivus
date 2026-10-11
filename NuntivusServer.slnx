@@ -13,6 +13,7 @@
     <File Path="migration/007_source_ingestion_state.sql" />
     <File Path="migration/008_shared_destinations.sql" />
     <File Path="migration/009_destination_drafts.sql" />
+    <File Path="migration/010_delivery_attempt_number_offset.sql" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path="../../../Desktop/AI_CONTEXT.md" />

@@ -5,13 +5,14 @@ import {
   Flex,
   Heading,
   IconButton,
-  Link,
   Table,
   Text,
 } from '@radix-ui/themes'
 import { useState, type ComponentType, type ReactNode, type SVGProps } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { ErrorPreview } from '../components/errors/error-preview'
+import { EntityReference } from '../components/links/entity-reference'
 import { DestinationHealthSummary } from '../components/observability/destination-health-summary'
 import {
   CalendarIcon,
@@ -35,26 +36,11 @@ import {
 } from '../features/contracts/use-contracts'
 import { useContractDestinationHealthQuery } from '../features/destination-health/use-destination-health'
 import { useSourcesQuery } from '../features/sources/use-sources'
+import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
-
-function formatDeliveryStatus(status: number | string) {
-  if (typeof status === 'string') {
-    return status
-  }
-
-  const map: Record<number, string> = {
-    0: 'Pending',
-    1: 'InFlight',
-    2: 'Delivered',
-    3: 'Failed',
-    4: 'Dead',
-  }
-
-  return map[status] ?? String(status)
-}
 
 function authenticationDetails(configurationText: string) {
   try {
@@ -270,7 +256,7 @@ export function ContractDetailPage() {
         <ContractMetric
           icon={CustomersIcon}
           label="Customer"
-          value={<Link asChild><NavLink to={`/customers/${encodeURIComponent(contract.customerId)}`}>{contract.customerId}</NavLink></Link>}
+          value={<EntityReference kind="customer" id={contract.customerId} />}
           supporting="Contract owner"
           action={<IconButton size="1" variant="ghost" aria-label="Open customer" onClick={() => navigate(`/customers/${encodeURIComponent(contract.customerId)}`)}><CustomersIcon /></IconButton>}
         />
@@ -284,12 +270,12 @@ export function ContractDetailPage() {
           <ContractSectionTitle icon={CodeIcon}>Contract details</ContractSectionTitle>
           <div className="contract-info-list">
             <ContractInfoRow icon={ContractsIcon} label="Contract ID" action={<IconButton size="1" variant="ghost" color="gray" aria-label="Copy contract ID" onClick={() => void copyValue(contract.id, 'Contract ID')}><CopyIcon /></IconButton>}>{contract.id}</ContractInfoRow>
-            <ContractInfoRow icon={CustomersIcon} label="Customer" action={<IconButton size="1" variant="ghost" color="gray" aria-label="Copy customer ID" onClick={() => void copyValue(contract.customerId, 'Customer ID')}><CopyIcon /></IconButton>}><Link asChild><NavLink to={`/customers/${encodeURIComponent(contract.customerId)}`}>{contract.customerId}</NavLink></Link></ContractInfoRow>
-            <ContractInfoRow icon={EventsIcon} label="Sources"><Flex gap="1" wrap="wrap">{contract.sourceIds.map((sourceId) => <Link asChild key={sourceId}><NavLink to="/sources">{sourcesQuery.data?.find((source) => source.id === sourceId)?.name ?? sourceId}</NavLink></Link>)}</Flex></ContractInfoRow>
+            <ContractInfoRow icon={CustomersIcon} label="Customer" action={<IconButton size="1" variant="ghost" color="gray" aria-label="Copy customer ID" onClick={() => void copyValue(contract.customerId, 'Customer ID')}><CopyIcon /></IconButton>}><EntityReference kind="customer" id={contract.customerId} /></ContractInfoRow>
+            <ContractInfoRow icon={EventsIcon} label="Sources"><Flex gap="1" wrap="wrap">{contract.sourceIds.map((sourceId) => <EntityReference key={sourceId} kind="source" id={sourceId} label={sourcesQuery.data?.find((source) => source.id === sourceId)?.name} />)}</Flex></ContractInfoRow>
             <ContractInfoRow icon={EventsIcon} label="Event types"><Flex gap="1" wrap="wrap">{contract.eventTypes.map((eventType) => <Badge key={eventType} variant="soft">{eventType}</Badge>)}</Flex></ContractInfoRow>
             <ContractInfoRow icon={DeliveriesIcon} label="Destinations"><Flex gap="2" wrap="wrap">
               {contract.destinations?.map(binding => <Badge key={binding.id} variant="soft" color={binding.deliveryEnabled ? 'green' : 'gray'}>
-                {binding.destinationId ? <NavLink to={`/destinations/${encodeURIComponent(binding.destinationId)}`}>{binding.type}</NavLink> : `${binding.type} (detached)`}
+                {binding.destinationId ? <EntityReference kind="destination" id={binding.destinationId} /> : `${binding.type} (detached)`}
               </Badge>)}
             </Flex></ContractInfoRow>
             <ContractInfoRow icon={CheckCircleIcon} label="Enabled state"><div><Badge color={contract.enabled ? 'green' : 'gray'} variant="soft">{contract.enabled ? 'Enabled' : 'Disabled'}</Badge><Text as="p" size="1" color="gray">This contract is currently {contract.enabled ? 'active and can receive events' : 'inactive'}.</Text></div></ContractInfoRow>
@@ -423,7 +409,7 @@ export function ContractDetailPage() {
                 {(failuresQuery.data?.items ?? []).map((failure) => (
                   <Table.Row key={failure.deliveryId}>
                     <Table.RowHeaderCell>{failure.deliveryId}</Table.RowHeaderCell>
-                    <Table.Cell>{failure.lastError ?? '-'}</Table.Cell>
+                    <Table.Cell><ErrorPreview error={failure.lastError} /></Table.Cell>
                     <Table.Cell>{failure.attemptCount}</Table.Cell>
                   </Table.Row>
                 ))}

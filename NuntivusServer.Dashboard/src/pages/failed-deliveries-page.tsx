@@ -12,11 +12,14 @@ import {
 import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { ErrorPreview } from '../components/errors/error-preview'
 import { FieldErrorText } from '../components/forms/form-feedback'
+import { EntityReference } from '../components/links/entity-reference'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
 import { RetryIcon } from '../components/icons/nav-icons'
 import { deliveryIdError } from '../features/deliveries/delivery-filter-validation'
+import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
 import { DetailAction, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
 import {
   useFailedDeliveriesQuery,
@@ -300,6 +303,7 @@ export function FailedDeliveriesPage() {
                   <Table.Body>
                     {deliveries.map((delivery) => {
                       const retrying = activeRetryMutation.isPending && confirmDeliveryId === delivery.id
+                      const status = formatDeliveryStatus(delivery.status)
                       return (
                         <NavigableTableRow
                           key={delivery.id}
@@ -308,14 +312,17 @@ export function FailedDeliveriesPage() {
                         >
                           <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
                           <Table.Cell>
-                            <Badge color={delivery.status === 'Dead' ? 'red' : 'amber'} variant="soft">
-                              {delivery.status}
+                            <Badge color={status === 'Dead' ? 'red' : 'amber'} variant="soft">
+                              {status}
                             </Badge>
+                            <Text as="div" size="1" color="gray">
+                              {status === 'Dead' ? 'No automatic retry' : 'Retry may be scheduled'}
+                            </Text>
                           </Table.Cell>
-                          <Table.Cell>{delivery.customerId}</Table.Cell>
-                          <Table.Cell>{delivery.contractId}</Table.Cell>
+                          <Table.Cell><EntityReference kind="customer" id={delivery.customerId} /></Table.Cell>
+                          <Table.Cell><EntityReference kind="contract" id={delivery.contractId} /></Table.Cell>
                           <Table.Cell>{formatFailureCategory(delivery)}</Table.Cell>
-                          <Table.Cell>{delivery.latestFailure?.error ?? delivery.lastError ?? '-'}</Table.Cell>
+                          <Table.Cell><ErrorPreview error={delivery.latestFailure?.error ?? delivery.lastError} /></Table.Cell>
                           <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>
                           <Table.Cell>
                             <div className="table-row-actions">

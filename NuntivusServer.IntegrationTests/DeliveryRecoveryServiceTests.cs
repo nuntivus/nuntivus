@@ -100,6 +100,55 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task ManualRetryAsync_Reschedules_Unattempted_Pending_Delivery_After_Work_Message_Is_Lost()
+        {
+            var (eventId, contractId, customerId) = await SeedAsync();
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            var repo = new PostgresDeliveryRepository(factory);
+            var delivery = DeliveryFactory.CreatePending(
+                eventId, contractId, customerId, "orders.created", "{}",
+                new Destination(DestinationType.Http, "{\"url\":\"https://example.test\"}"),
+                DateTimeOffset.UtcNow);
+
+            using (var uow = new PostgresUnitOfWork(factory))
+            {
+                uow.Begin(true);
+                (await repo.InsertPendingAsync(new[] { delivery }, uow, CancellationToken.None)).EnsureSuccess();
+                uow.Commit();
+            }
+
+            var service = BuildService();
+            var request = NewRequest("retry pending without an attempt");
+            var first = (await service.ManualRetryAsync(delivery.Id, request, CancellationToken.None)).EnsureValue();
+            Assert.Equal(DeliveryStatus.Pending, first.Status);
+            Assert.Equal(0, first.AttemptCount);
+            Assert.NotNull(first.NextAttemptAt);
+
+            var duplicate = (await service.ManualRetryAsync(delivery.Id, request, CancellationToken.None)).EnsureValue();
+            Assert.NotNull(duplicate.NextAttemptAt);
+            Assert.InRange(
+                (first.NextAttemptAt.Value - duplicate.NextAttemptAt.Value).Duration(),
+                TimeSpan.Zero,
+                TimeSpan.FromMilliseconds(1));
+
+            using (var uow = new PostgresUnitOfWork(factory))
+            {
+                uow.Begin(true);
+                var due = await repo.ClaimDueForSchedulingAsync(
+                    DateTimeOffset.UtcNow.AddMinutes(1), 10, uow, CancellationToken.None);
+                Assert.Equal(delivery.Id, Assert.Single(due.EnsureValue()).Id);
+                uow.Commit();
+            }
+
+            var second = (await service.ManualRetryAsync(
+                delivery.Id, NewRequest("retry after lost work message"), CancellationToken.None)).EnsureValue();
+            Assert.Equal(DeliveryStatus.Pending, second.Status);
+            Assert.Equal(0, second.AttemptCount);
+            Assert.NotNull(second.NextAttemptAt);
+            Assert.Equal(2, await ReadAuditCountAsync(delivery.Id));
+        }
+
+        [Fact]
         public async Task ManualRequeueAsync_Preserves_AttemptCount_And_Is_Idempotent()
         {
             var delivery = await SeedDeadDeliveryAsync();

@@ -186,7 +186,7 @@ namespace NuntivusServer.Application.Deliveries.Execution
                 expectedUpdatedAt = delivery.UpdatedAt;
             }
 
-            var attemptNumber = delivery.AttemptCount;
+            var attemptNumber = delivery.AttemptNumber;
             var startedAt = DateTimeOffset.UtcNow;
             var payloadResult = _payloadTransformer.Apply(
                 delivery.Payload,
@@ -231,7 +231,7 @@ namespace NuntivusServer.Application.Deliveries.Execution
             }
             var completedAt = DateTimeOffset.UtcNow;
 
-            var (finalizedNow, retry) = ClassifyRetry(execution, attemptNumber, completedAt);
+            var (finalizedNow, retry) = ClassifyRetry(execution, delivery.AttemptCount, completedAt);
             var destinationLatencyMs = ResolveDestinationLatencyMs(execution);
             var attempt = DeliveryAttempt.Create(
                 delivery.Id,

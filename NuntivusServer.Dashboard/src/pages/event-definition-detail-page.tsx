@@ -15,6 +15,7 @@ import { useState, type FormEvent } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { EntityReference } from '../components/links/entity-reference'
 import { CalendarIcon, CheckCircleIcon, ClockIcon, CodeIcon, ContractsIcon, CopyIcon, EventDefinitionsIcon, EventsIcon, PencilIcon } from '../components/icons/nav-icons'
 import { DetailPageHeader } from '../components/states/detail-page-header'
 import { DetailMetric, DetailSectionTitle } from '../components/states/detail-visuals'
@@ -578,7 +579,7 @@ export function EventDefinitionDetailPage() {
                         {contract.id}
                       </NavLink>
                     </Table.RowHeaderCell>
-                    <Table.Cell>{contract.customerId}</Table.Cell>
+                    <Table.Cell><EntityReference kind="customer" id={contract.customerId} /></Table.Cell>
                     <Table.Cell>{contract.name ?? '-'}</Table.Cell>
                     <Table.Cell>
                       <Badge color={contract.enabled ? 'green' : 'gray'} variant="soft">

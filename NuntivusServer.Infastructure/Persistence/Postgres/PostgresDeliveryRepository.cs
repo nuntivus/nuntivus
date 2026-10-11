@@ -61,6 +61,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         destination_config,
                         status,
                         attempt_count,
+                        attempt_number_offset,
                         last_error,
                         next_attempt_at,
                         created_at,
@@ -90,6 +91,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         CAST(@DestinationConfiguration AS jsonb),
                         @Status,
                         @AttemptCount,
+                        @AttemptNumberOffset,
                         @LastError,
                         @NextAttemptAt,
                         @CreatedAt,
@@ -134,6 +136,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                             delivery.DestinationConfiguration,
                             Status = delivery.Status.ToString(),
                             delivery.AttemptCount,
+                            delivery.AttemptNumberOffset,
                             delivery.LastError,
                             delivery.NextAttemptAt,
                             delivery.CreatedAt,
@@ -269,6 +272,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         destination_config::text AS DestinationConfig,
                         status,
                         attempt_count AS AttemptCount,
+                        attempt_number_offset AS AttemptNumberOffset,
                         last_error AS LastError,
                         next_attempt_at AS NextAttemptAt,
                         created_at AS CreatedAt,
@@ -546,6 +550,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         d.destination_config::text AS DestinationConfig,
                         d.status,
                         d.attempt_count AS AttemptCount,
+                        d.attempt_number_offset AS AttemptNumberOffset,
                         d.last_error AS LastError,
                         d.next_attempt_at AS NextAttemptAt,
                         d.created_at AS CreatedAt,
@@ -1350,6 +1355,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         destination_binding_id AS DestinationBindingId,
                         status,
                         attempt_count       AS AttemptCount,
+                        attempt_number_offset AS AttemptNumberOffset,
                         last_error          AS LastError,
                         next_attempt_at     AS NextAttemptAt,
                         created_at          AS CreatedAt,
@@ -1416,6 +1422,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         destination_binding_id AS DestinationBindingId,
                         status,
                         attempt_count       AS AttemptCount,
+                        attempt_number_offset AS AttemptNumberOffset,
                         last_error          AS LastError,
                         next_attempt_at     AS NextAttemptAt,
                         created_at          AS CreatedAt,
@@ -1475,6 +1482,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     UPDATE deliveries
                     SET status          = @Status,
                         attempt_count   = @AttemptCount,
+                        attempt_number_offset = @AttemptNumberOffset,
                         last_error      = @LastError,
                         next_attempt_at = @NextAttemptAt,
                         updated_at      = @UpdatedAt
@@ -1489,6 +1497,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         delivery.Id,
                         Status = delivery.Status.ToString(),
                         delivery.AttemptCount,
+                        delivery.AttemptNumberOffset,
                         delivery.LastError,
                         delivery.NextAttemptAt,
                         delivery.UpdatedAt,
@@ -1651,6 +1660,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
             public string DestinationConfig { get; set; } = string.Empty;
             public string Status { get; set; } = string.Empty;
             public int AttemptCount { get; set; }
+            public int AttemptNumberOffset { get; set; }
             public string? LastError { get; set; }
             public DateTimeOffset? NextAttemptAt { get; set; }
             public DateTimeOffset CreatedAt { get; set; }
@@ -1681,7 +1691,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 row.NextAttemptAt,
                 row.CreatedAt,
                 row.UpdatedAt,
-                row.DestinationBindingId);
+                row.DestinationBindingId,
+                row.AttemptNumberOffset);
 
         private sealed class DeliveryAttemptRow
         {

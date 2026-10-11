@@ -13,10 +13,13 @@ import { useState } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { JsonViewer } from '../components/json/json-viewer'
+import { EntityReference } from '../components/links/entity-reference'
+import { useEntityLabel } from '../components/links/use-entity-label'
 import { CalendarIcon, ChevronRightIcon, ClockIcon, CodeIcon, CopyIcon, DeliveriesIcon, EventsIcon, RetryIcon } from '../components/icons/nav-icons'
 import { DetailLoadingState } from '../components/states/detail-loading-state'
 import { DetailMetric } from '../components/states/detail-visuals'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
 import {
   useEventDetailQuery,
   useReplayEventMutation,
@@ -27,22 +30,6 @@ import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { DeliveryListItem } from '../services/api/events-api'
 import { useAppSelector } from '../store/hooks'
-
-function formatDeliveryStatus(status: number | string) {
-  if (typeof status === 'string') {
-    return status
-  }
-
-  const map: Record<number, string> = {
-    0: 'Pending',
-    1: 'InFlight',
-    2: 'Delivered',
-    3: 'Failed',
-    4: 'Dead',
-  }
-
-  return map[status] ?? String(status)
-}
 
 function summarizeDeliveries(deliveries: DeliveryListItem[]) {
   let pending = 0
@@ -117,6 +104,7 @@ export function EventDetailPage() {
   } | null>(null)
 
   const detail = detailQuery.data
+  const sourceName = useEntityLabel('source', detail?.source)
   const replayedDeliveriesQuery = useReplayedEventDeliveriesQuery(lastReplay?.replayedEventId)
 
   const replayKeyError = !replayKey.trim() ? 'Replay key is required.' : null
@@ -249,7 +237,7 @@ export function EventDetailPage() {
       </Flex>
 
       <div className="visual-detail-metric-grid">
-        <DetailMetric icon={EventsIcon} label="Event type" value={detail.type} supporting={`Source: ${detail.source}`} />
+        <DetailMetric icon={EventsIcon} label="Event type" value={detail.type} supporting={`Source: ${sourceName ?? detail.source}`} />
         <DetailMetric icon={CalendarIcon} label="Occurred" value={formatEventDate(detail.occurredAt)} supporting="Producer timestamp" />
         <DetailMetric icon={ClockIcon} label="Received" value={formatEventDate(detail.receivedAt)} supporting="Ingestion timestamp" tone="violet" />
         <DetailMetric icon={DeliveriesIcon} label="Deliveries" value={deliverySummary.total} supporting={`${deliverySummary.delivered} delivered / ${deliverySummary.failedOrDead} failed`} tone={deliverySummary.failedOrDead ? 'danger' : 'success'} />
@@ -280,7 +268,9 @@ export function EventDetailPage() {
                     <Text size="1" color="gray">Delivery</Text>
                     <Badge color={deliveryBadgeColor(delivery.status)} variant="soft">{formatDeliveryStatus(delivery.status)}</Badge>
                   </Flex>
-                  <NavLink className="event-timeline-link" to={`/deliveries/${delivery.id}`}>{delivery.id}</NavLink>
+                   <NavLink className="event-timeline-link" to={`/deliveries/${delivery.id}`} title={`Delivery ID: ${delivery.id}`}>
+                     {delivery.eventType} · {delivery.id.slice(0, 8)}
+                   </NavLink>
                   <Text size="1" color="gray">{formatEventDate(delivery.updatedAt)} / {delivery.attemptCount} attempt{delivery.attemptCount === 1 ? '' : 's'}</Text>
                 </div>
               </li>
@@ -300,7 +290,7 @@ export function EventDetailPage() {
         <div className="event-information-list">
           <div className="event-information-row"><EventsIcon /><Text weight="medium">Event ID</Text><Text>{detail.id}</Text><Button variant="ghost" size="1" aria-label="Copy event ID" onClick={() => void handleCopy(detail.id, 'id')}><CopyIcon /></Button></div>
           <div className="event-information-row"><EventsIcon /><Text weight="medium">Event type</Text><Text>{detail.type}</Text><Button variant="ghost" size="1" aria-label="Copy event type" onClick={() => void handleCopy(detail.type, 'type')}><CopyIcon /></Button></div>
-          <div className="event-information-row"><CodeIcon /><Text weight="medium">Source</Text><Text>{detail.source}</Text><Button variant="ghost" size="1" aria-label="Copy source" onClick={() => void handleCopy(detail.source, 'source')}><CopyIcon /></Button></div>
+          <div className="event-information-row"><CodeIcon /><Text weight="medium">Source</Text><Text><EntityReference kind="source" id={detail.source} /></Text><Button variant="ghost" size="1" aria-label="Copy source" onClick={() => void handleCopy(detail.source, 'source')}><CopyIcon /></Button></div>
           <div className="event-information-row"><CalendarIcon /><Text weight="medium">Occurred timestamp</Text><Text>{formatEventDate(detail.occurredAt)}</Text><Button variant="ghost" size="1" aria-label="Copy occurred timestamp" onClick={() => void handleCopy(detail.occurredAt, 'occurred')}><CopyIcon /></Button></div>
           <div className="event-information-row"><ClockIcon /><Text weight="medium">Received timestamp</Text><Text>{formatEventDate(detail.receivedAt)}</Text><Button variant="ghost" size="1" aria-label="Copy received timestamp" onClick={() => void handleCopy(detail.receivedAt, 'received')}><CopyIcon /></Button></div>
           <div className="event-information-row"><DeliveriesIcon /><Text weight="medium">Delivery summary</Text><Flex gap="1" wrap="wrap"><Badge variant="soft">Total {deliverySummary.total}</Badge><Badge color="green" variant="soft">Delivered {deliverySummary.delivered}</Badge><Badge color="amber" variant="soft">Pending {deliverySummary.pending}</Badge><Badge color="red" variant="soft">Failed/Dead {deliverySummary.failedOrDead}</Badge></Flex><span /></div>
@@ -352,7 +342,7 @@ export function EventDetailPage() {
                 {detail.deliveries.map((delivery) => (
                   <Table.Row key={delivery.id}>
                     <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
-                    <Table.Cell>{delivery.contractId}</Table.Cell>
+                     <Table.Cell><EntityReference kind="contract" id={delivery.contractId} /></Table.Cell>
                     <Table.Cell><Badge color={deliveryBadgeColor(delivery.status)} variant="soft">{formatDeliveryStatus(delivery.status)}</Badge></Table.Cell>
                     <Table.Cell>{delivery.attemptCount}</Table.Cell>
                     <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>
@@ -445,7 +435,7 @@ export function EventDetailPage() {
                         {(replayedDeliveriesQuery.data ?? []).map((delivery) => (
                           <Table.Row key={delivery.id}>
                             <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
-                            <Table.Cell>{delivery.contractId}</Table.Cell>
+                            <Table.Cell><EntityReference kind="contract" id={delivery.contractId} /></Table.Cell>
                             <Table.Cell>{formatDeliveryStatus(delivery.status)}</Table.Cell>
                             <Table.Cell>{delivery.attemptCount}</Table.Cell>
                           </Table.Row>

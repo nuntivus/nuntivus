@@ -187,8 +187,46 @@ namespace NuntivusServer.UnitTests.Deliveries
             Assert.True(changed);
             Assert.Equal(DeliveryStatus.Pending, delivery.Status);
             Assert.Equal(0, delivery.AttemptCount);
+            Assert.Equal(1, delivery.AttemptNumberOffset);
             Assert.Null(delivery.LastError);
             Assert.Equal(retryAt, delivery.NextAttemptAt);
+        }
+
+        [Fact]
+        public void ManualRetryReset_Across_Multiple_Cycles_Preserves_Unique_Attempt_Numbers()
+        {
+            var delivery = NewPending(out var now);
+            delivery.MarkInFlight(now);
+            delivery.MarkDead("fatal", now);
+
+            delivery.ManualRetryReset(now.AddSeconds(1));
+            delivery.MarkInFlight(now.AddSeconds(1));
+            Assert.Equal(2, delivery.AttemptNumber);
+            delivery.MarkDead("fatal again", now.AddSeconds(2));
+
+            delivery.ManualRetryReset(now.AddSeconds(3));
+            Assert.Equal(0, delivery.AttemptCount);
+            Assert.Equal(2, delivery.AttemptNumberOffset);
+            delivery.MarkInFlight(now.AddSeconds(3));
+            Assert.Equal(1, delivery.AttemptCount);
+            Assert.Equal(3, delivery.AttemptNumber);
+        }
+
+        [Fact]
+        public void Rehydrate_Preserves_Attempt_Number_Offset()
+        {
+            var original = NewPending(out var now);
+            var delivery = Delivery.Rehydrate(
+                original.Id, original.EventId, original.ContractId, original.CustomerId,
+                original.EventType, original.Payload, null, null, null, null, null, null,
+                false, null, original.DestinationType, original.DestinationConfiguration,
+                DeliveryStatus.Pending, 0, null, now, original.CreatedAt, now,
+                attemptNumberOffset: 4);
+
+            delivery.MarkInFlight(now);
+
+            Assert.Equal(1, delivery.AttemptCount);
+            Assert.Equal(5, delivery.AttemptNumber);
         }
 
         [Fact]
@@ -226,14 +264,20 @@ namespace NuntivusServer.UnitTests.Deliveries
         }
 
         [Fact]
-        public void ManualRetryReset_When_Already_Active_Is_NoOp()
+        public void ManualRetryReset_From_Unscheduled_Pending_Schedules_Immediate_Retry()
         {
             var delivery = NewPending(out var now);
 
-            var changed = delivery.ManualRetryReset(now.AddSeconds(1));
+            var retryAt = now.AddSeconds(1);
+            var changed = delivery.ManualRetryReset(retryAt);
 
-            Assert.False(changed);
+            Assert.True(changed);
             Assert.Equal(DeliveryStatus.Pending, delivery.Status);
+            Assert.Equal(0, delivery.AttemptCount);
+            Assert.Equal(0, delivery.AttemptNumberOffset);
+            Assert.Equal(retryAt, delivery.NextAttemptAt);
+            Assert.False(delivery.ManualRetryReset(retryAt.AddSeconds(1)));
+            Assert.Equal(retryAt, delivery.NextAttemptAt);
         }
 
         [Fact]

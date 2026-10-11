@@ -54,7 +54,7 @@ export interface ContractOptions {
   ordering?: ContractOrdering | null
 }
 
-export interface Contract {
+export interface Contract extends ContractOptions {
   id: string
   customerId: string
   sourceIds: string[]

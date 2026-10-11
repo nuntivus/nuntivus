@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using NuntivusServer.Application.Deliveries.Execution;
+using NuntivusServer.Application.Deliveries.Recovery;
 using NuntivusServer.Application.Contracts.Destinations;
 using NuntivusServer.Application.Persistence;
 using NuntivusServer.Common.Logging;
@@ -164,6 +165,51 @@ namespace NuntivusServer.IntegrationTests
             var attempt = Assert.Single(await ReadAttemptsAsync(deliveryId));
             Assert.Equal("Permanent", attempt.failure_category);
             Assert.Equal("400", attempt.HttpStatus);
+        }
+
+        [Fact]
+        public async Task Manual_retry_after_permanent_failure_records_each_new_attempt()
+        {
+            var (deliveryId, _) = await SeedDeliveryAsync(_server.Url);
+            var dispatcher = BuildDispatcher(new DeliveryDispatcherOption { MaxAttempts = 2 });
+            _server.Enqueue(Respond(HttpStatusCode.BadRequest, "permanent"));
+            Assert.Equal(DeliveryDispatchOutcome.FailedTerminal,
+                (await dispatcher.DispatchAsync(deliveryId, CancellationToken.None)).EnsureValue());
+
+            var factory = new PostgresDatabaseConnectionFactory(_fx.ConnectionString);
+            var repository = new PostgresDeliveryRepository(factory);
+            var recovery = new DeliveryRecoveryService(
+                repository, new PostgresAuditLogRepository(factory), new PostgresUnitOfWork(factory),
+                new NullAppLogger<DeliveryRecoveryService>());
+
+            for (var cycle = 2; cycle <= 3; cycle++)
+            {
+                var retry = await recovery.ManualRetryAsync(
+                    deliveryId,
+                    new ManualDeliveryOperationRequest(Guid.NewGuid(), "operator-1", "retry", "{}"),
+                    CancellationToken.None);
+                Assert.Equal(0, retry.EnsureValue().AttemptCount);
+
+                using (var uow = new PostgresUnitOfWork(factory))
+                {
+                    uow.Begin(true);
+                    var due = await repository.ClaimDueForSchedulingAsync(
+                        DateTimeOffset.UtcNow.AddMinutes(1), 10, uow, CancellationToken.None);
+                    Assert.Single(due.EnsureValue());
+                    uow.Commit();
+                }
+
+                _server.Enqueue(Respond(cycle == 2 ? HttpStatusCode.InternalServerError : HttpStatusCode.OK, "result"));
+                var outcome = await dispatcher.DispatchAsync(deliveryId, CancellationToken.None);
+                Assert.Equal(cycle == 2 ? DeliveryDispatchOutcome.FailedRetry : DeliveryDispatchOutcome.Delivered,
+                    outcome.EnsureValue());
+            }
+
+            var attempts = await ReadAttemptsAsync(deliveryId);
+            Assert.Equal(new[] { 1, 2, 3 }, attempts.Select(a => a.attempt_number));
+            Assert.Equal(new[] { "Permanent", "Transient", null }, attempts.Select(a => a.failure_category));
+            Assert.True(attempts[2].succeeded);
+            Assert.Equal("Delivered", (await ReadDeliveryAsync(deliveryId)).status);
         }
 
         [Fact]

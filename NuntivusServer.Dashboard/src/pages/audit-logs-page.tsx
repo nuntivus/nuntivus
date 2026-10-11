@@ -13,6 +13,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { JsonViewer } from '../components/json/json-viewer'
+import { EntityReference } from '../components/links/entity-reference'
 import { EyeIcon } from '../components/icons/nav-icons'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
@@ -380,9 +381,11 @@ export function AuditLogsPage() {
                           </Table.Cell>
                           <Table.Cell>{formatTitleCase(item.action)}</Table.Cell>
                           <Table.Cell>{item.actorId ?? '-'}</Table.Cell>
-                          <Table.Cell>{item.customerId ?? '-'}</Table.Cell>
-                          <Table.Cell title={item.contractId ?? undefined}>{toShort(item.contractId)}</Table.Cell>
-                          <Table.Cell title={item.deliveryId ?? undefined}>{toShort(item.deliveryId)}</Table.Cell>
+                          <Table.Cell><EntityReference kind="customer" id={item.customerId} /></Table.Cell>
+                          <Table.Cell><EntityReference kind="contract" id={item.contractId} /></Table.Cell>
+                          <Table.Cell title={item.deliveryId ?? undefined}>
+                            {item.deliveryId ? <NavLink to={`/deliveries/${encodeURIComponent(item.deliveryId)}`}>{toShort(item.deliveryId)}</NavLink> : '-'}
+                          </Table.Cell>
                           <Table.Cell>{summarizeDetails(item)}</Table.Cell>
                           <Table.Cell>
                             <TableIconButton

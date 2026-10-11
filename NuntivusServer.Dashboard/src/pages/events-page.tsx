@@ -11,6 +11,7 @@ import {
 } from '@radix-ui/themes'
 import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
+import { EntityReference } from '../components/links/entity-reference'
 import { hasPermission } from '../auth/permissions'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { SearchIcon } from '../components/icons/nav-icons'
@@ -440,7 +441,7 @@ export function EventsPage() {
                         >
                           <Table.RowHeaderCell>{item.id}</Table.RowHeaderCell>
                           <Table.Cell>{item.type}</Table.Cell>
-                          <Table.Cell>{item.source}</Table.Cell>
+                          <Table.Cell><EntityReference kind="source" id={item.source} /></Table.Cell>
                           <Table.Cell>{new Date(item.occurredAt).toLocaleString()}</Table.Cell>
                           <Table.Cell>{new Date(item.receivedAt).toLocaleString()}</Table.Cell>
                           <Table.Cell>

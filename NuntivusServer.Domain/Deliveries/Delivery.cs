@@ -33,6 +33,8 @@ namespace NuntivusServer.Domain.Deliveries
         public string DestinationConfiguration { get; }
         public DeliveryStatus Status { get; private set; }
         public int AttemptCount { get; private set; }
+        public int AttemptNumberOffset { get; private set; }
+        public int AttemptNumber => AttemptNumberOffset + AttemptCount;
         public string? LastError { get; private set; }
         public DateTimeOffset? NextAttemptAt { get; private set; }
         public DateTimeOffset CreatedAt { get; }
@@ -61,7 +63,8 @@ namespace NuntivusServer.Domain.Deliveries
             DateTimeOffset? nextAttemptAt,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt,
-            Guid destinationBindingId = default)
+            Guid destinationBindingId = default,
+            int attemptNumberOffset = 0)
         {
             Id = id;
             EventId = eventId;
@@ -82,6 +85,7 @@ namespace NuntivusServer.Domain.Deliveries
             DestinationConfiguration = destinationConfiguration;
             Status = status;
             AttemptCount = attemptCount;
+            AttemptNumberOffset = attemptNumberOffset;
             LastError = lastError;
             NextAttemptAt = nextAttemptAt;
             CreatedAt = createdAt;
@@ -222,22 +226,20 @@ namespace NuntivusServer.Domain.Deliveries
 
         /// <summary>
         /// Manual retry operation: reactivates a dead or failed delivery by resetting
-        /// attempt count and scheduling immediate dispatch. An already-attempted pending
-        /// delivery without a scheduled retry may also be explicitly rescheduled.
+        /// attempt count and scheduling immediate dispatch. An unscheduled pending
+        /// delivery may also be explicitly rescheduled.
         /// </summary>
         public bool ManualRetryReset(DateTimeOffset now)
         {
-            if (Status == DeliveryStatus.Pending)
-            {
-                if (AttemptCount == 0 || NextAttemptAt is not null)
-                    return false;
-            }
+            if (Status == DeliveryStatus.Pending && NextAttemptAt is not null)
+                return false;
 
             if (Status is not (DeliveryStatus.Pending or DeliveryStatus.Dead or DeliveryStatus.Failed))
                 throw new InvalidOperationException(
                     $"Cannot manually retry delivery from {Status}.");
 
             Status = DeliveryStatus.Pending;
+            AttemptNumberOffset += AttemptCount;
             AttemptCount = 0;
             LastError = null;
             NextAttemptAt = now;
@@ -314,14 +316,15 @@ namespace NuntivusServer.Domain.Deliveries
             DateTimeOffset? nextAttemptAt,
             DateTimeOffset createdAt,
             DateTimeOffset updatedAt,
-            Guid destinationBindingId = default) =>
+            Guid destinationBindingId = default,
+            int attemptNumberOffset = 0) =>
             new(id, eventId, contractId, customerId, eventType, payload,
                 authenticationReference,
                 authenticationVersion,
                 transformationVersion,
                 schemaVersion,
                 transformationConfiguration, rateLimit, orderingEnabled, orderingKey, destinationType, destinationConfiguration, status,
-                attemptCount, lastError, nextAttemptAt, createdAt, updatedAt, destinationBindingId);
+                attemptCount, lastError, nextAttemptAt, createdAt, updatedAt, destinationBindingId, attemptNumberOffset);
 
         public static Delivery Rehydrate(
             Guid id,

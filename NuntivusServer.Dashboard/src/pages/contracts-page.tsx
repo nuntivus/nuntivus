@@ -12,6 +12,7 @@ import {
 import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { EntityReference } from '../components/links/entity-reference'
 import { PowerIcon, SearchIcon, TestEventIcon } from '../components/icons/nav-icons'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
@@ -493,7 +494,7 @@ export function ContractsPage() {
                           />
                         </Table.Cell>
                         <Table.RowHeaderCell>{contract.name ?? contract.id}</Table.RowHeaderCell>
-                        <Table.Cell>{contract.customerId}</Table.Cell>
+                         <Table.Cell><EntityReference kind="customer" id={contract.customerId} /></Table.Cell>
                         <Table.Cell>{contract.eventTypes.join(', ') || '-'}</Table.Cell>
                         <Table.Cell>{contract.destinationType}</Table.Cell>
                         <Table.Cell>

@@ -1,6 +1,8 @@
 import { Badge, Card, Flex, Heading, Link, Select, Table, Text } from '@radix-ui/themes'
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
+import { ErrorPreview } from '../components/errors/error-preview'
+import { EntityReference } from '../components/links/entity-reference'
 import { DetailAction, NavigableTableRow } from '../components/tables/table-actions'
 import { DashboardTimeChart } from '../components/observability/dashboard-time-chart'
 import {
@@ -206,7 +208,7 @@ export function DashboardPage() {
                     {recentEvents.map((item) => (
                       <NavigableTableRow key={item.id} to={`/events/${encodeURIComponent(item.id)}`} label={`event ${item.type}`}>
                         <Table.RowHeaderCell><Text weight="medium" size="2">{item.type}</Text></Table.RowHeaderCell>
-                        <Table.Cell><span className="table-truncate" title={item.source}>{item.source}</span></Table.Cell>
+                        <Table.Cell><EntityReference kind="source" id={item.source} /></Table.Cell>
                         <Table.Cell className="table-nowrap">{formatTimestamp(item.receivedAt)}</Table.Cell>
                         <Table.Cell className="table-action-column">
                           <div className="table-row-actions">
@@ -265,9 +267,9 @@ export function DashboardPage() {
                     {recentFailures.map((item) => (
                       <NavigableTableRow key={item.deliveryId} to={`/deliveries/${encodeURIComponent(item.deliveryId)}`} label={`delivery ${item.deliveryId}`}>
                         <Table.RowHeaderCell><Badge color="red" variant="soft">{item.eventType}</Badge></Table.RowHeaderCell>
-                        <Table.Cell><span className="table-truncate" title={item.customerId}>{item.customerId}</span></Table.Cell>
+                        <Table.Cell><EntityReference kind="customer" id={item.customerId} /></Table.Cell>
                         <Table.Cell>{item.attemptCount}</Table.Cell>
-                        <Table.Cell><span className="table-error-text" title={item.lastError ?? 'No error detail'}>{item.lastError ?? 'No error detail'}</span></Table.Cell>
+                        <Table.Cell><ErrorPreview error={item.lastError} /></Table.Cell>
                         <Table.Cell className="table-action-column">
                           <div className="table-row-actions">
                             <DetailAction to={`/deliveries/${encodeURIComponent(item.deliveryId)}`} label="Open delivery" />

@@ -12,12 +12,15 @@ import {
 import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { ErrorPreview } from '../components/errors/error-preview'
+import { EntityReference } from '../components/links/entity-reference'
 import { DestinationHealthSummary } from '../components/observability/destination-health-summary'
 import { CalendarIcon, CheckCircleIcon, ContractsIcon, CustomersIcon, DeliveriesIcon, FailedDeliveriesIcon } from '../components/icons/nav-icons'
 import { DetailPageHeader } from '../components/states/detail-page-header'
 import { DetailLoadingState } from '../components/states/detail-loading-state'
 import { DetailMetric, DetailSectionTitle } from '../components/states/detail-visuals'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
 import { useCustomerDestinationHealthQuery } from '../features/destination-health/use-destination-health'
 import {
   useCustomerContractsQuery,
@@ -32,22 +35,6 @@ import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
-
-function formatDeliveryStatus(status: number | string) {
-  if (typeof status === 'string') {
-    return status
-  }
-
-  const map: Record<number, string> = {
-    0: 'Pending',
-    1: 'InFlight',
-    2: 'Delivered',
-    3: 'Failed',
-    4: 'Dead',
-  }
-
-  return map[status] ?? String(status)
-}
 
 export function CustomerDetailPage() {
   const { id } = useParams()
@@ -233,8 +220,8 @@ export function CustomerDetailPage() {
               <Table.Root>
                 <Table.Header>
                   <Table.Row>
+                    <Table.ColumnHeaderCell>Contract</Table.ColumnHeaderCell>
                     <Table.ColumnHeaderCell>ID</Table.ColumnHeaderCell>
-                    <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
                     <Table.ColumnHeaderCell>Enabled</Table.ColumnHeaderCell>
                     <Table.ColumnHeaderCell>Event types</Table.ColumnHeaderCell>
                     <Table.ColumnHeaderCell>Related</Table.ColumnHeaderCell>
@@ -243,8 +230,8 @@ export function CustomerDetailPage() {
                 <Table.Body>
                   {(contractsQuery.data?.items ?? []).map((contract) => (
                     <Table.Row key={contract.id}>
-                      <Table.RowHeaderCell>{contract.id}</Table.RowHeaderCell>
-                      <Table.Cell>{contract.name ?? '-'}</Table.Cell>
+                      <Table.RowHeaderCell><EntityReference kind="contract" id={contract.id} label={contract.name} /></Table.RowHeaderCell>
+                      <Table.Cell>{contract.id}</Table.Cell>
                       <Table.Cell>
                         <Badge color={contract.enabled ? 'green' : 'gray'}>
                           {contract.enabled ? 'Enabled' : 'Disabled'}
@@ -359,7 +346,7 @@ export function CustomerDetailPage() {
                   <Table.Row key={failure.deliveryId}>
                     <Table.RowHeaderCell>{failure.deliveryId}</Table.RowHeaderCell>
                     <Table.Cell>{failure.eventType}</Table.Cell>
-                    <Table.Cell>{failure.lastError ?? '-'}</Table.Cell>
+                    <Table.Cell><ErrorPreview error={failure.lastError} /></Table.Cell>
                     <Table.Cell>{failure.attemptCount}</Table.Cell>
                     <Table.Cell>
                       {failure.nextAttemptAt

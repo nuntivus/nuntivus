@@ -5,7 +5,6 @@ import {
   Flex,
   Heading,
   IconButton,
-  Link,
   Table,
   Tabs,
   Text,
@@ -15,7 +14,9 @@ import {
 import { useMemo, useState, type ComponentType, type ReactNode, type SVGProps } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
+import { ErrorPreview } from '../components/errors/error-preview'
 import { JsonViewer } from '../components/json/json-viewer'
+import { EntityReference } from '../components/links/entity-reference'
 import {
   AlertIcon,
   CalendarIcon,
@@ -377,13 +378,13 @@ export function DeliveryDetailPage() {
           <DeliverySectionTitle icon={DeliveriesIcon}>Delivery information</DeliverySectionTitle>
           <div className="delivery-info-list">
             <DeliveryInfoRow icon={EventsIcon} label="Event" copyValue={delivery.eventId} onCopy={handleCopy}>
-              <Link asChild><NavLink to={`/events/${encodeURIComponent(delivery.eventId)}`}>{delivery.eventId}</NavLink></Link>
+              <EntityReference kind="event" id={delivery.eventId} label={delivery.eventType} />
             </DeliveryInfoRow>
             <DeliveryInfoRow icon={CustomersIcon} label="Customer" copyValue={delivery.customerId} onCopy={handleCopy}>
-              <Link asChild><NavLink to={`/customers/${encodeURIComponent(delivery.customerId)}`}>{delivery.customerId}</NavLink></Link>
+              <EntityReference kind="customer" id={delivery.customerId} />
             </DeliveryInfoRow>
             <DeliveryInfoRow icon={ContractsIcon} label="Contract" copyValue={delivery.contractId} onCopy={handleCopy}>
-              <Link asChild><NavLink to={`/contracts/${encodeURIComponent(delivery.contractId)}`}>{delivery.contractId}</NavLink></Link>
+              <EntityReference kind="contract" id={delivery.contractId} />
             </DeliveryInfoRow>
             <DeliveryInfoRow icon={DeliveriesIcon} label="Destination">{delivery.destinationType}</DeliveryInfoRow>
           </div>
@@ -394,7 +395,7 @@ export function DeliveryDetailPage() {
           <div className="delivery-info-list">
             <DeliveryInfoRow icon={EventsIcon} label="Event ID" copyValue={delivery.eventId} onCopy={handleCopy}>{delivery.eventId}</DeliveryInfoRow>
             <DeliveryInfoRow icon={CodeIcon} label="Event type"><Badge variant="soft">{delivery.eventType}</Badge></DeliveryInfoRow>
-            <DeliveryInfoRow icon={ContractsIcon} label="Source">{event?.source ?? 'Contract'}</DeliveryInfoRow>
+            <DeliveryInfoRow icon={ContractsIcon} label="Source"><EntityReference kind="source" id={event?.source} /></DeliveryInfoRow>
           </div>
         </Card>
 
@@ -433,9 +434,7 @@ export function DeliveryDetailPage() {
             </div>
           )}
           <DeliveryInfoRow icon={CodeIcon} label="Latest error" copyValue={delivery.lastError ?? undefined} onCopy={handleCopy}>
-            <span className="delivery-error-preview" title={delivery.lastError ?? undefined}>
-              {delivery.lastError ?? '-'}
-            </span>
+            <ErrorPreview error={delivery.lastError} title="Latest delivery error" />
           </DeliveryInfoRow>
           {failure?.failureCategory ? (
             <DeliveryInfoRow icon={AlertIcon} label="Category">{failure.failureCategory}</DeliveryInfoRow>
@@ -457,8 +456,8 @@ export function DeliveryDetailPage() {
               <div className="delivery-info-list">
                 <DeliveryInfoRow icon={DeliveriesIcon} label="Delivery ID" copyValue={delivery.id} onCopy={handleCopy}>{delivery.id}</DeliveryInfoRow>
                 <DeliveryInfoRow icon={EventsIcon} label="Event ID" copyValue={delivery.eventId} onCopy={handleCopy}>{delivery.eventId}</DeliveryInfoRow>
-                <DeliveryInfoRow icon={CustomersIcon} label="Customer">{delivery.customerId}</DeliveryInfoRow>
-                <DeliveryInfoRow icon={ContractsIcon} label="Contract">{delivery.contractId}</DeliveryInfoRow>
+                <DeliveryInfoRow icon={CustomersIcon} label="Customer"><EntityReference kind="customer" id={delivery.customerId} /></DeliveryInfoRow>
+                <DeliveryInfoRow icon={ContractsIcon} label="Contract"><EntityReference kind="contract" id={delivery.contractId} /></DeliveryInfoRow>
                 <DeliveryInfoRow icon={failed ? FailedDeliveriesIcon : CheckCircleIcon} label="Status">
                   <Badge color={statusColor(delivery.status)} variant="soft">{formatDeliveryStatus(delivery.status)}</Badge>
                 </DeliveryInfoRow>
@@ -532,7 +531,7 @@ export function DeliveryDetailPage() {
                     <Table.Cell>{attempt.failureCategory ?? '-'}</Table.Cell>
                     <Table.Cell>{protocolFromMetadata(attempt.metadata)}</Table.Cell>
                     <Table.Cell>{httpStatusFromMetadata(attempt.metadata) ?? '-'}</Table.Cell>
-                    <Table.Cell>{attempt.error ?? '-'}</Table.Cell>
+                    <Table.Cell><ErrorPreview error={attempt.error} title={`Attempt ${attempt.attemptNumber} error`} /></Table.Cell>
                     <Table.Cell>
                       {attempt.succeeded
                         ? '-'
