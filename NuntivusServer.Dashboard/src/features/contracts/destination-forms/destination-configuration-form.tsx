@@ -19,7 +19,7 @@ export function DestinationConfigurationForm({
   fixedType = false,
 }: DestinationConfigurationFormProps) {
   return (
-    <Flex direction="column" gap="3">
+    <Flex direction="column" gap="3" className="configuration-form-grid">
       {!fixedType && <DestinationTypeSelector
         value={value.type}
         onChange={(type) => onChange({ ...value, type })}

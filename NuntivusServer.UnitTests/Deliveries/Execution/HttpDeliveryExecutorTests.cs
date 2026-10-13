@@ -40,6 +40,29 @@ namespace NuntivusServer.UnitTests.Deliveries.Execution
             Assert.Equal(expectedCategory, result.Category);
         }
 
+        [Theory]
+        [InlineData("PUT")]
+        [InlineData("PATCH")]
+        [InlineData("DELETE")]
+        public async Task Sends_configured_http_method_with_payload(string method)
+        {
+            string? sentMethod = null;
+            string? sentBody = null;
+            var executor = BuildExecutor(request =>
+            {
+                sentMethod = request.Method.Method;
+                sentBody = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            });
+
+            var result = await executor.ExecuteAsync(BuildRequest(new HttpDestinationConfig(
+                "https://example.test/webhook", new HttpAuthentication("none"), Method: method)), CancellationToken.None);
+
+            Assert.True(result.Succeeded);
+            Assert.Equal(method, sentMethod);
+            Assert.Equal("{\"orderId\":\"o-1\"}", sentBody);
+        }
+
         [Fact]
         public async Task HttpRequestException_maps_to_transient()
         {

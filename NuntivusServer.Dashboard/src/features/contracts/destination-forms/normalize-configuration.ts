@@ -13,11 +13,12 @@ function normalizeConfigurationKey(key: string): string {
     : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join('')
 }
 
-export function normalizeConfiguration(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(normalizeConfiguration)
+export function normalizeConfiguration(value: unknown, parentKey?: string): unknown {
+  if (Array.isArray(value)) return value.map((entry) => normalizeConfiguration(entry))
   if (value !== null && typeof value === 'object') {
+    if (parentKey === 'headers' || parentKey === 'secretHeaders' || parentKey === 'protectedHeaders') return value
     return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
-      normalizeConfigurationKey(key), normalizeConfiguration(entry),
+      normalizeConfigurationKey(key), normalizeConfiguration(entry, normalizeConfigurationKey(key)),
     ]))
   }
   return value

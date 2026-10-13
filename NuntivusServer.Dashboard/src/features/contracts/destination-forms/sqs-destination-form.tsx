@@ -19,7 +19,7 @@ export function SqsDestinationForm({ value, onChange }: SqsDestinationFormProps)
         />
       </div>
 
-      <div className="destination-form-field">
+      <div className="destination-form-field configuration-form-wide">
         <Text size="2" color="gray">Queue URL</Text>
         <TextField.Root
           placeholder="https://sqs.us-east-1.amazonaws.com/123456789012/orders"
@@ -28,7 +28,7 @@ export function SqsDestinationForm({ value, onChange }: SqsDestinationFormProps)
         />
       </div>
 
-      <div className="destination-form-field">
+      <div className="destination-form-field configuration-form-wide">
         <Text size="2" color="gray">Service URL (optional)</Text>
         <TextField.Root
           placeholder="http://localhost:4566"

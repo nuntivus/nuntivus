@@ -14,7 +14,8 @@ namespace NuntivusServer.Contracts.CustomerContracts
         IReadOnlyDictionary<string, string>? Headers = null,
         IReadOnlyDictionary<string, string>? SecretHeaders = null,
         IReadOnlyDictionary<string, string>? ProtectedHeaders = null,
-        int? TimeoutSeconds = null) : DestinationConfig;
+        int? TimeoutSeconds = null,
+        string? Method = null) : DestinationConfig;
 
     /// <summary>
     /// Authentication descriptor for an HTTP destination.

@@ -78,7 +78,18 @@ namespace NuntivusServer.Worker.Sources
                 }
             };
             using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
-            using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+            var method = config.TryGetProperty("method", out var selectedMethod)
+                ? selectedMethod.GetString()!.ToUpperInvariant() : "GET";
+            if (method is not ("GET" or "POST"))
+                throw new InvalidOperationException("HTTP polling method must be GET or POST.");
+            using var request = new HttpRequestMessage(method == "POST" ? HttpMethod.Post : HttpMethod.Get, endpoint);
+            if (method == "POST" && config.TryGetProperty("body", out var requestBody))
+                request.Content = new StringContent(requestBody.GetRawText(), Encoding.UTF8, "application/json");
+            if (config.TryGetProperty("headers", out var headers))
+            {
+                foreach (var header in headers.EnumerateObject())
+                    request.Headers.TryAddWithoutValidation(header.Name, header.Value.GetString());
+            }
             if (config.TryGetProperty("secretRef", out var reference))
                 request.Headers.TryAddWithoutValidation("Authorization", "Bearer " +
                     (await _secrets.ResolveAsync(reference.GetString()!, token)).EnsureValue());

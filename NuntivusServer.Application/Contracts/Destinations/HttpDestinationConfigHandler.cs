@@ -78,6 +78,10 @@ namespace NuntivusServer.Application.Contracts.Destinations
                     $"Destination timeoutSeconds must be between {MinTimeoutSeconds} and {MaxTimeoutSeconds}."));
             }
 
+            var method = http.Method?.Trim().ToUpperInvariant() ?? "POST";
+            if (method is not ("POST" or "PUT" or "PATCH" or "DELETE"))
+                return Result.Failure<Destination>(Error.Validation("Destination method must be POST, PUT, PATCH, or DELETE."));
+
             if (http.Authentication is null || string.IsNullOrWhiteSpace(http.Authentication.Type))
                 return Result.Failure<Destination>(Error.Validation("Destination authentication is required."));
 
@@ -139,7 +143,8 @@ namespace NuntivusServer.Application.Contracts.Destinations
                 headersResult.Value,
                 SecretHeaders: null,
                 ProtectedHeaders: protectedHeaders.Count == 0 ? null : protectedHeaders,
-                http.TimeoutSeconds);
+                http.TimeoutSeconds,
+                method);
 
             var json = JsonSerializer.Serialize(normalized);
             var configSizeValidation = ValidateConfigurationSize(json);
@@ -195,7 +200,8 @@ namespace NuntivusServer.Application.Contracts.Destinations
                 parsed.Headers,
                 SecretHeaders: redactedSecretHeaders.Count == 0 ? null : redactedSecretHeaders,
                 ProtectedHeaders: null,
-                parsed.TimeoutSeconds);
+                parsed.TimeoutSeconds,
+                parsed.Method);
 
             return Result.Success(JsonSerializer.Serialize(redacted));
         }
@@ -284,7 +290,8 @@ namespace NuntivusServer.Application.Contracts.Destinations
                 nextConfig.Headers,
                 nextConfig.SecretHeaders,
                 nextConfig.ProtectedHeaders,
-                nextConfig.TimeoutSeconds);
+                nextConfig.TimeoutSeconds,
+                nextConfig.Method);
 
             var rotatedJson = JsonSerializer.Serialize(rotatedConfig);
             var configSizeValidation = ValidateConfigurationSize(rotatedJson);

@@ -13,7 +13,7 @@ export function RabbitMqDestinationForm({
 }: RabbitMqDestinationFormProps) {
   return (
     <>
-      <div className="destination-form-field">
+      <div className="destination-form-field configuration-form-wide">
         <Text size="2" color="gray">URI</Text>
         <TextField.Root
           placeholder="amqps://broker:5671/vhost"

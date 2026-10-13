@@ -7,6 +7,7 @@ using NuntivusServer.Application.Contracts.Destinations;
 using NuntivusServer.Common.Extensions;
 using NuntivusServer.Contracts.Destinations;
 using NuntivusServer.Domain.Contracts;
+using DestinationType = NuntivusServer.Domain.Contracts.DestinationType;
 
 namespace NuntivusServer.Api.Controllers.Destinations
 {
@@ -17,11 +18,60 @@ namespace NuntivusServer.Api.Controllers.Destinations
     {
         private readonly IDestinationService _destinations;
         private readonly IDestinationConfigDispatcher _configs;
+        private readonly IDestinationConfigUpdateResolver _updates;
+        private readonly IReadOnlyDictionary<DestinationType, IDestinationConnectionTester> _testers;
 
-        public DestinationsController(IDestinationService destinations, IDestinationConfigDispatcher configs)
+        public DestinationsController(IDestinationService destinations, IDestinationConfigDispatcher configs,
+            IDestinationConfigUpdateResolver updates, IEnumerable<IDestinationConnectionTester> testers)
         {
             _destinations = destinations;
             _configs = configs;
+            _updates = updates;
+            _testers = testers.ToDictionary(tester => tester.Type);
+        }
+
+        [HttpPost("test-connection")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
+        public Task<IActionResult> TestNewConnection([FromBody] TestDestinationConnectionRequest request, CancellationToken cancellationToken) =>
+            TestConnection(request, null, cancellationToken);
+
+        [HttpPost("{id:guid}/test-connection")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
+        public Task<IActionResult> TestExistingConnection(Guid id, [FromBody] TestDestinationConnectionRequest request, CancellationToken cancellationToken) =>
+            TestConnection(request, id, cancellationToken);
+
+        private async Task<IActionResult> TestConnection(TestDestinationConnectionRequest request, Guid? id, CancellationToken cancellationToken)
+        {
+            if (request.Configuration is null)
+                return ErrorResult([NuntivusServer.Common.Error.Validation("Destination configuration is required.")]);
+            var configuration = request.Configuration;
+            DestinationResource? existing = null;
+            if (id is { } destinationId)
+            {
+                var lookup = await _destinations.GetByIdAsync(destinationId, cancellationToken);
+                if (lookup.IsFailure) return ErrorResult(lookup.Errors);
+                existing = lookup.Value;
+                if (existing.Configured)
+                {
+                    var resolved = _updates.Resolve(configuration, existing.Destination);
+                    if (resolved.IsFailure) return ErrorResult(resolved.Errors);
+                    configuration = resolved.Value;
+                }
+            }
+            var built = _configs.Build(configuration);
+            if (built.IsFailure) return ErrorResult(built.Errors);
+            if (existing is not null && built.Value.Type != existing.Destination.Type)
+                return ErrorResult([NuntivusServer.Common.Error.Validation("Destination type cannot be changed.")]);
+            if (!_testers.TryGetValue(built.Value.Type, out var tester))
+                return ErrorResult([NuntivusServer.Common.Error.Validation("Connection test is not supported for this Destination type.")]);
+            var result = await tester.TestAsync(built.Value, cancellationToken);
+            return result.ToActionResult(HttpContext, message => Ok(new { message }));
+        }
+
+        private IActionResult ErrorResult(IReadOnlyList<NuntivusServer.Common.Error> errors)
+        {
+            var response = ApiErrorResponse.From(errors, HttpContext);
+            return new ObjectResult(response) { StatusCode = response.Status };
         }
 
         [HttpGet]

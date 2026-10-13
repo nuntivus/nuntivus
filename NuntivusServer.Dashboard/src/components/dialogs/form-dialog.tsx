@@ -1,5 +1,5 @@
 import { Dialog, Flex, IconButton, Text } from '@radix-ui/themes'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 
 interface FormDialogProps {
   open: boolean
@@ -39,6 +39,7 @@ export function FormDialog({
       <Dialog.Content
         className="form-dialog"
         maxWidth={maxWidth}
+        style={{ '--form-dialog-max-width': maxWidth } as CSSProperties}
         aria-describedby={description ? descriptionId : undefined}
       >
         <Flex justify="between" align="start" gap="3" mb={description ? '1' : '4'}>

@@ -5,6 +5,8 @@ import type { DestinationType } from '../../../services/api/contracts-api.ts'
 type Credential = { kind?: string; value?: string; version?: number }
 type StoredConfiguration = {
   url?: string
+  method?: string
+  headers?: Record<string, string>
   authentication?: { type?: string; credential?: Credential }
   bootstrapServers?: string
   topic?: string
@@ -45,6 +47,9 @@ export function hydrateDestinationForm(type: DestinationType, configuration: str
   switch (type) {
     case 'Http': return { ...base, http: {
       url: config.url ?? '',
+      method: config.method === 'PUT' || config.method === 'PATCH' || config.method === 'DELETE' ? config.method : 'POST',
+      headers: JSON.stringify(config.headers ?? {}, null, 2),
+      timeoutSeconds: config.timeoutSeconds?.toString() ?? '',
       authenticationType: config.authentication?.type === 'bearer' || config.authentication?.type === 'hmac'
         ? config.authentication.type : 'none',
       credential: storedSecret(config.authentication?.credential),
@@ -83,18 +88,21 @@ export function mergeDestinationConfiguration(
   const stored = normalizeConfiguration(JSON.parse(storedText)) as Record<string, unknown>
   const changes = mapDestinationFormToConfig(state)
   if (changes.type === 'http') {
-    const original = JSON.parse(storedText) as Record<string, unknown>
     const storedAuth = stored.authentication as Record<string, unknown> | undefined
-    const merged: Record<string, unknown> = { ...stored, type: 'http', url: changes.url,
+    const merged: Record<string, unknown> = { type: 'http', ...stored, url: changes.url,
       authentication: { type: changes.authenticationType,
         credential: changes.authenticationType === 'none' ? null
           : state.http.credential.mode === 'keep' ? storedAuth?.credential ?? null : changes.credential ?? null } }
-    merged.headers = original.Headers ?? original.headers ?? null
+    merged.type = 'http'
+    merged.method = changes.method
+    merged.headers = changes.headers
+    merged.timeoutSeconds = changes.timeoutSeconds ?? null
     delete merged.secretHeaders
     delete merged.protectedHeaders
     return merged
   }
-  const merged: Record<string, unknown> = { ...stored, ...changes }
+  const merged: Record<string, unknown> = { type: changes.type, ...stored }
+  Object.assign(merged, changes)
   const originalCredentials = stored.credentials && typeof stored.credentials === 'object'
     ? stored.credentials as Record<string, unknown> : {}
   const changedCredentials = changes.credentials as Record<string, unknown> | undefined

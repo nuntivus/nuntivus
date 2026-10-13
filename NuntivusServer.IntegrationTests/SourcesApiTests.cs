@@ -36,6 +36,26 @@ namespace NuntivusServer.IntegrationTests
             return (await response.Content.ReadFromJsonAsync<SourceView>())!;
         }
 
+        [Theory]
+        [InlineData("PUT")]
+        [InlineData("PATCH")]
+        public async Task Http_ingestion_requires_selected_method(string method)
+        {
+            var created = await _client.PostAsJsonAsync("/v1/sources", new
+            {
+                name = "Method-bound", type = "HTTP_API",
+                configuration = new { authentication = new { type = "none" }, method }
+            });
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+            var source = (await created.Content.ReadFromJsonAsync<SourceView>())!;
+            var path = $"/v1/sources/{source.Id}/events";
+
+            Assert.Equal(HttpStatusCode.MethodNotAllowed,
+                (await _client.PostAsJsonAsync(path, EventRequest())).StatusCode);
+            using var request = new HttpRequestMessage(new HttpMethod(method), path) { Content = JsonContent.Create(EventRequest()) };
+            Assert.Equal(HttpStatusCode.OK, (await _client.SendAsync(request)).StatusCode);
+        }
+
         [Fact]
         public async Task Unreferenced_source_can_be_created_and_deleted()
         {

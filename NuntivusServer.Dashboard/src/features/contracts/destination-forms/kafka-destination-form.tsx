@@ -13,7 +13,7 @@ export function KafkaDestinationForm({
 }: KafkaDestinationFormProps) {
   return (
     <>
-      <div className="destination-form-field">
+      <div className="destination-form-field configuration-form-wide">
         <Text size="2" color="gray">Bootstrap servers</Text>
         <TextField.Root
           placeholder="broker1:9092,broker2:9092"

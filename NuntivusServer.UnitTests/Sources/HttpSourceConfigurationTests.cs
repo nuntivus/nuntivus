@@ -18,6 +18,24 @@ namespace NuntivusServer.UnitTests.Sources
                 "{\"authentication\":{\"type\":\"token\",\"secretRef\":\"secret.test.source\"}}")
                 .IsSuccess);
 
+        [Theory]
+        [InlineData("POST")]
+        [InlineData("PUT")]
+        [InlineData("PATCH")]
+        public void AcceptsConfiguredIngestionMethod(string method)
+        {
+            var result = HttpSourceConfigurationValidator.Normalize(
+                $"{{\"authentication\":{{\"type\":\"none\"}},\"method\":\"{method}\"}}");
+
+            Assert.True(result.IsSuccess);
+            Assert.Contains($"\"method\":\"{method}\"", result.Value);
+        }
+
+        [Fact]
+        public void RejectsUnsupportedIngestionMethod() =>
+            Assert.True(HttpSourceConfigurationValidator.Normalize(
+                "{\"authentication\":{\"type\":\"none\"},\"method\":\"DELETE\"}").IsFailure);
+
         [Fact]
         public async Task HttpAdapterDoesNotCopySensitiveMetadata()
         {

@@ -26,5 +26,25 @@ namespace NuntivusServer.UnitTests.Sources
         {
             Assert.True(new PullSourceConfigurationHandler(SourceType.HTTP_POLLING).Normalize(json).IsFailure);
         }
+
+        [Fact]
+        public void AcceptsPostPollingWithHeadersAndJsonBody()
+        {
+            var result = new PullSourceConfigurationHandler(SourceType.HTTP_POLLING).Normalize(
+                "{\"url\":\"https://example.com/events\",\"method\":\"POST\",\"headers\":{\"X-Client\":\"test\"},\"body\":{\"page\":1}}");
+            Assert.True(result.IsSuccess);
+        }
+
+        [Theory]
+        [InlineData("\"method\":\"DELETE\"")]
+        [InlineData("\"method\":\"GET\",\"body\":{}")]
+        [InlineData("\"headers\":{\"Authorization\":\"Bearer secret\"}")]
+        [InlineData("\"headers\":{\"Host\":\"internal\"}")]
+        [InlineData("\"headers\":{\"X-Client\":42}")]
+        public void RejectsUnsafePollingRequestSettings(string fields)
+        {
+            Assert.True(new PullSourceConfigurationHandler(SourceType.HTTP_POLLING).Normalize(
+                $"{{\"url\":\"https://example.com/events\",{fields}}}").IsFailure);
+        }
     }
 }

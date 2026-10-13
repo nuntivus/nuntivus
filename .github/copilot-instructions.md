@@ -7,6 +7,10 @@
 - Nuntivus server is not deployed; for this project, do not preserve legacy API backward compatibility when implementing the Source ingestion architecture.
 - Source detail pages should have a shared, source-type-agnostic overview and type-specific sections, because additional Source types will be added beyond HTTP.
 - On the contract edit page, do not include the legacy inline Destination type/configuration form below the Destinations table, and avoid exposed snapshot terminology/controls in the destination table to reduce confusion.
+- Source editing should occur on its detail page, like destination editing, rather than in the Sources list dialog. For the requested edit page, user prefers a GitHub-style form with restrained width, stacked labels and helper text, section dividers, and save/cancel actions.
+
+## Connection Testing
+- Each source and destination connection-test type should have its own class implementing ISourceConnectionTester or IDestinationConnectionTester, rather than a single switch-based implementation for all types.
 
 ## Delivery Operations
 - For manual delivery operations, cancel applies to Pending/Failed/Dead states.

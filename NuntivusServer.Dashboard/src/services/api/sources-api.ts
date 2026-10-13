@@ -46,6 +46,11 @@ export function updateSource(id: string, input: SourceInput) {
   return apiPut<Source>(`/v1/sources/${encodeURIComponent(id)}`, input)
 }
 
+export function testSourceConnection(input: Pick<SourceInput, 'type' | 'configuration'>, id?: string) {
+  return apiPost<{ message: string }>(id
+    ? `/v1/sources/${encodeURIComponent(id)}/test-connection` : '/v1/sources/test-connection', input)
+}
+
 export function enableSource(id: string) {
   return apiPost<Source>(`/v1/sources/${encodeURIComponent(id)}/enable`)
 }

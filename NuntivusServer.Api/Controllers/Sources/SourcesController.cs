@@ -23,16 +23,51 @@ namespace NuntivusServer.Api.Controllers.Sources
         private readonly IHttpSourceAuthenticator _authenticator;
         private readonly IWebhookIngestRequestValidator _validator;
         private readonly IAppLogger<SourcesController> _logger;
+        private readonly ISourceConfigurationRegistry _configurations;
+        private readonly IReadOnlyDictionary<SourceType, ISourceConnectionTester> _testers;
 
         public SourcesController(ISourceService sources, ISourceIngestionService ingestion,
             IHttpSourceAuthenticator authenticator, IWebhookIngestRequestValidator validator,
-            IAppLogger<SourcesController> logger)
+            IAppLogger<SourcesController> logger, ISourceConfigurationRegistry configurations,
+            IEnumerable<ISourceConnectionTester> testers)
         {
             _sources = sources;
             _ingestion = ingestion;
             _authenticator = authenticator;
             _validator = validator;
             _logger = logger;
+            _configurations = configurations;
+            _testers = testers.ToDictionary(tester => tester.Type);
+        }
+
+        [HttpPost("test-connection")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
+        public Task<IActionResult> TestNewConnection([FromBody] TestSourceConnectionRequest request, CancellationToken cancellationToken) =>
+            TestConnection(request, null, cancellationToken);
+
+        [HttpPost("{id:guid}/test-connection")]
+        [Authorize(Policy = AdminAuthorizationPolicies.Operator)]
+        public Task<IActionResult> TestExistingConnection(Guid id, [FromBody] TestSourceConnectionRequest request, CancellationToken cancellationToken) =>
+            TestConnection(request, id, cancellationToken);
+
+        private async Task<IActionResult> TestConnection(TestSourceConnectionRequest request, Guid? id, CancellationToken cancellationToken)
+        {
+            SourceType type;
+            if (id is { } sourceId)
+            {
+                var existing = await _sources.GetByIdAsync(sourceId.ToString("D"), cancellationToken);
+                if (existing.IsFailure) return ErrorResult(existing.Errors);
+                type = existing.Value.Type;
+            }
+            else if (!Enum.TryParse(request.Type, true, out type) || !Enum.IsDefined(type))
+                return ErrorResult([NuntivusServer.Common.Error.Validation("Unknown Source type.")]);
+
+            var config = _configurations.Normalize(type, ConfigurationText(request.Configuration));
+            if (config.IsFailure) return ErrorResult(config.Errors);
+            if (!_testers.TryGetValue(type, out var tester))
+                return ErrorResult([NuntivusServer.Common.Error.Validation("Connection test is not supported for this Source type.")]);
+            var result = await tester.TestAsync(config.Value, cancellationToken);
+            return result.ToActionResult(HttpContext, message => Ok(new { message }));
         }
 
         [HttpPost]
@@ -45,7 +80,7 @@ namespace NuntivusServer.Api.Controllers.Sources
                 CreatedAtAction(nameof(GetById), new { id = source.Id.Value }, Map(source)));
         }
 
-        [HttpPost("{id:guid}/events")]
+        [AcceptVerbs("POST", "PUT", "PATCH", Route = "{id:guid}/events")]
         [AllowAnonymous]
         public async Task<IActionResult> Ingest(Guid id, [FromBody] WebhookIngestRequest request,
             CancellationToken cancellationToken)
@@ -58,6 +93,15 @@ namespace NuntivusServer.Api.Controllers.Sources
                 return ErrorResult([NuntivusServer.Common.Error.Conflict("Source is disabled.")]);
             if (source.Type != SourceType.HTTP_API)
                 return ErrorResult([NuntivusServer.Common.Error.Validation("Source is not an HTTP Source.")]);
+
+            using var sourceConfiguration = JsonDocument.Parse(source.Configuration);
+            var method = sourceConfiguration.RootElement.TryGetProperty("method", out var selectedMethod)
+                ? selectedMethod.GetString()! : "POST";
+            if (!string.Equals(Request.Method, method, StringComparison.OrdinalIgnoreCase))
+            {
+                Response.Headers.Allow = method;
+                return StatusCode(StatusCodes.Status405MethodNotAllowed);
+            }
 
             var authentication = await _authenticator.AuthenticateAsync(source,
                 Request.Headers["X-Nuntivus-Source-Token"].ToString(), cancellationToken);

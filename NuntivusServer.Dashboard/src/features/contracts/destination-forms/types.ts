@@ -33,6 +33,19 @@ export function normalizeDestinationType(value: unknown): DestinationType | null
   }
 }
 
+export function httpHeaderRows(text: string): { key: string; value: string }[] {
+  try {
+    const parsed: unknown = JSON.parse(text || '{}')
+    if (Array.isArray(parsed)) return parsed as { key: string; value: string }[]
+    if (parsed && typeof parsed === 'object') return Object.entries(parsed).map(([key, value]) => ({ key, value: value as string }))
+  } catch { return [] }
+  return []
+}
+
+export function httpHeaders(text: string): Record<string, string> {
+  return Object.fromEntries(httpHeaderRows(text).map(({ key, value }) => [key.trim(), value]))
+}
+
 type SecretFieldState = {
   mode: SecretMode
   hasStoredValue: boolean
@@ -45,6 +58,9 @@ export type DestinationFormState = {
   type: DestinationType
   http: {
     url: string
+    method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+    headers: string
+    timeoutSeconds: string
     authenticationType: 'none' | 'bearer' | 'hmac'
     credential: SecretFieldState
   }
@@ -107,6 +123,9 @@ export function createDefaultDestinationFormState(
     type,
     http: {
       url: '',
+      method: 'POST',
+      headers: '{}',
+      timeoutSeconds: '',
       authenticationType: 'none',
       credential: createDefaultSecretFieldState(),
     },
@@ -204,6 +223,9 @@ export function mapDestinationFormToConfig(
       return {
         type: 'http',
         url: state.http.url.trim(),
+        method: state.http.method,
+        headers: httpHeaders(state.http.headers),
+        timeoutSeconds: state.http.timeoutSeconds.trim() ? Number(state.http.timeoutSeconds) : undefined,
         authenticationType: state.http.authenticationType,
         credential:
           state.http.authenticationType === 'none'
@@ -314,6 +336,21 @@ export function validateDestinationFormState(state: DestinationFormState): strin
       } catch {
         return 'Destination URL is invalid.'
       }
+
+      if (state.http.timeoutSeconds.trim() && (!Number.isInteger(Number(state.http.timeoutSeconds))
+        || Number(state.http.timeoutSeconds) < 1 || Number(state.http.timeoutSeconds) > 300))
+        return 'Timeout must be between 1 and 300 seconds.'
+      try {
+        const parsed: unknown = JSON.parse(state.http.headers || '{}')
+        if (!parsed || typeof parsed !== 'object' || (!Array.isArray(parsed)
+          && Object.values(parsed).some(value => typeof value !== 'string')))
+          return 'Headers must have names and string values.'
+        const rows = httpHeaderRows(state.http.headers)
+        if (rows.some(row => typeof row.key !== 'string' || !row.key.trim() || typeof row.value !== 'string'))
+          return 'Every header needs a name and a value.'
+        if (new Set(rows.map(row => row.key.trim().toLowerCase())).size !== rows.length)
+          return 'Header names must be unique.'
+      } catch { return 'Headers must be valid JSON.' }
 
       if (
         state.http.authenticationType !== 'none' &&

@@ -58,7 +58,7 @@ export function SecretField({ label, value, onChange }: SecretFieldProps) {
   const canShowEditor = value.mode === 'replace'
 
   return (
-    <Flex direction="column" gap="2" className="destination-form-field">
+    <Flex direction="column" gap="2" className="destination-form-field configuration-form-wide">
       <Text size="2" color="gray">{label}</Text>
 
       <Select.Root

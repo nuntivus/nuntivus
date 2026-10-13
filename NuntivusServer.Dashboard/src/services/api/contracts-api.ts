@@ -157,6 +157,7 @@ export interface DestinationCredentialInput {
 export interface HttpDestinationInput {
   type: 'http'
   url: string
+  method?: 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   authenticationType: 'none' | 'bearer' | 'hmac'
   credential?: DestinationCredentialInput
   headers?: Record<string, string>
@@ -272,6 +273,7 @@ export function mapDestinationToApi(destination: DestinationConfigInput) {
       return {
         type: 'http',
         url: destination.url,
+        method: destination.method,
         authentication: {
           type: destination.authenticationType,
           credential: toCredential(destination.credential),

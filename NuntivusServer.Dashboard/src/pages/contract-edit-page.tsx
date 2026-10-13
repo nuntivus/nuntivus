@@ -107,6 +107,8 @@ function parseDestinationConfiguration(
     const parsed = normalizeConfiguration(JSON.parse(configurationText)) as {
       type?: string
       url?: string
+      method?: string
+      headers?: Record<string, string>
       authentication?: {
         type?: string
         credential?: {
@@ -174,6 +176,10 @@ function parseDestinationConfiguration(
         type: 'Http',
         http: {
           url: parsed.url ?? '',
+          method: parsed.method === 'PUT' || parsed.method === 'PATCH' || parsed.method === 'DELETE'
+            ? parsed.method : 'POST',
+          headers: JSON.stringify(parsed.headers ?? {}, null, 2),
+          timeoutSeconds: parsed.timeoutSeconds?.toString() ?? '',
           authenticationType:
             parsed.authentication?.type === 'bearer' ||
               parsed.authentication?.type === 'hmac'

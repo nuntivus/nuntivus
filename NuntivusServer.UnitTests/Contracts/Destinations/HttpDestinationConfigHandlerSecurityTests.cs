@@ -3,6 +3,7 @@ using NuntivusServer.Application.Contracts.Destinations;
 using NuntivusServer.Common;
 using NuntivusServer.Contracts.CustomerContracts;
 using System.Collections.Generic;
+using System.Text.Json;
 
 namespace NuntivusServer.UnitTests.Contracts.Destinations
 {
@@ -19,6 +20,29 @@ namespace NuntivusServer.UnitTests.Contracts.Destinations
 
             Assert.True(result.IsFailure);
             Assert.Contains("private-network", result.Errors[0].Message);
+        }
+
+        [Theory]
+        [InlineData("POST")]
+        [InlineData("PUT")]
+        [InlineData("PATCH")]
+        [InlineData("DELETE")]
+        public void Build_preserves_supported_method(string method)
+        {
+            var handler = new HttpDestinationConfigHandler(new PassthroughProtector());
+            var result = handler.Build(new HttpDestinationConfig("https://hooks.example.com/acme",
+                new HttpAuthentication("none"), Method: method));
+
+            Assert.True(result.IsSuccess);
+            Assert.Equal(method, JsonSerializer.Deserialize<HttpDestinationConfig>(result.Value.Configuration)!.Method);
+        }
+
+        [Fact]
+        public void Build_rejects_unsupported_method()
+        {
+            var handler = new HttpDestinationConfigHandler(new PassthroughProtector());
+            Assert.True(handler.Build(new HttpDestinationConfig("https://hooks.example.com/acme",
+                new HttpAuthentication("none"), Method: "GET")).IsFailure);
         }
 
         [Fact]

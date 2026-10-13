@@ -37,12 +37,46 @@ namespace NuntivusServer.Application.Sources
                     SourceType.RABBITMQ or SourceType.KAFKA => new[] { "secretRef", "username" },
                     SourceType.NATS => new[] { "secretRef" },
                     SourceType.SQS or SourceType.S3 => new[] { "secretRef", "accessKeyId", "intervalSeconds" },
-                    SourceType.HTTP_POLLING => new[] { "secretRef", "intervalSeconds" },
+                    SourceType.HTTP_POLLING => new[] { "secretRef", "intervalSeconds", "method", "headers", "body" },
                     _ => new[] { "intervalSeconds" }
                 }).ToHashSet();
                 if (root.EnumerateObject().Any(field => !allowed.Contains(field.Name)
-                    || (field.Name != "intervalSeconds" && field.Value.ValueKind != JsonValueKind.String)))
+                    || (field.Name is not ("intervalSeconds" or "headers" or "body") && field.Value.ValueKind != JsonValueKind.String)))
                     return Result.Failure<string>(Error.Validation("Source configuration contains unsupported fields."));
+                if (Type == SourceType.HTTP_POLLING)
+                {
+                    var method = root.TryGetProperty("method", out var selectedMethod)
+                        ? selectedMethod.ValueKind == JsonValueKind.String ? selectedMethod.GetString()?.Trim().ToUpperInvariant() : null
+                        : "GET";
+                    if (method is not ("GET" or "POST"))
+                        return Result.Failure<string>(Error.Validation("HTTP polling method must be GET or POST."));
+                    if (root.TryGetProperty("body", out var body)
+                        && (method != "POST" || body.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array)
+                            || body.GetRawText().Length > 4096))
+                        return Result.Failure<string>(Error.Validation("HTTP polling body must be a JSON object or array (at most 4096 characters) and requires POST."));
+                    if (root.TryGetProperty("headers", out var headers))
+                    {
+                        if (headers.ValueKind != JsonValueKind.Object || headers.EnumerateObject().Count() > 20)
+                            return Result.Failure<string>(Error.Validation("HTTP polling headers must be an object with at most 20 entries."));
+                        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        foreach (var header in headers.EnumerateObject())
+                        {
+                            if (!names.Add(header.Name) || header.Name.Length is < 1 or > 64
+                                || !System.Text.RegularExpressions.Regex.IsMatch(header.Name, "^[A-Za-z0-9][A-Za-z0-9-]*$")
+                                || header.Name is { } name && (name.Equals("Host", StringComparison.OrdinalIgnoreCase)
+                                    || name.Equals("Authorization", StringComparison.OrdinalIgnoreCase)
+                                    || name.Equals("Proxy-Authorization", StringComparison.OrdinalIgnoreCase)
+                                    || name.Equals("Cookie", StringComparison.OrdinalIgnoreCase)
+                                    || name.Equals("Connection", StringComparison.OrdinalIgnoreCase)
+                                    || name.Equals("Content-Length", StringComparison.OrdinalIgnoreCase)
+                                    || name.Equals("Transfer-Encoding", StringComparison.OrdinalIgnoreCase)
+                                    || name.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+                                || header.Value.ValueKind != JsonValueKind.String || header.Value.GetString() is not { Length: <= 1024 } value
+                                || value.Any(char.IsControl))
+                                return Result.Failure<string>(Error.Validation("HTTP polling contains an unsafe header name or value."));
+                        }
+                    }
+                }
                 if (root.TryGetProperty("secretRef", out var secret)
                     && !ConfigReference.TryParse(secret.GetString(), "secret", out _))
                     return Result.Failure<string>(Error.Validation("secretRef must reference a managed secret."));

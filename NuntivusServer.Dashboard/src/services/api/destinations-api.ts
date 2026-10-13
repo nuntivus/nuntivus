@@ -66,6 +66,11 @@ export function updateDestination(id: string, input: DestinationInput) {
   })
 }
 
+export function testDestinationConnection(configuration: DestinationInput['configuration'], id?: string) {
+  return apiPost<{ message: string }>(id
+    ? `/v1/destinations/${encodeURIComponent(id)}/test-connection` : '/v1/destinations/test-connection', { configuration })
+}
+
 export function enableDestination(id: string) {
   return apiPost<DestinationResource>(`/v1/destinations/${encodeURIComponent(id)}/enable`)
 }

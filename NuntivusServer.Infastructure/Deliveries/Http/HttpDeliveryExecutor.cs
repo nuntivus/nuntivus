@@ -121,7 +121,12 @@ namespace NuntivusServer.Infastructure.Deliveries.Http
             if (destinationAddressValidation is not null)
                 return destinationAddressValidation;
 
-            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, destinationUri)
+            var method = config.Method?.ToUpperInvariant() ?? "POST";
+            if (method is not ("POST" or "PUT" or "PATCH" or "DELETE"))
+                return DeliveryExecutionResult.Failure(DeliveryFailureCategory.ConfigurationInvalid,
+                    "HTTP destination method must be POST, PUT, PATCH, or DELETE.");
+
+            using var httpRequest = new HttpRequestMessage(new HttpMethod(method), destinationUri)
             {
                 Content = new StringContent(request.Payload, Encoding.UTF8),
             };

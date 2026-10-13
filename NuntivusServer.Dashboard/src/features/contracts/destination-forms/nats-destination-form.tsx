@@ -10,7 +10,7 @@ type NatsDestinationFormProps = {
 export function NatsDestinationForm({ value, onChange }: NatsDestinationFormProps) {
   return (
     <>
-      <div className="destination-form-field">
+      <div className="destination-form-field configuration-form-wide">
         <Text size="2" color="gray">NATS URL</Text>
         <TextField.Root
           placeholder="nats://localhost:4222"
