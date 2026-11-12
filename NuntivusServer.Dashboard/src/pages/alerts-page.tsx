@@ -6,10 +6,11 @@ import { hasPermission } from '../auth/permissions'
 import { useAppSelector } from '../store/hooks'
 import { useUnsavedChangesGuard } from '../hooks/use-unsaved-changes-guard'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
-import { apiGet, apiPost, apiPut, getApiErrorMessage } from '../services/api/api-client'
+import { apiDelete, apiGet, apiPost, apiPut, getApiErrorMessage } from '../services/api/api-client'
+import { WebhookDeliveryDialog } from '../features/alerts/webhook-delivery-dialog'
 import type { PagedResponse } from '../services/api/paged-response'
 
-type Rule = { id: string; contractId: string; name: string; signal: string; threshold: number; reminderSeconds: number; enabled: boolean; active: boolean; webhookUrl: string | null; webhookSecretRef: string | null }
+type Rule = { id: string; contractId: string; name: string; signal: string; threshold: number; reminderSeconds: number; enabled: boolean; active: boolean; webhookUrl: string | null; webhookSecretRef: string | null; archived: boolean }
 type Notice = { id: string; contractId: string; state: string; message: string; createdAt: string; acknowledgedAt: string | null }
 export function AlertsPage() {
   const queryClient = useQueryClient()
@@ -21,6 +22,7 @@ export function AlertsPage() {
   const [draft, setDraft] = useState({ contractId: '', name: '', signal: 'DeadLetters', threshold: '1', reminderSeconds: '0', webhookUrl: '', webhookSecretRef: '' })
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [webhookId, setWebhookId] = useState<string | null>(null)
   const rules = useQuery({ queryKey: ['alerts', 'rules', rulePage], queryFn: () => apiGet<PagedResponse<Rule>>('/v1/alerts/rules', { page: rulePage }) })
   const notices = useQuery({ queryKey: ['alerts', 'notifications', page], queryFn: () => apiGet<PagedResponse<Notice>>('/v1/alerts/notifications', { page }), refetchInterval: 30000 })
   useUnsavedChangesGuard({ when: !!draft.name || !!draft.contractId || !!draft.webhookUrl || !!draft.webhookSecretRef || draft.signal !== 'DeadLetters' || draft.threshold !== '1' || draft.reminderSeconds !== '0' })
@@ -40,6 +42,10 @@ export function AlertsPage() {
     if (!await confirm({ title: rule.enabled ? 'Disable alert rule?' : 'Enable alert rule?', description: 'Disabling pauses evaluation. Existing notifications and queued webhooks are retained.', confirmText: rule.enabled ? 'Disable rule' : 'Enable rule' })) return
     await update(() => apiPut(`/v1/alerts/rules/${rule.id}`, { ...rule, enabled: !rule.enabled }))
   }
+  async function archive(rule: Rule) {
+    if (!await confirm({ title: 'Archive alert rule?', description: 'Stops future evaluation permanently. Notifications, attempt history and queued webhook sends are retained. Create a new rule to replace its signal or threshold.', confirmText: 'Archive rule' })) return
+    await update(() => apiDelete(`/v1/alerts/rules/${rule.id}`))
+  }
   async function update(action: () => Promise<unknown>) {
     setError(null)
     setPending(true)
@@ -50,16 +56,20 @@ export function AlertsPage() {
   return <Flex direction="column" gap="4">
     <Heading>Alerts</Heading>
     <FormErrorText message={error} />
+    {webhookId ? <WebhookDeliveryDialog key={webhookId} id={webhookId} canWrite={canWrite} onClose={() => setWebhookId(null)} /> : null}
     <Card><Flex direction="column" gap="3"><Heading size="4">Notifications</Heading>
       {notices.isError ? <FormErrorText message={getApiErrorMessage(notices.error, 'Unable to load notifications.')} /> : null}
       {notices.data?.items.map(notice => <Flex key={notice.id} direction="column" gap="1"><Text><Badge color={notice.state === 'Recovered' ? 'green' : 'amber'}>{notice.state}</Badge> {notice.message}</Text><Text size="1">{notice.createdAt} · {notice.contractId}</Text>
-        <Button type="button" size="1" variant="soft" disabled={!canWrite || pending || !!notice.acknowledgedAt} onClick={() => void update(() => apiPost(`/v1/alerts/notifications/${notice.id}/acknowledge`, {}))} style={{ alignSelf: 'flex-start' }}>{notice.acknowledgedAt ? 'Acknowledged' : 'Acknowledge'}</Button></Flex>)}
+        <Flex gap="2"><Button type="button" size="1" variant="soft" disabled={!canWrite || pending || !!notice.acknowledgedAt} onClick={() => void update(() => apiPost(`/v1/alerts/notifications/${notice.id}/acknowledge`, {}))}>{notice.acknowledgedAt ? 'Acknowledged' : 'Acknowledge'}</Button>
+        <Button size="1" variant="soft" onClick={() => setWebhookId(notice.id)}>Webhook delivery</Button></Flex></Flex>)}
       <Flex gap="2"><Button variant="soft" disabled={page === 1} onClick={() => setPage(page - 1)}>Previous notifications</Button><Button variant="soft" disabled={!notices.data?.hasNext} onClick={() => setPage(page + 1)}>Next notifications</Button></Flex>
     </Flex></Card>
     <Card><Flex direction="column" gap="3"><Heading size="4">Rules</Heading>
       {rules.isError ? <FormErrorText message={getApiErrorMessage(rules.error, 'Unable to load rules.')} /> : null}
-      {rules.data?.items.map(rule => <Flex key={rule.id} align="center" gap="2" wrap="wrap"><Text>{rule.name} · {rule.signal} · {rule.active ? 'Firing' : 'Normal'} · reminders {rule.reminderSeconds ? `${rule.reminderSeconds}s` : 'off'}</Text>
-        <Button size="1" variant="soft" disabled={!canWrite || pending} onClick={() => void toggle(rule)}>{rule.enabled ? 'Disable' : 'Enable'}</Button></Flex>)}
+      <Text size="2" color="gray">To change a rule's contract, signal or threshold, create a replacement rule, then archive the obsolete rule.</Text>
+      {rules.data?.items.map(rule => <Flex key={rule.id} align="center" gap="2" wrap="wrap"><Text>{rule.name} · {rule.signal} · {rule.archived ? 'Archived' : rule.active ? 'Firing' : 'Normal'} · reminders {rule.reminderSeconds ? `${rule.reminderSeconds}s` : 'off'}</Text>
+        {!rule.archived ? <><Button size="1" variant="soft" disabled={!canWrite || pending} onClick={() => void toggle(rule)}>{rule.enabled ? 'Disable' : 'Enable'}</Button>
+        <Button size="1" variant="soft" disabled={!canWrite || pending} onClick={() => void archive(rule)}>Archive</Button></> : null}</Flex>)}
       <Flex gap="2"><Button variant="soft" disabled={rulePage === 1} onClick={() => setRulePage(rulePage - 1)}>Previous rules</Button><Button variant="soft" disabled={!rules.data?.hasNext} onClick={() => setRulePage(rulePage + 1)}>Next rules</Button></Flex>
     </Flex></Card>
     {canWrite ? <Card><form onSubmit={save}><Flex direction="column" gap="3" style={{ maxWidth: 560 }}><Heading size="4">Create rule</Heading>

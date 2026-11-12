@@ -382,6 +382,7 @@ builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContractService, ContractService>();
 builder.Services.AddScoped<IContractSloService, PostgresContractSloService>();
 builder.Services.AddScoped<NuntivusServer.Application.Alerts.IAlertService, PostgresAlertService>();
+builder.Services.AddScoped<NuntivusServer.Application.Alerts.IAlertOperationsService, PostgresAlertOperationsService>();
 builder.Services.AddScoped<NuntivusServer.Application.Exports.IDataExportReader, PostgresDataExportReader>();
 builder.Services.AddScoped<IContractTestEventService, ContractTestEventService>();
 builder.Services.AddScoped<IContractDryRunService, ContractDryRunService>();

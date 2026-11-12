@@ -13,7 +13,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
     public sealed class PostgresAlertService(IDatabaseConnectionFactory connections, IContractSloService slos,
         IContractRepository contracts, IEndpointSecurityPolicy endpoints, IAuditLogRepository audit, IUnitOfWork uow) : IAlertService
     {
-        private const string RuleColumns = "id AS Id, contract_id AS ContractId, name AS Name, signal AS Signal, threshold AS Threshold, reminder_seconds AS ReminderSeconds, enabled AS Enabled, active AS Active, webhook_url AS WebhookUrl, webhook_secret_ref AS WebhookSecretRef";
+        internal const string RuleColumns = "id AS Id, contract_id AS ContractId, name AS Name, signal AS Signal, threshold AS Threshold, reminder_seconds AS ReminderSeconds, enabled AS Enabled, active AS Active, webhook_url AS WebhookUrl, webhook_secret_ref AS WebhookSecretRef, archived AS Archived";
         private const string NotificationColumns = "id AS Id, rule_id AS RuleId, contract_id AS ContractId, state AS State, message AS Message, created_at AS CreatedAt, acknowledged_at AS AcknowledgedAt, acknowledged_by AS AcknowledgedBy";
         public async Task<Result<AlertRuleView>> SaveRuleAsync(Guid id, AlertRuleRequest request, string actorId, CancellationToken cancellationToken)
         {
@@ -50,6 +50,11 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 }
                 var previous = await uow.GetConnection()!.QuerySingleOrDefaultAsync<AlertRuleView>(new CommandDefinition(
                     $"SELECT {RuleColumns} FROM alert_rules WHERE id = @Id FOR UPDATE", new { Id = id }, uow.GetTransaction(), cancellationToken: cancellationToken));
+                if (previous?.Archived == true)
+                {
+                    uow.Rollback();
+                    return Result.Failure<AlertRuleView>(Error.Conflict("Archived rules cannot be modified; create a replacement rule."));
+                }
                 if (previous is not null && (previous.ContractId != request.ContractId || previous.Signal != request.Signal || previous.Threshold != request.Threshold))
                 {
                     uow.Rollback();

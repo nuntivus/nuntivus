@@ -8,8 +8,8 @@ The .NET/TypeScript SDKs and declarative configuration CLI were explicitly defer
 
 ## Automated coverage
 
-Final verification results: workspace build successful; 319 integration tests
-passed; 253 unit tests passed; dashboard build successful; all 66 dashboard
+Final verification results: workspace build successful; 323 integration tests
+passed; 253 unit tests passed; dashboard build successful; all 70 dashboard
 tests passed after the test maintenance described below. The
 production-only npm dependency audit reported zero vulnerabilities.
 
@@ -37,6 +37,10 @@ The contract-health test fixture explicitly returns 404 for an unconfigured SLO 
 - Schema impact uses the candidate compatibility mode and retains Breaking status even when a contract has a transformation.
 - Concurrent replay requests return one replay identity without duplicate outbox/audit writes; a deterministic unit test also covers the losing event-insert conflict path.
 - Alert evaluation and webhook sending use independent BackgroundServices. A blocked-sender test verifies evaluation does not await network completion.
+
+## Operational management coverage
+
+Migration `017_alert_operations.sql` adds archive state, durable webhook attempts and retry-operation idempotency. API tests cover archive retention and repeated requests, denied edits to archived rules, failed/exhausted redrive, active/successful-send conflicts, concurrent duplicate operation IDs, stale completions, fresh ten-attempt budgets without resetting lifetime history, and Viewer read-only permissions. Browser tests cover the shared history/retry dialog, archive confirmation and failed-delivery exports using applied rather than draft filters. Historical attempts predating tracking have no reconstructed details.
 
 ## Deployment checks not replaced by automated tests
 

@@ -13,6 +13,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { ErrorPreview } from '../components/errors/error-preview'
+import { DataExportButtons } from '../components/exports/data-export-buttons'
 import { FieldErrorText } from '../components/forms/form-feedback'
 import { EntityReference } from '../components/links/entity-reference'
 import { ListFeedback } from '../components/lists/list-feedback'
@@ -267,6 +268,8 @@ export function FailedDeliveriesPage() {
               Bulk retry (later)
             </Button>
           </Flex>
+
+          <DataExportButtons entity="deliveries" filters={{ ...query }} disabled={!!deliveryIdError(contractIdParam, 'Contract ID')} />
 
           <ListFeedback
             isLoading={failedQuery.isLoading}

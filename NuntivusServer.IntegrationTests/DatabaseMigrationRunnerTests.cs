@@ -26,7 +26,7 @@ namespace NuntivusServer.IntegrationTests
                 Assert.Equal(0, repeated.AppliedMigrations);
                 Assert.True((await RunAsync(connectionString, path, DatabaseMigrationMode.Validate)).Success);
                 await using var connection = new NpgsqlConnection(connectionString);
-                foreach (var table in new[] { "delivery_slo_observations", "alert_rules", "alert_notifications", "alert_webhook_outbox", "portal_accounts", "portal_memberships", "portal_invitations", "destination_failure_counters" })
+                foreach (var table in new[] { "delivery_slo_observations", "alert_rules", "alert_notifications", "alert_webhook_outbox", "portal_accounts", "portal_memberships", "portal_invitations", "destination_failure_counters", "alert_webhook_attempts", "alert_webhook_retry_operations" })
                     Assert.True(await connection.ExecuteScalarAsync<bool>("SELECT to_regclass(@Table) IS NOT NULL", new { Table = table }));
             });
         }

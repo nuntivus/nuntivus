@@ -2,6 +2,8 @@
 
 Operators and administrators can download metadata-only Events, Deliveries and Contracts from their dashboard list pages. Viewers and customer portal users cannot export. Downloads use the authenticated user principal, preserve applied filters, and never put bearer tokens in URLs.
 
+The Failed deliveries page also provides these controls, using its applied customer, contract, failure-category and Failed/Dead status filters. Unsubmitted form edits do not affect downloads. Invalid contract IDs disable export; table pagination and sorting are excluded.
+
 ## API
 
 `GET /v1/exports/{entity}?format=csv|json` where entity is `events`, `deliveries` or `contracts`.
