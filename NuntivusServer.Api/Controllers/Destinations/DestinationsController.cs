@@ -64,7 +64,10 @@ namespace NuntivusServer.Api.Controllers.Destinations
                 return ErrorResult([NuntivusServer.Common.Error.Validation("Destination type cannot be changed.")]);
             if (!_testers.TryGetValue(built.Value.Type, out var tester))
                 return ErrorResult([NuntivusServer.Common.Error.Validation("Connection test is not supported for this Destination type.")]);
-            var result = await tester.TestAsync(built.Value, cancellationToken);
+            var payload = request.Payload?.GetRawText() ?? "{}";
+            if (System.Text.Encoding.UTF8.GetByteCount(payload) > 65536)
+                return ErrorResult([NuntivusServer.Common.Error.Validation("Test payload must not exceed 64 KiB.")]);
+            var result = await tester.TestAsync(built.Value, payload, cancellationToken);
             return result.ToActionResult(HttpContext, message => Ok(new { message }));
         }
 

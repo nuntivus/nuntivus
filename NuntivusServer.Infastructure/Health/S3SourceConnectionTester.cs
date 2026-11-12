@@ -27,11 +27,13 @@ namespace NuntivusServer.Infastructure.Health
                 var region = RegionEndpoint.GetBySystemName(config.GetProperty("region").GetString()!);
                 using var client = credentials.Value is null
                     ? new AmazonS3Client(region) : new AmazonS3Client(credentials.Value, region);
-                await client.GetBucketLocationAsync(new GetBucketLocationRequest
+                await client.ListObjectsV2Async(new ListObjectsV2Request
                 {
-                    BucketName = config.GetProperty("bucket").GetString()!
+                    BucketName = config.GetProperty("bucket").GetString()!,
+                    Prefix = config.GetProperty("prefix").GetString()!,
+                    MaxKeys = 1
                 }, token);
-                return Result.Success("S3 bucket is accessible with the configured credentials.");
+                return Result.Success("S3 bucket/prefix listing is accessible with the configured credentials. No objects read, deleted or moved; object-read permission is not verified.");
             }, cancellationToken);
     }
 }

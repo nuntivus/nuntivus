@@ -11,6 +11,7 @@ import { hydrateDestinationForm, mergeDestinationConfiguration } from '../featur
 import { normalizeDestinationType, validateDestinationFormState, type DestinationFormState } from '../features/contracts/destination-forms/types'
 import { useDestinationDetailQuery, useUpdateDestinationMutation } from '../features/destinations/use-destinations'
 import { useNotifications } from '../hooks/use-notifications'
+import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useUnsavedChangesGuard } from '../hooks/use-unsaved-changes-guard'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { testDestinationConnection, type DestinationResource } from '../services/api/destinations-api'
@@ -68,6 +69,8 @@ function DestinationEditor({ item, onCancel }: { item: DestinationResource; onCa
   const type = normalizeDestinationType(item.type)
   const update = useUpdateDestinationMutation()
   const notifications = useNotifications()
+  const confirm = useConfirmDialog()
+  const [testPayload, setTestPayload] = useState('{}')
   const [name, setName] = useState(item.name)
   const [description, setDescription] = useState(item.description ?? '')
   const [initialForm] = useState<DestinationFormState | null>(() => {
@@ -87,11 +90,22 @@ function DestinationEditor({ item, onCancel }: { item: DestinationResource; onCa
 
   async function testConnection() {
     if (!form) return
-    const snapshot = JSON.stringify(form)
+    const snapshot = JSON.stringify([form, testPayload])
+    const validation = validateDestinationFormState(form)
+    if (validation) { setError(validation); return }
+    let payload: unknown
+    if (type !== 'Http' || form.http.method !== 'GET') {
+      try { payload = JSON.parse(testPayload) } catch { setError('Test payload must be valid JSON.'); return }
+      if (new TextEncoder().encode(JSON.stringify(payload)).length > 65536) { setError('Test payload must not exceed 64 KiB.'); return }
+    }
+    if (!await confirm({ title: 'Send test request?', description: type === 'Http'
+      ? `Sends a real ${form.http.method} request using the current URL, headers and authentication. This may trigger actions at the destination. No event or delivery is stored.`
+      : `Publishes a real ${type} message using the current destination configuration and credentials. This may trigger downstream actions. No event or delivery is stored.`, confirmText: 'Send test request' })) return
+    setError(null)
     setTesting(true)
     setTestResult(null)
     try {
-      const result = await testDestinationConnection(mergeDestinationConfiguration(item.configuration, form), item.id)
+      const result = await testDestinationConnection(mergeDestinationConfiguration(item.configuration, form), item.id, payload)
       setTestResult({ form: snapshot, message: result.message, failed: false })
     } catch (cause) {
       setTestResult({ form: snapshot, message: getApiErrorMessage(cause, 'Connection test failed.'), failed: true })
@@ -130,8 +144,13 @@ function DestinationEditor({ item, onCancel }: { item: DestinationResource; onCa
     <details className="source-advanced-settings"><summary>Advanced Settings</summary>
       <DestinationConfigurationForm fixedType value={form} onChange={setForm} />
     </details>
+    <div className="settings-editor-field">
+      <Text as="label" htmlFor="destination-test-payload">JSON test payload</Text>
+      <TextArea id="destination-test-payload" value={testPayload} onChange={event => setTestPayload(event.target.value)} disabled={(type === 'Http' && form.http.method === 'GET') || testing} rows={6} />
+      <Text size="1" color="gray">{type === 'Http' && form.http.method === 'GET' ? 'GET sends no request body.' : 'Test-only JSON payload (maximum 64 KiB). Not saved as destination configuration.'} Testing sends a real request or message and may trigger actions at the destination.</Text>
+    </div>
     {error && <Text color="red">{error}</Text>}
-    {testResult?.form === JSON.stringify(form) && <Text color={testResult.failed ? 'red' : 'green'} role="status">{testResult.message}</Text>}
+    {testResult?.form === JSON.stringify([form, testPayload]) && <Text color={testResult.failed ? 'red' : 'green'} role="status">{testResult.message}</Text>}
     <div className="settings-editor-actions"><Button type="submit" disabled={update.isPending}>{item.configured ? 'Save changes' : 'Save configuration'}</Button><Button type="button" variant="soft" onClick={() => void testConnection()} disabled={testing || update.isPending}>{testing ? 'Testing...' : 'Test connection'}</Button><Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button></div>
   </form></Card>
 }

@@ -26,10 +26,10 @@ export function HttpDestinationForm({ value, onChange }: HttpDestinationFormProp
         <Text id="http-method-label" size="2" color="gray">Delivery method</Text>
         <Select.Root value={value.method} onValueChange={(method) => onChange({ ...value, method: method as typeof value.method })}>
           <Select.Trigger aria-labelledby="http-method-label" /><Select.Content>
-            {(['POST', 'PUT', 'PATCH', 'DELETE'] as const).map(method => <Select.Item key={method} value={method}>{method}</Select.Item>)}
+            {(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const).map(method => <Select.Item key={method} value={method}>{method}</Select.Item>)}
           </Select.Content>
         </Select.Root>
-        <Text size="1" color="gray">The HTTP method used to deliver each event.</Text>
+        <Text size="1" color="gray">The HTTP method used to deliver each event. GET sends no request body.</Text>
       </div>
       <div className="destination-form-field">
         <Text as="label" htmlFor="http-destination-timeout" size="2" color="gray">Timeout (seconds, 1–300)</Text>

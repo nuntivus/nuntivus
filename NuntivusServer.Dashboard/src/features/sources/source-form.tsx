@@ -141,6 +141,7 @@ export function SourceForm({ source, onSaved, onCancel }: SourceFormProps) {
     </div>
     </>}
     {error && <Text color="red" role="alert">{error}</Text>}
+    <Text size="1" color="gray">Tests use the current configuration and credentials without consuming source data. Broker tests inspect metadata only; HTTP polling uses HEAD, not the configured retrieval method. Inbound HTTP tests validate local configuration only. No messages are acknowledged, offsets advanced, or files/objects moved or deleted.</Text>
     {testResult?.draft === JSON.stringify(draft) && <Text color={testResult.failed ? 'red' : 'green'} role="status">{testResult.message}</Text>}
     <div className="settings-editor-actions">
       <Button type="submit" disabled={pending}>{source ? 'Save changes' : 'Create source'}</Button>

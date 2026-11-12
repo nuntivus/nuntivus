@@ -4,6 +4,65 @@ import { chromium } from 'playwright'
 
 const appUrl = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173'
 
+for (const initialStatus of ['Failed', 3]) {
+    test(`delivery detail refreshes background retry success from ${JSON.stringify(initialStatus)} without reloading`, async () => {
+        const browser = await chromium.launch({ headless: true })
+        const page = await browser.newPage()
+        let completed = false
+        let detailRequests = 0
+        let successfulAttemptsRequests = 0
+        let successfulFailureRequests = 0
+        try {
+            await page.addInitScript(() => {
+                window.sessionStorage.setItem('nuntivus.dashboard.auth.token', 'playwright-token')
+            })
+            await page.route('https://localhost:7123/**', async route => {
+                const path = new URL(route.request().url()).pathname
+                let body = {}
+                if (path === '/v1/admin/users/me') {
+                    body = { subject: 'playwright.admin', displayName: 'Playwright Admin', roles: ['Admin'],
+                        permissions: ['deliveries.read', 'delivery-failures.read', 'events.read'] }
+                } else if (path === '/v1/deliveries/test-delivery') {
+                    detailRequests++
+                    body = {
+                        id: 'test-delivery', eventId: 'test-event', customerId: 'test-customer', contractId: 'test-contract',
+                        destinationType: 'Http', eventType: 'test.created', status: completed ? 'Delivered' : initialStatus,
+                        attemptCount: completed ? 2 : 1, lastError: completed ? null : 'Connection refused',
+                        nextAttemptAt: completed ? null : '2026-01-01T00:02:00Z',
+                        createdAt: '2026-01-01T00:00:00Z', updatedAt: completed ? '2026-01-01T00:03:00Z' : '2026-01-01T00:01:00Z',
+                    }
+                } else if (path === '/v1/deliveries/test-delivery/attempts') {
+                    if (completed) successfulAttemptsRequests++
+                    body = completed ? [{ id: 'successful-attempt', attemptNumber: 2, succeeded: true,
+                        startedAt: '2026-01-01T00:03:00Z', completedAt: '2026-01-01T00:03:01Z', durationMs: 1000,
+                        metadata: { httpStatus: '200' }, error: null, failureCategory: null }] : []
+                } else if (path === '/v1/deliveries/test-delivery/failure') {
+                    if (completed) successfulFailureRequests++
+                    body = completed ? {} : { failureCategory: 'Transient' }
+                }
+                await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+            })
+            await page.goto(`${appUrl}/deliveries/test-delivery`)
+            await page.locator('.delivery-error-callout').waitFor()
+            completed = true
+            await page.locator('.delivery-success-callout').waitFor({ timeout: 10000 })
+            await page.waitForFunction(() => document.querySelector('.delivery-status-track')?.textContent.includes('2 attempts'))
+            assert.deepEqual(await page.locator('.delivery-status-dot').allTextContents(), ['✓', '✓', '✓', '✓'])
+            assert.equal(await page.locator('.delivery-error-callout').count(), 0)
+            assert.equal(await page.locator('.delivery-metric.delivery-tone-success').count(), 1)
+            await page.getByRole('tab', { name: /Attempts/ }).click()
+            await page.getByText('Success', { exact: true }).waitFor()
+            assert.ok(successfulAttemptsRequests > 0)
+            assert.ok(successfulFailureRequests > 0)
+            const terminalRequestCount = detailRequests
+            await page.waitForTimeout(3500)
+            assert.equal(detailRequests, terminalRequestCount, 'Polling stops after Delivered')
+        } finally {
+            await browser.close()
+        }
+    })
+}
+
 for (const { status, attemptCount, expectedDots, expectedDetails } of [
     { status: 'Dead', attemptCount: 1, expectedDots: ['✓', '✓', '×', '4'], expectedDetails: ['1 attempt', 'Not delivered', 'Not completed'] },
     { status: 'Dead', attemptCount: 0, expectedDots: ['×', '2', '3', '4'], expectedDetails: ['Waiting', 'Not delivered', 'Not completed'] },

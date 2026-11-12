@@ -9,6 +9,7 @@ using NuntivusServer.Infastructure.Deliveries.Kafka;
 using NuntivusServer.Infastructure.Deliveries.Nats;
 using NuntivusServer.Infastructure.Deliveries.RabbitMq;
 using NuntivusServer.Infastructure.Deliveries.Sqs;
+using NuntivusServer.Infastructure.Health;
 using RabbitMQ.Client;
 using System;
 using System.Text.Json;
@@ -50,6 +51,26 @@ namespace NuntivusServer.IntegrationTests
             Assert.True(result.Succeeded, result.Error);
             Assert.NotNull(result.Metadata);
             Assert.Equal(topic, result.Metadata!["topic"]);
+            var test = await new KafkaDestinationConnectionTester(executor).TestAsync(request.Destination,
+                "{\"test\":\"kafka\"}", CancellationToken.None);
+            Assert.True(test.IsSuccess, test.IsFailure ? test.Errors[0].Message : null);
+        }
+
+        [Fact]
+        public async Task RabbitMq_source_test_leaves_messages_untouched()
+        {
+            var factory = new ConnectionFactory { Uri = new Uri(_fx.RabbitMqConnectionString) };
+            using var connection = factory.CreateConnection();
+            using var channel = connection.CreateModel();
+            var queue = channel.QueueDeclare().QueueName;
+            channel.BasicPublish("", queue, null, System.Text.Encoding.UTF8.GetBytes("{\"test\":true}"));
+            var tester = new RabbitMqSourceConnectionTester(new NoopSecretResolver());
+            var config = JsonSerializer.Serialize(new { uri = _fx.RabbitMqConnectionString, queue });
+            var result = await tester.TestAsync(config, CancellationToken.None);
+            Assert.True(result.IsSuccess, result.IsFailure ? result.Errors[0].Message : null);
+            var state = channel.QueueDeclarePassive(queue);
+            Assert.Equal(1u, state.MessageCount);
+            Assert.Equal(0u, state.ConsumerCount);
         }
 
         [Fact]
@@ -69,6 +90,12 @@ namespace NuntivusServer.IntegrationTests
             Assert.True(result.Succeeded, result.Error);
             Assert.NotNull(result.Metadata);
             Assert.Equal("NUNTIVUS_DELIVERY_IT", result.Metadata!["stream"]);
+            var test = await new NatsDestinationConnectionTester(executor).TestAsync(request.Destination,
+                "{\"test\":\"nats\"}", CancellationToken.None);
+            Assert.True(test.IsSuccess, test.IsFailure ? test.Errors[0].Message : null);
+            var sourceTest = await new NatsSourceConnectionTester(new NoopSecretResolver()).TestAsync(
+                JsonSerializer.Serialize(new { url = _fx.NatsUrl, stream = "NUNTIVUS_DELIVERY_IT", subject = "delivery.>", durable = "test" }), CancellationToken.None);
+            Assert.True(sourceTest.IsSuccess, sourceTest.IsFailure ? sourceTest.Errors[0].Message : null);
         }
 
         [Fact]
@@ -101,6 +128,9 @@ namespace NuntivusServer.IntegrationTests
             Assert.True(result.Succeeded, result.Error);
             Assert.NotNull(result.Metadata);
             Assert.Equal("true", result.Metadata!["brokerAck"]);
+            var test = await new RabbitMqDestinationConnectionTester(executor).TestAsync(request.Destination,
+                "{\"test\":\"rabbitmq\"}", CancellationToken.None);
+            Assert.True(test.IsSuccess, test.IsFailure ? test.Errors[0].Message : null);
         }
 
         [Fact]
@@ -123,6 +153,9 @@ namespace NuntivusServer.IntegrationTests
             Assert.True(result.Succeeded, result.Error);
             Assert.NotNull(result.Metadata);
             Assert.False(string.IsNullOrWhiteSpace(result.Metadata!["messageId"]));
+            var test = await new SqsDestinationConnectionTester(executor).TestAsync(request.Destination,
+                "{\"test\":\"sqs\"}", CancellationToken.None);
+            Assert.True(test.IsSuccess, test.IsFailure ? test.Errors[0].Message : null);
         }
 
         private static DeliveryExecutionRequest BuildRequest(DomainDestinationType destinationType, object config)

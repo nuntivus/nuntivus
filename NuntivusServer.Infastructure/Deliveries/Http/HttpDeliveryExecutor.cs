@@ -122,15 +122,16 @@ namespace NuntivusServer.Infastructure.Deliveries.Http
                 return destinationAddressValidation;
 
             var method = config.Method?.ToUpperInvariant() ?? "POST";
-            if (method is not ("POST" or "PUT" or "PATCH" or "DELETE"))
+            if (method is not ("GET" or "POST" or "PUT" or "PATCH" or "DELETE"))
                 return DeliveryExecutionResult.Failure(DeliveryFailureCategory.ConfigurationInvalid,
-                    "HTTP destination method must be POST, PUT, PATCH, or DELETE.");
+                    "HTTP destination method must be GET, POST, PUT, PATCH, or DELETE.");
 
-            using var httpRequest = new HttpRequestMessage(new HttpMethod(method), destinationUri)
+            using var httpRequest = new HttpRequestMessage(new HttpMethod(method), destinationUri);
+            if (method != "GET")
             {
-                Content = new StringContent(request.Payload, Encoding.UTF8),
-            };
-            httpRequest.Content.Headers.ContentType = JsonMediaType;
+                httpRequest.Content = new StringContent(request.Payload, Encoding.UTF8);
+                httpRequest.Content.Headers.ContentType = JsonMediaType;
+            }
 
             httpRequest.Headers.TryAddWithoutValidation("X-Nuntivus-Delivery-Id", request.DeliveryId.ToString());
             httpRequest.Headers.TryAddWithoutValidation("X-Nuntivus-Event-Id", request.EventId.ToString());
@@ -206,8 +207,32 @@ namespace NuntivusServer.Infastructure.Deliveries.Http
                 activity?.SetTag(NuntivusTelemetry.OutcomeTag, "transport_error");
                 return DeliveryExecutionResult.Failure(
                     DeliveryFailureCategory.Transient,
-                    $"HTTP transport error: {ex.Message}");
+                    $"HTTP transport error: {ex.Message}",
+                    metadata: new Dictionary<string, string> { ["transportFailure"] = ClassifyTransportFailure(ex) });
             }
+        }
+
+        private static string ClassifyTransportFailure(HttpRequestException exception)
+        {
+            if (exception.HttpRequestError == HttpRequestError.SecureConnectionError)
+                return "tls";
+            if (exception.HttpRequestError == HttpRequestError.NameResolutionError)
+                return "dns";
+            for (Exception? cause = exception; cause is not null; cause = cause.InnerException)
+            {
+                if (cause is System.Security.Authentication.AuthenticationException) return "tls";
+                if (cause is not SocketException socket) continue;
+                return socket.SocketErrorCode switch
+                {
+                    SocketError.ConnectionRefused => "refused",
+                    SocketError.HostNotFound or SocketError.NoData or SocketError.TryAgain => "dns",
+                    SocketError.NetworkUnreachable or SocketError.HostUnreachable => "unreachable",
+                    SocketError.TimedOut => "timeout",
+                    SocketError.ConnectionReset or SocketError.ConnectionAborted => "reset",
+                    _ => "connection"
+                };
+            }
+            return exception.HttpRequestError == HttpRequestError.HttpProtocolError ? "protocol" : "connection";
         }
 
         private async Task<DeliveryExecutionResult?> ApplyAuthenticationAsync(

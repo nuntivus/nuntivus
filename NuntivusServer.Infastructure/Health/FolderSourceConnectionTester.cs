@@ -10,12 +10,14 @@ namespace NuntivusServer.Infastructure.Health
         public SourceType Type => SourceType.FOLDER;
 
         public Task<Result<string>> TestAsync(string normalizedConfiguration, CancellationToken cancellationToken)
-        {
-            using var document = JsonDocument.Parse(normalizedConfiguration);
-            var path = document.RootElement.GetProperty("path").GetString()!;
-            return Task.FromResult(Directory.Exists(path)
-                ? Result.Success("Folder is accessible on the API host (Worker access is not verified).")
-                : Result.Failure<string>(Error.Validation("Folder is not accessible on the API host.")));
-        }
+            => ConnectionProbe.RunAsync(token =>
+            {
+                using var document = JsonDocument.Parse(normalizedConfiguration);
+                var path = document.RootElement.GetProperty("path").GetString()!;
+                token.ThrowIfCancellationRequested();
+                using var files = Directory.EnumerateFiles(path, "*.json").GetEnumerator();
+                files.MoveNext();
+                return Task.FromResult(Result.Success("Folder JSON listing is accessible on the API host. No files read, moved or deleted; Worker access is not verified."));
+            }, cancellationToken);
     }
 }

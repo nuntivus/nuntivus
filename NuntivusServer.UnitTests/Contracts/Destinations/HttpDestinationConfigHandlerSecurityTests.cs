@@ -23,6 +23,7 @@ namespace NuntivusServer.UnitTests.Contracts.Destinations
         }
 
         [Theory]
+        [InlineData("GET")]
         [InlineData("POST")]
         [InlineData("PUT")]
         [InlineData("PATCH")]
@@ -42,7 +43,7 @@ namespace NuntivusServer.UnitTests.Contracts.Destinations
         {
             var handler = new HttpDestinationConfigHandler(new PassthroughProtector());
             Assert.True(handler.Build(new HttpDestinationConfig("https://hooks.example.com/acme",
-                new HttpAuthentication("none"), Method: "GET")).IsFailure);
+                new HttpAuthentication("none"), Method: "TRACE")).IsFailure);
         }
 
         [Fact]

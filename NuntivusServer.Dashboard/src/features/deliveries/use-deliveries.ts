@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { formatDeliveryStatus } from './delivery-status'
 import { invalidateQueryKeys } from '../shared/query-invalidation'
 import {
   getDeliveryAttempts,
@@ -32,11 +34,25 @@ export function useFailedDeliveriesQuery(query: DeliveryListQuery, enabled = tru
 }
 
 export function useDeliveryDetailQuery(id: string | undefined) {
-  return useQuery({
+  const queryClient = useQueryClient()
+  const query = useQuery({
     queryKey: ['deliveries', 'detail', id],
     queryFn: ({ signal }) => getDeliveryById(id ?? '', { signal }),
     enabled: !!id,
+    refetchInterval: query => {
+      const status = query.state.data?.status
+      return status !== undefined && ['pending', 'inflight', 'failed'].includes(formatDeliveryStatus(status).toLowerCase())
+        ? 3000 : false
+    },
   })
+
+  useEffect(() => {
+    if (!id || !query.dataUpdatedAt) return
+    void queryClient.invalidateQueries({ queryKey: ['deliveries', 'detail', id, 'failure'], exact: true })
+    void queryClient.invalidateQueries({ queryKey: ['deliveries', 'detail', id, 'attempts'], exact: true })
+  }, [id, query.dataUpdatedAt, queryClient])
+
+  return query
 }
 
 export function useDeliveryFailureQuery(id: string | undefined) {

@@ -32,7 +32,7 @@ namespace NuntivusServer.Infastructure.Health
                     QueueUrl = config.GetProperty("queueUrl").GetString()!,
                     AttributeNames = new List<string> { "QueueArn" }
                 }, token);
-                return Result.Success("SQS queue is accessible with the configured credentials.");
+                return Result.Success("SQS queue attributes are accessible with the configured credentials. No messages received or deleted; receive permission is not verified.");
             }, cancellationToken);
     }
 }

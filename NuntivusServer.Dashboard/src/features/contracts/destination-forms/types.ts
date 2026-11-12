@@ -58,7 +58,7 @@ export type DestinationFormState = {
   type: DestinationType
   http: {
     url: string
-    method: 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
     headers: string
     timeoutSeconds: string
     authenticationType: 'none' | 'bearer' | 'hmac'

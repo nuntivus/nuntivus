@@ -47,7 +47,7 @@ export function hydrateDestinationForm(type: DestinationType, configuration: str
   switch (type) {
     case 'Http': return { ...base, http: {
       url: config.url ?? '',
-      method: config.method === 'PUT' || config.method === 'PATCH' || config.method === 'DELETE' ? config.method : 'POST',
+      method: config.method === 'GET' || config.method === 'PUT' || config.method === 'PATCH' || config.method === 'DELETE' ? config.method : 'POST',
       headers: JSON.stringify(config.headers ?? {}, null, 2),
       timeoutSeconds: config.timeoutSeconds?.toString() ?? '',
       authenticationType: config.authentication?.type === 'bearer' || config.authentication?.type === 'hmac'

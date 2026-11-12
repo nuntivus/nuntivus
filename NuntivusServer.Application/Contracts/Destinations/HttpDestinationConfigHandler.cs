@@ -79,8 +79,8 @@ namespace NuntivusServer.Application.Contracts.Destinations
             }
 
             var method = http.Method?.Trim().ToUpperInvariant() ?? "POST";
-            if (method is not ("POST" or "PUT" or "PATCH" or "DELETE"))
-                return Result.Failure<Destination>(Error.Validation("Destination method must be POST, PUT, PATCH, or DELETE."));
+            if (method is not ("GET" or "POST" or "PUT" or "PATCH" or "DELETE"))
+                return Result.Failure<Destination>(Error.Validation("Destination method must be GET, POST, PUT, PATCH, or DELETE."));
 
             if (http.Authentication is null || string.IsNullOrWhiteSpace(http.Authentication.Type))
                 return Result.Failure<Destination>(Error.Validation("Destination authentication is required."));

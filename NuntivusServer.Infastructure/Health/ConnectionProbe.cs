@@ -22,9 +22,11 @@ namespace NuntivusServer.Infastructure.Health
             {
                 return Result.Failure<string>(Error.Validation("Connection test timed out."));
             }
-            catch (Exception ex) when (ex is HttpRequestException or SocketException or IOException or AmazonServiceException or ArgumentException or InvalidOperationException)
+            catch (Exception ex) when (ex is HttpRequestException or SocketException or IOException or AmazonServiceException or ArgumentException or InvalidOperationException
+                or Confluent.Kafka.KafkaException or RabbitMQ.Client.Exceptions.BrokerUnreachableException
+                or RabbitMQ.Client.Exceptions.OperationInterruptedException or NATS.Client.Core.NatsException or UnauthorizedAccessException)
             {
-                return Result.Failure<string>(Error.Validation($"Connection test failed: {ex.Message}"));
+                return Result.Failure<string>(Error.Validation("Connection test failed. Check the configured endpoint, credentials, resource and permissions."));
             }
         }
 
@@ -53,13 +55,16 @@ namespace NuntivusServer.Infastructure.Health
         }
 
         internal static async Task<Result<string>> TestHttpAsync(IHttpClientFactory factory, string url,
-            string headRejectedMessage, string successMessage, string failureSuffix, CancellationToken cancellationToken)
+            string headRejectedMessage, string successMessage, string failureSuffix, CancellationToken cancellationToken,
+            string? headNotFoundMessage = null)
         {
             using var request = new HttpRequestMessage(HttpMethod.Head, url);
             using var response = await factory.CreateClient("connection-test").SendAsync(request,
                 HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             return response.StatusCode == HttpStatusCode.MethodNotAllowed
                 ? Result.Success(headRejectedMessage)
+                : response.StatusCode == HttpStatusCode.NotFound && headNotFoundMessage is not null
+                    ? Result.Success(headNotFoundMessage)
                 : response.IsSuccessStatusCode
                     ? Result.Success(successMessage)
                     : Result.Failure<string>(Error.Validation($"HTTP endpoint returned {(int)response.StatusCode} to HEAD{failureSuffix}"));

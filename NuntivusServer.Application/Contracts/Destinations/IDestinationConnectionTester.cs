@@ -7,5 +7,7 @@ namespace NuntivusServer.Application.Contracts.Destinations
     {
         DestinationType Type { get; }
         Task<Result<string>> TestAsync(Destination destination, CancellationToken cancellationToken);
+        Task<Result<string>> TestAsync(Destination destination, string payload, CancellationToken cancellationToken) =>
+            TestAsync(destination, cancellationToken);
     }
 }

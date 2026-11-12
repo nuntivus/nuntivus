@@ -2755,6 +2755,28 @@
   overflow: hidden;
 }
 
+.routing-map-canvas .react-flow {
+  --xy-controls-button-background-color: var(--panel-bg);
+  --xy-controls-button-background-color-hover: var(--panel-bg-hover, var(--app-bg));
+  --xy-controls-button-color: var(--text-h);
+  --xy-controls-button-color-hover: var(--text-h);
+  --xy-controls-button-border-color: var(--border);
+  --xy-minimap-background-color: var(--panel-bg);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--app-bg) 65%, transparent);
+  --xy-minimap-mask-stroke-color: var(--accent);
+  --xy-minimap-node-background-color: var(--accent);
+  --xy-minimap-node-stroke-color: var(--border-strong);
+  --xy-attribution-background-color: var(--panel-bg);
+}
+
+.routing-map-canvas .react-flow__controls,
+.routing-map-canvas .react-flow__minimap {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
 .routing-map-inspector {
   align-self: start;
   overflow-wrap: anywhere;

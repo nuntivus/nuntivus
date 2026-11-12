@@ -19,6 +19,13 @@ test('backend destination type enums select the corresponding edit form', () => 
   }
 })
 
+test('HTTP GET is preserved when serializing destination configuration', () => {
+  const state = createDefaultDestinationFormState('Http')
+  state.http.url = 'https://example.com/webhook'
+  state.http.method = 'GET'
+  assert.equal(mapDestinationFormToConfig(state).method, 'GET')
+})
+
 test('unknown destination types cannot be used to build an edit form', () => {
   assert.equal(normalizeDestinationType(0), null)
   assert.equal(normalizeDestinationType(6), null)

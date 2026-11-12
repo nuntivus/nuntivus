@@ -8,6 +8,14 @@ namespace NuntivusServer.Infastructure.Health
 {
     internal static class ConnectionProbeCredentials
     {
+        internal static async Task<Result<string?>> SourceSecretAsync(JsonElement config,
+            ISecretResolver secrets, CancellationToken cancellationToken)
+        {
+            if (!config.TryGetProperty("secretRef", out var reference)) return Result.Success<string?>(null);
+            var result = await secrets.ResolveAsync(reference.GetString()!, cancellationToken);
+            return result.IsFailure ? Result<string?>.Fail(result.Errors) : Result.Success<string?>(result.Value);
+        }
+
         internal static async Task<Result<AWSCredentials?>> SourceAwsAsync(JsonElement config,
             ISecretResolver secrets, CancellationToken cancellationToken)
         {

@@ -371,6 +371,13 @@ builder.Services.AddTransient<ISourceConnectionTester, KafkaSourceConnectionTest
 builder.Services.AddTransient<ISourceConnectionTester, SqsSourceConnectionTester>();
 builder.Services.AddTransient<ISourceConnectionTester, S3SourceConnectionTester>();
 builder.Services.AddTransient<IDestinationConnectionTester, HttpDestinationConnectionTester>();
+builder.Services.AddTransient<HttpDeliveryExecutor>();
+builder.Services.AddSingleton<NuntivusServer.Infastructure.Deliveries.Kafka.KafkaDeliveryExecutor>();
+builder.Services.AddSingleton<NuntivusServer.Infastructure.Deliveries.Nats.NatsDeliveryExecutor>();
+builder.Services.AddSingleton<NuntivusServer.Infastructure.Deliveries.RabbitMq.RabbitMqDeliveryExecutor>();
+builder.Services.AddSingleton<NuntivusServer.Infastructure.Deliveries.Sqs.SqsDeliveryExecutor>();
+builder.Services.AddHttpClient(HttpDeliveryExecutor.HttpClientName).ConfigurePrimaryHttpMessageHandler(sp =>
+    new SocketsHttpHandler { AllowAutoRedirect = sp.GetRequiredService<HttpDestinationSecurityOption>().AllowRedirects });
 builder.Services.AddTransient<IDestinationConnectionTester, KafkaDestinationConnectionTester>();
 builder.Services.AddTransient<IDestinationConnectionTester, NatsDestinationConnectionTester>();
 builder.Services.AddTransient<IDestinationConnectionTester, RabbitMqDestinationConnectionTester>();

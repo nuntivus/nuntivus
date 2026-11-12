@@ -162,7 +162,7 @@ export interface DestinationCredentialInput {
 export interface HttpDestinationInput {
   type: 'http'
   url: string
-  method?: 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   authenticationType: 'none' | 'bearer' | 'hmac'
   credential?: DestinationCredentialInput
   headers?: Record<string, string>

@@ -9,15 +9,16 @@ namespace NuntivusServer.Infastructure.Health
 {
     public sealed class NatsDestinationConnectionTester : IDestinationConnectionTester
     {
+        private readonly NuntivusServer.Infastructure.Deliveries.Nats.NatsDeliveryExecutor _executor;
+
+        public NatsDestinationConnectionTester(NuntivusServer.Infastructure.Deliveries.Nats.NatsDeliveryExecutor executor) => _executor = executor;
+
         public DestinationType Type => DestinationType.Nats;
 
         public Task<Result<string>> TestAsync(Destination destination, CancellationToken cancellationToken) =>
-            ConnectionProbe.RunAsync(token =>
-            {
-                var config = JsonSerializer.Deserialize<NatsDestinationConfig>(destination.Configuration)!;
-                var uri = new Uri(config.Url);
-                var port = uri.Port == -1 ? 4222 : uri.Port;
-                return ConnectionProbe.TestTlsAsync(uri, port, token);
-            }, cancellationToken);
+            TestAsync(destination, "{}", cancellationToken);
+
+        public Task<Result<string>> TestAsync(Destination destination, string payload, CancellationToken cancellationToken) =>
+            DestinationTestRequest.SendAsync(_executor, destination, payload, cancellationToken);
     }
 }

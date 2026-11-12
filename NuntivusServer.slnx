@@ -14,6 +14,13 @@
     <File Path="migration/008_shared_destinations.sql" />
     <File Path="migration/009_destination_drafts.sql" />
     <File Path="migration/010_delivery_attempt_number_offset.sql" />
+    <File Path="migration/011_event_schema_validation.sql" />
+    <File Path="migration/012_transformation_identity.sql" />
+    <File Path="migration/013_contract_slos.sql" />
+    <File Path="migration/014_alert_notifications.sql" />
+    <File Path="migration/015_portal_memberships.sql" />
+    <File Path="migration/016_destination_failure_counters.sql" />
+    <File Path="migration/017_alert_operations.sql" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path="../../../Desktop/AI_CONTEXT.md" />

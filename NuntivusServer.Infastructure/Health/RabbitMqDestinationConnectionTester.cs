@@ -9,15 +9,16 @@ namespace NuntivusServer.Infastructure.Health
 {
     public sealed class RabbitMqDestinationConnectionTester : IDestinationConnectionTester
     {
+        private readonly NuntivusServer.Infastructure.Deliveries.RabbitMq.RabbitMqDeliveryExecutor _executor;
+
+        public RabbitMqDestinationConnectionTester(NuntivusServer.Infastructure.Deliveries.RabbitMq.RabbitMqDeliveryExecutor executor) => _executor = executor;
+
         public DestinationType Type => DestinationType.RabbitMq;
 
         public Task<Result<string>> TestAsync(Destination destination, CancellationToken cancellationToken) =>
-            ConnectionProbe.RunAsync(token =>
-            {
-                var config = JsonSerializer.Deserialize<RabbitMqDestinationConfig>(destination.Configuration)!;
-                var uri = new Uri(config.Uri);
-                var port = uri.Port == -1 ? 5671 : uri.Port;
-                return ConnectionProbe.TestTlsAsync(uri, port, token);
-            }, cancellationToken);
+            TestAsync(destination, "{}", cancellationToken);
+
+        public Task<Result<string>> TestAsync(Destination destination, string payload, CancellationToken cancellationToken) =>
+            DestinationTestRequest.SendAsync(_executor, destination, payload, cancellationToken);
     }
 }
