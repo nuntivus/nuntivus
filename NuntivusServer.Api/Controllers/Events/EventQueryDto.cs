@@ -14,5 +14,7 @@ namespace NuntivusServer.Api.Controllers.Events
         DateTimeOffset ReceivedAt,
         JsonElement Payload,
         JsonElement? Metadata,
-        IReadOnlyList<DeliveryQueryView> Deliveries);
+        IReadOnlyList<DeliveryQueryView> Deliveries,
+        int? InputSchemaVersion = null,
+        string SchemaValidationStatus = "Unknown");
 }

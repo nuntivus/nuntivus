@@ -5,6 +5,8 @@ using NuntivusServer.Common.Logging;
 using NuntivusServer.Contracts.Events;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using System.Security.Claims;
 
 namespace NuntivusServer.Api.Controllers.Events
 {
@@ -123,9 +125,20 @@ namespace NuntivusServer.Api.Controllers.Events
         public async Task<IActionResult> ActivateSchemaVersion(
             string eventType,
             int version,
+            [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] SchemaActivationOptions? request,
             CancellationToken cancellationToken)
         {
-            var result = await _definitions.ActivateSchemaVersionAsync(eventType, version, cancellationToken);
+            var actorId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            var result = await _definitions.ActivateSchemaVersionAsync(eventType, version, cancellationToken,
+                actorId, User.IsInRole("Admin"), request);
+            return result.ToOk(HttpContext);
+        }
+
+        [HttpGet("{eventType}/schemas/{version:int}/compatibility")]
+        public async Task<IActionResult> CompareSchemaVersions(string eventType, int version,
+            [FromQuery] int? againstVersion, CancellationToken cancellationToken)
+        {
+            var result = await _definitions.CompareSchemaVersionsAsync(eventType, version, againstVersion, cancellationToken);
             return result.ToOk(HttpContext);
         }
 

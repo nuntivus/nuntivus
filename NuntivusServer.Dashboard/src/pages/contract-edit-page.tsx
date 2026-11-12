@@ -16,6 +16,8 @@ import { FormDialog } from '../components/dialogs/form-dialog'
 import { getServerValidation } from '../components/forms/form-validation'
 import { ContractsIcon, DeliveriesIcon, EventsIcon } from '../components/icons/nav-icons'
 import { ContractOptionsForm } from '../features/contracts/contract-options-form'
+import { TransformationImpactPanel } from '../features/contracts/transformation-impact-panel'
+import { ContractDryRunPanel } from '../features/contracts/contract-dry-run-panel'
 import { ContractSourceSelector } from '../features/contracts/contract-source-selector'
 import { ContractDestinationSelector } from '../features/contracts/contract-destination-selector'
 import { backendConfigToFormState, formStateToBackendConfig, validateAdvancedContractOptions } from '../features/contracts/contract-options'
@@ -609,6 +611,11 @@ function ContractEditorForm({
       </Card>
 
       <ContractOptionsForm standalone value={optionsDraft} onChange={setOptionsDraft} eventTypes={eventTypes} disabled={!canWriteContracts || replaceMutation.isPending} onRawEditingChange={(key, editing) => setRawEditing((current) => editing ? [...current.filter((item) => item !== key), key] : current.filter((item) => item !== key))} />
+      <TransformationImpactPanel contractId={id} eventTypes={eventTypes} transformation={formStateToBackendConfig(optionsDraft).transformation ?? null} disabled={Object.keys(optionErrors).length > 0 || rawEditing.length > 0 || replaceMutation.isPending} />
+      <ContractDryRunPanel contractId={id} eventTypes={eventTypes} sourceIds={sourceIds} enabled={enabled}
+        draft={{ customerId, sourceIds, eventTypes, destinationIds, name, ...formStateToBackendConfig(optionsDraft), url: '', authenticationType: 'none' }}
+        disabled={Object.keys(optionErrors).length > 0 || rawEditing.length > 0 || replaceMutation.isPending || retainedDetachedIds.length > 0} />
+      {retainedDetachedIds.length > 0 ? <Text size="1" color="gray">Draft dry run requires linked destinations; detached saved snapshots can be tested from the Test events page.</Text> : null}
       <FieldErrorText id="contract-edit-options-error" message={saveAttempted ? fieldErrors.options : undefined} />
       <FormErrorText id="contract-edit-submit-error" message={submitError ?? (replaceMutation.isError ? getApiErrorMessage(replaceMutation.error, 'Unable to update contract.') : null)} />
       <input type="hidden" value={String(enabled)} readOnly />

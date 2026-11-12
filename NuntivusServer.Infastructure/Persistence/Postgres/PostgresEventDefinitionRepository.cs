@@ -304,6 +304,46 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
             }
         }
 
+        public async Task<Result> LockDefinitionAsync(string eventType, IUnitOfWork uow, CancellationToken cancellationToken)
+        {
+            try
+            {
+                if (!uow.IsTransactionOpen) throw new InvalidOperationException("Transaction is not open.");
+                var existing = await uow.GetConnection()!.QuerySingleOrDefaultAsync<string>(new CommandDefinition(
+                    "SELECT event_type FROM event_definitions WHERE event_type = @EventType FOR UPDATE;",
+                    new { EventType = eventType }, uow.GetTransaction(), cancellationToken: cancellationToken));
+                return existing is null ? Result.Failure(Error.NotFound("The event definition was not found.")) : Result.Success();
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure(ex);
+            }
+        }
+
+        public async Task<Result<EventSchemaVersion?>> GetActiveSchemaVersionAsync(
+            string eventType,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                const string sql = """
+                    SELECT event_type, version_number AS version, schema_json::text AS schema,
+                           compatibility_mode, state_code AS state, created_at, activated_at, deprecated_at
+                    FROM event_schema_versions
+                    WHERE event_type = @EventType AND state_code = 'Active';
+                    """;
+                await using var connection = CreateConnection();
+                await connection.OpenAsync(cancellationToken);
+                var row = await connection.QuerySingleOrDefaultAsync<EventSchemaVersionRow>(
+                    new CommandDefinition(sql, new { EventType = eventType }, cancellationToken: cancellationToken));
+                return Result.Success<EventSchemaVersion?>(row?.ToDomain());
+            }
+            catch (Exception ex)
+            {
+                return Result.Failure<EventSchemaVersion?>(ex);
+            }
+        }
+
         public async Task<Result<PagedResult<EventSchemaVersion>>> ListSchemaVersionsAsync(
             string eventType,
             int page,
@@ -390,6 +430,10 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 var transaction = uow.GetTransaction()!;
 
                 await connection.ExecuteAsync(new CommandDefinition(
+                    "SELECT event_type FROM event_definitions WHERE event_type = @EventType FOR UPDATE;",
+                    new { EventType = eventType }, transaction, cancellationToken: cancellationToken));
+
+                await connection.ExecuteAsync(new CommandDefinition(
                     deactivateActiveSql,
                     new
                     {
@@ -448,6 +492,9 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
 
                 var connection = uow.GetConnection()!;
                 var transaction = uow.GetTransaction()!;
+
+                var locked = await LockDefinitionAsync(eventType, uow, cancellationToken);
+                if (locked.IsFailure) return locked;
 
                 var rows = await connection.ExecuteAsync(new CommandDefinition(
                     sql,

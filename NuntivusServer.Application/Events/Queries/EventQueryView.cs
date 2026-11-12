@@ -13,5 +13,7 @@ namespace NuntivusServer.Application.Events.Queries
         DateTimeOffset ReceivedAt,
         string Payload,
         string? Metadata,
-        IReadOnlyList<DeliveryQueryView> Deliveries);
+        IReadOnlyList<DeliveryQueryView> Deliveries,
+        int? InputSchemaVersion = null,
+        string SchemaValidationStatus = "Unknown");
 }

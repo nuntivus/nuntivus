@@ -20,19 +20,25 @@ namespace NuntivusServer.Application.Events
         private readonly IAuditLogRepository _auditLogs;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IAppLogger<EventService> _logger;
+        private readonly IEventDefinitionRepository _definitions;
+        private readonly IEventSchemaValidator _schemaValidator;
 
         public EventService(
             IEventRepository eventRepository,
             IOutboxRepository outboxRepository,
             IAuditLogRepository auditLogs,
             IUnitOfWork unitOfWork,
-            IAppLogger<EventService> logger)
+            IAppLogger<EventService> logger,
+            IEventDefinitionRepository definitions,
+            IEventSchemaValidator schemaValidator)
         {
             _eventRepository = eventRepository;
             _outboxRepository = outboxRepository;
             _auditLogs = auditLogs;
             _unitOfWork = unitOfWork;
             _logger = logger;
+            _definitions = definitions;
+            _schemaValidator = schemaValidator;
         }
 
         public async Task<Result<Guid>> PublishAsync(
@@ -67,13 +73,35 @@ namespace NuntivusServer.Application.Events
                     return Result.Success(existingEvent.Id);
                 }
 
+                if (!string.IsNullOrWhiteSpace(metadata))
+                {
+                    using var document = JsonDocument.Parse(metadata);
+                    if (document.RootElement.ValueKind != JsonValueKind.Object
+                        || document.RootElement.EnumerateObject().Any(property => property.Name.StartsWith("nuntivus.", StringComparison.OrdinalIgnoreCase)))
+                        return Result.Failure<Guid>(Error.Validation("Metadata must be an object and cannot use the reserved nuntivus. namespace."));
+                }
+
+                var activeResult = await _definitions.GetActiveSchemaVersionAsync(type, cancellationToken);
+                if (activeResult.IsFailure)
+                    return Result<Guid>.Fail(activeResult.Errors);
+
+                var activeSchema = activeResult.Value;
+                if (activeSchema is not null)
+                {
+                    var validation = _schemaValidator.ValidatePayload(activeSchema.Schema, payload);
+                    if (validation.IsFailure)
+                        return Result<Guid>.Fail(validation.Errors);
+                }
+
                 var @event = Event.Create(
                     idempotencyKey,
                     type,
                     sourceId,
                     occurredAt,
                     payload,
-                    metadata);
+                    metadata,
+                    activeSchema?.Version,
+                    activeSchema is null ? EventSchemaValidationStatus.NotConfigured : EventSchemaValidationStatus.Valid);
 
                 var eventAccepted = new EventAccepted(
                     @event.Id,
@@ -180,7 +208,9 @@ namespace NuntivusServer.Application.Events
                     sourceId: source.SourceId,
                     occurredAt: source.OccurredAt,
                     payload: source.Payload,
-                    metadata: replayMetadata);
+                    metadata: replayMetadata,
+                    inputSchemaVersion: source.InputSchemaVersion,
+                    schemaValidationStatus: source.SchemaValidationStatus);
 
                 var accepted = new EventAccepted(
                     replayedEvent.Id,
@@ -199,6 +229,13 @@ namespace NuntivusServer.Application.Events
                 _unitOfWork.Begin(true);
 
                 var eventInsert = await _eventRepository.InsertAsync(replayedEvent, _unitOfWork, cancellationToken);
+                if (eventInsert.IsFailure && eventInsert.Errors.Any(error => error.Code == "conflict"))
+                {
+                    _unitOfWork.Rollback();
+                    var winner = (await _eventRepository.GetReplayAsync(eventId, replayKey, cancellationToken)).EnsureValue();
+                    if (winner is not null)
+                        return Result.Success(new ReplayEventResult(winner.SourceEventId, winner.ReplayedEventId, Created: false));
+                }
                 eventInsert.EnsureSuccess();
 
                 var replayInsert = await _eventRepository.InsertReplayAsync(replay, _unitOfWork, cancellationToken);

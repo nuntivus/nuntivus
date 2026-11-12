@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using NuntivusServer.Application.Contracts;
+using NuntivusServer.Application.Deliveries.Execution;
 using NuntivusServer.Application.Persistence;
 using NuntivusServer.Common;
 using NuntivusServer.Contracts.CustomerContracts;
@@ -26,6 +27,7 @@ namespace NuntivusServer.Application.Matching
         private readonly IAuditLogRepository _auditLogs;
         private readonly IContractFilterEvaluator _filterEvaluator;
         private readonly IUnitOfWork _unitOfWork;
+        private readonly IContractPayloadPreparer _payloadPreparer;
 
         public ContractTestEventService(
             IContractRepository contracts,
@@ -35,7 +37,8 @@ namespace NuntivusServer.Application.Matching
             IOutboxRepository outbox,
             IAuditLogRepository auditLogs,
             IContractFilterEvaluator filterEvaluator,
-            IUnitOfWork unitOfWork)
+            IUnitOfWork unitOfWork,
+            IContractPayloadPreparer payloadPreparer)
         {
             _contracts = contracts;
             _events = events;
@@ -45,6 +48,7 @@ namespace NuntivusServer.Application.Matching
             _auditLogs = auditLogs;
             _filterEvaluator = filterEvaluator;
             _unitOfWork = unitOfWork;
+            _payloadPreparer = payloadPreparer;
         }
 
         public async Task<Result<ContractTestPreviewView>> PreviewAsync(
@@ -187,9 +191,21 @@ namespace NuntivusServer.Application.Matching
             var filter = _filterEvaluator.Evaluate(contractMatches[0].Filter, @event);
             if (filter.IsFailure)
                 return Result<Evaluation>.Fail(filter.Errors);
+            JsonElement? transformedPayload = null;
+            var selected = contractMatches[0];
+            if (filter.Value)
+            {
+                var prepared = await _payloadPreparer.PrepareAsync(@event.Type, @event.Payload,
+                    selected.Transformation is null ? null : JsonSerializer.Serialize(selected.Transformation),
+                    selected.SchemaVersion, cancellationToken);
+                if (prepared.IsFailure) return Result<Evaluation>.Fail(prepared.Errors);
+                using var document = JsonDocument.Parse(prepared.Value);
+                transformedPayload = document.RootElement.Clone();
+            }
             return Result.Success(new Evaluation(
                 filter.Value
-                    ? new ContractTestPreviewView(true, "Contract matches this event. Sending will deliver to every active destination on this contract.")
+                    ? new ContractTestPreviewView(true, "Contract matches this event. Sending will deliver to every active destination on this contract.",
+                        transformedPayload, selected.Transformation?.Identity, selected.SchemaVersion)
                     : new ContractTestPreviewView(false, "Event does not satisfy the contract filter."),
                 contractMatches, @event));
         }

@@ -416,6 +416,39 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Dispatch_with_typed_transformation_sends_prepared_output()
+        {
+            using var expression = JsonDocument.Parse("""{"op":"constant","value":{"prepared":true}}""");
+            var transformation = JsonSerializer.Serialize(new ContractPayloadTransformation(2, [], expression.RootElement));
+            var (deliveryId, _) = await SeedDeliveryAsync(_server.Url, transformation);
+            _server.Enqueue(Respond(HttpStatusCode.OK, "accepted"));
+            var result = await BuildDispatcher().DispatchAsync(deliveryId, CancellationToken.None);
+            result.EnsureSuccess();
+            Assert.Equal(DeliveryDispatchOutcome.Delivered, result.Value);
+            Assert.Single(_server.Received);
+        }
+
+        [Fact]
+        public async Task Dispatch_rejects_output_schema_before_network_execution()
+        {
+            var (deliveryId, _) = await SeedDeliveryAsync(_server.Url);
+            await using var connection = new NpgsqlConnection(_fx.ConnectionString);
+            await connection.ExecuteAsync("""
+                INSERT INTO event_definitions (event_type, display_name, created_at)
+                SELECT event_type, 'Output schema test', now() FROM deliveries WHERE id = @Id
+                ON CONFLICT DO NOTHING;
+                INSERT INTO event_schema_versions (event_type, version_number, schema_json, compatibility_mode, state_code, created_at)
+                SELECT event_type, 91, 'false'::jsonb, 'Backward', 'Draft', now() FROM deliveries WHERE id = @Id;
+                UPDATE deliveries SET schema_version = 91 WHERE id = @Id;
+                """, new { Id = deliveryId });
+            var result = await BuildDispatcher().DispatchAsync(deliveryId, CancellationToken.None);
+            result.EnsureSuccess();
+            Assert.Equal(DeliveryDispatchOutcome.FailedTerminal, result.Value);
+            Assert.Empty(_server.Received);
+            Assert.Equal("ConfigurationInvalid", Assert.Single(await ReadAttemptsAsync(deliveryId)).failure_category);
+        }
+
+        [Fact]
         public async Task Dispatch_rate_limit_is_enforced_across_parallel_workers()
         {
             var seeded = await SeedDeliveriesForContractAsync(
@@ -591,6 +624,9 @@ namespace NuntivusServer.IntegrationTests
             services.AddSingleton<IDeliveryExecutor, HttpDeliveryExecutor>();
             services.AddSingleton<IDeliveryExecutorDispatcher, DeliveryExecutorDispatcher>();
             services.AddSingleton<IDeliveryPayloadTransformer, DeliveryPayloadTransformer>();
+            services.AddScoped<IContractPayloadPreparer, ContractPayloadPreparer>();
+            services.AddScoped<IEventDefinitionRepository, PostgresEventDefinitionRepository>();
+            services.AddSingleton<NuntivusServer.Application.Events.IEventSchemaValidator, NuntivusServer.Infastructure.Events.JsonEventSchemaValidator>();
 
             services.AddSingleton(options ?? new DeliveryDispatcherOption
             {

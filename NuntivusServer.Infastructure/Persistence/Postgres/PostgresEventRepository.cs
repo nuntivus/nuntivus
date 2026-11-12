@@ -40,7 +40,9 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         occurred_at,
                         received_at,
                         metadata,
-                        payload
+                        payload,
+                        input_schema_version,
+                        schema_validation_status
                     )
                     VALUES
                     (
@@ -51,7 +53,9 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         @OccurredAt,
                         @ReceivedAt,
                         COALESCE(CAST(@Metadata AS jsonb), '{}'::jsonb),
-                        CAST(@Payload AS jsonb)
+                        CAST(@Payload AS jsonb),
+                        @InputSchemaVersion,
+                        @SchemaValidationStatus
                     );
                     """;
 
@@ -70,7 +74,9 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                             @event.OccurredAt,
                             @event.ReceivedAt,
                             Metadata = @event.Metadata?.ToJson(),
-                            @event.Payload
+                            @event.Payload,
+                            @event.InputSchemaVersion,
+                            SchemaValidationStatus = @event.SchemaValidationStatus.ToString()
                         },
                         transaction,
                         cancellationToken: cancellationToken));
@@ -98,7 +104,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
             {
                 const string sql = """
                     SELECT id, idempotency_key, type, CAST(source_id AS uuid) AS source_id, occurred_at, received_at,
-                           metadata::text AS metadata, payload::text AS payload
+                           metadata::text AS metadata, payload::text AS payload,
+                           input_schema_version, schema_validation_status
                     FROM events
                     WHERE source_id::text = @SourceId
                       AND idempotency_key = @IdempotencyKey
@@ -132,7 +139,9 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     row.occurred_at,
                     row.received_at,
                     row.payload,
-                    metadata);
+                    metadata,
+                    row.input_schema_version,
+                    Enum.Parse<EventSchemaValidationStatus>(row.schema_validation_status));
 
                 return Result.Success<Event?>(@event);
             }
@@ -244,7 +253,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
             {
                 const string sql = """
                     SELECT id, idempotency_key, type, CAST(source_id AS uuid) AS source_id, occurred_at, received_at,
-                           metadata::text AS metadata, payload::text AS payload
+                           metadata::text AS metadata, payload::text AS payload,
+                           input_schema_version, schema_validation_status
                     FROM events
                     WHERE id = @Id
                     LIMIT 1;
@@ -269,7 +279,9 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     row.occurred_at,
                     row.received_at,
                     row.payload,
-                    metadata);
+                    metadata,
+                    row.input_schema_version,
+                    Enum.Parse<EventSchemaValidationStatus>(row.schema_validation_status));
 
                 return Result.Success<Event?>(@event);
             }
@@ -294,7 +306,9 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         e.occurred_at       AS OccurredAt,
                         e.received_at       AS ReceivedAt,
                         e.payload::text     AS Payload,
-                        e.metadata::text    AS Metadata
+                        e.metadata::text    AS Metadata,
+                        e.input_schema_version AS InputSchemaVersion,
+                        e.schema_validation_status AS SchemaValidationStatus
                     FROM events e
                     WHERE e.id = @Id
                     LIMIT 1;
@@ -399,7 +413,9 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         e.occurred_at       AS OccurredAt,
                         e.received_at       AS ReceivedAt,
                         e.payload::text     AS Payload,
-                        e.metadata::text    AS Metadata
+                        e.metadata::text    AS Metadata,
+                        e.input_schema_version AS InputSchemaVersion,
+                        e.schema_validation_status AS SchemaValidationStatus
                     FROM events e
                     {where}
                     ORDER BY {sortColumn} {sortDirection}, e.id {sortDirection}
@@ -551,7 +567,9 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 row.ReceivedAt,
                 row.Payload,
                 row.Metadata,
-                deliveries);
+                deliveries,
+                row.InputSchemaVersion,
+                row.SchemaValidationStatus);
 
         private sealed class EventQueryRow
         {
@@ -563,6 +581,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
             public DateTimeOffset ReceivedAt { get; set; }
             public string Payload { get; set; } = string.Empty;
             public string? Metadata { get; set; }
+            public int? InputSchemaVersion { get; set; }
+            public string SchemaValidationStatus { get; set; } = "Unknown";
         }
 
         private sealed class DeliveryQueryRow
@@ -625,6 +645,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
             public DateTimeOffset received_at { get; set; }
             public string? metadata { get; set; }
             public string payload { get; set; } = string.Empty;
+            public int? input_schema_version { get; set; }
+            public string schema_validation_status { get; set; } = "Unknown";
         }
 
         private sealed class EventReplayRow

@@ -15,6 +15,7 @@ import {
   type ContractTestSend,
 } from '../../services/api/contracts-api'
 import { useAppSelector } from '../../store/hooks'
+import { ContractDryRunPanel } from './contract-dry-run-panel'
 
 function parseObject(value: string, field: string): Record<string, unknown> {
   let parsed: unknown
@@ -159,6 +160,11 @@ export function ContractTestEventForm({ contract }: { contract: ContractDetail }
             {preview.matches ? 'Match' : 'No match'}: {preview.reason}
           </Text>
         ) : null}
+        {preview?.matches && 'transformedPayload' in preview ? <Flex direction="column" gap="2">
+          <Text size="2" weight="medium">Prepared output payload</Text>
+          <Text size="1" color="gray">Output schema: {preview.outputSchemaVersion ?? 'not configured'} · Transformation: {preview.transformationIdentity ?? 'none'}</Text>
+          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 320, overflow: 'auto' }}>{JSON.stringify(preview.transformedPayload, null, 2)}</pre>
+        </Flex> : null}
         {result ? (
           <Flex direction="column" gap="2">
             <Text size="2" color="green">Test event queued for this contract only.</Text>
@@ -166,6 +172,7 @@ export function ContractTestEventForm({ contract }: { contract: ContractDetail }
             <Link asChild><NavLink to={`/deliveries/${encodeURIComponent(result.deliveryId)}`}>View delivery and attempts</NavLink></Link>
           </Flex>
         ) : null}
+        <ContractDryRunPanel contractId={contract.id} eventTypes={contract.eventTypes} sourceIds={contract.sourceIds} />
       </Flex>
     </Card>
   )

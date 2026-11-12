@@ -50,6 +50,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         auth_ref,
                         auth_version,
                         transformation_version,
+                        transformation_identity,
                         schema_version,
                         transformation_config,
                         rate_limit_per_second,
@@ -80,6 +81,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         @AuthenticationReference,
                         @AuthenticationVersion,
                         @TransformationVersion,
+                        @TransformationIdentity,
                         @SchemaVersion,
                         CAST(@TransformationConfiguration AS jsonb),
                         @RateLimitPerSecond,
@@ -125,6 +127,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                             delivery.AuthenticationReference,
                             delivery.AuthenticationVersion,
                             delivery.TransformationVersion,
+                            TransformationIdentity = string.IsNullOrWhiteSpace(delivery.TransformationConfiguration) ? null
+                                : System.Text.Json.JsonSerializer.Deserialize<ContractPayloadTransformation>(delivery.TransformationConfiguration)?.Identity,
                             delivery.SchemaVersion,
                             delivery.TransformationConfiguration,
                             RateLimitPerSecond = delivery.RateLimit?.PerSecond,
@@ -165,6 +169,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 const string sql = """
                     SELECT
                         d.id                     AS Id,
+                        d.transformation_identity AS TransformationIdentity,
                         d.event_id               AS EventId,
                         d.customer_id            AS CustomerId,
                         d.contract_id            AS ContractId,
@@ -333,6 +338,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 var sql = $"""
                     SELECT
                         d.id                     AS Id,
+                        d.transformation_identity AS TransformationIdentity,
                         d.event_id               AS EventId,
                         d.customer_id            AS CustomerId,
                         d.contract_id            AS ContractId,
@@ -913,19 +919,26 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         ORDER BY updated_at ASC, id ASC
                         LIMIT @BatchLimit
                         FOR UPDATE SKIP LOCKED
+                    ), replayed AS (
+                        UPDATE deliveries d
+                        SET status = @FailedStatus,
+                            next_attempt_at = @Now,
+                            updated_at = @Now
+                        FROM candidates c
+                        WHERE d.id = c.id
+                        RETURNING d.id
+                    ), closed AS (
+                        UPDATE delivery_slo_observations SET measurement_closed = true
+                        WHERE delivery_id IN (SELECT id FROM replayed)
+                        RETURNING delivery_id
                     )
-                    UPDATE deliveries d
-                    SET status = @FailedStatus,
-                        next_attempt_at = @Now,
-                        updated_at = @Now
-                    FROM candidates c
-                    WHERE d.id = c.id;
+                    SELECT count(*)::int FROM replayed;
                     """;
 
                 using var connection = _connectionFactory.CreateConnection();
                 connection.Open();
 
-                var rows = await connection.ExecuteAsync(new CommandDefinition(
+                var rows = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
                     sql,
                     new
                     {
@@ -1201,6 +1214,14 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     """;
 
                 var now = DateTimeOffset.UtcNow;
+                await uow.GetConnection()!.ExecuteAsync(new CommandDefinition("""
+                    INSERT INTO destination_failure_counters (contract_id, destination_binding_id, consecutive_failures, updated_at)
+                    VALUES (@ContractId, @DestinationBindingId, CASE WHEN @Succeeded THEN 0 ELSE 1 END, @Now)
+                    ON CONFLICT (contract_id, destination_binding_id) DO UPDATE
+                    SET consecutive_failures = CASE WHEN @Succeeded THEN 0 ELSE destination_failure_counters.consecutive_failures + 1 END,
+                        updated_at = @Now;
+                    """, new { observation.ContractId, observation.DestinationBindingId, observation.Succeeded, Now = now },
+                    uow.GetTransaction(), cancellationToken: cancellationToken));
                 var row = await uow.GetConnection()!.QuerySingleAsync<DestinationHealthRow>(new CommandDefinition(
                     sql,
                     new
@@ -1710,6 +1731,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
         private sealed class DeliveryQueryRow
         {
             public Guid Id { get; set; }
+            public string? TransformationIdentity { get; set; }
             public Guid EventId { get; set; }
             public string CustomerId { get; set; } = string.Empty;
             public Guid ContractId { get; set; }
@@ -1754,7 +1776,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     row.SuccessfulAttempts,
                     row.FailedAttempts,
                     row.LastAttemptAt),
-                latestFailure);
+                latestFailure,
+                row.TransformationIdentity);
         }
 
         private sealed class DestinationHealthRow

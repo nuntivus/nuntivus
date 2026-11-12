@@ -309,6 +309,19 @@ async function apiRequest<TResponse>(
   }
 }
 
+export async function apiDownload(path: string, query: Record<string, QueryValue>, signal?: AbortSignal): Promise<Blob> {
+  const token = getStoredToken()
+  const response = await fetch(createUrl(path, query), {
+    signal,
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  })
+  if (!response.ok) {
+    if (response.status === 401) publishUnauthorized()
+    throw new ApiError('Download failed', response.status, await readResponseBody(response), response.headers)
+  }
+  return response.blob()
+}
+
 export async function apiGet<TResponse>(
   path: string,
   query?: Record<string, QueryValue>,

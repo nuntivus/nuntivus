@@ -31,6 +31,9 @@ test('a normalized existing HTTP destination can be serialized for update', () =
   assert.deepEqual(mapDestinationFormToConfig(state), {
     type: 'http',
     url: 'https://example.com/webhook',
+    method: 'POST',
+    headers: {},
+    timeoutSeconds: undefined,
     authenticationType: 'none',
     credential: undefined,
   })

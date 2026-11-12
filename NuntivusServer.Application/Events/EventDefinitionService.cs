@@ -19,15 +19,21 @@ namespace NuntivusServer.Application.Events
         private readonly IEventDefinitionRepository _repository;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IAppLogger<EventDefinitionService> _logger;
+        private readonly IEventSchemaValidator _schemaValidator;
+        private readonly IEventSchemaEvolutionService _evolution;
 
         public EventDefinitionService(
             IEventDefinitionRepository repository,
             IUnitOfWork unitOfWork,
-            IAppLogger<EventDefinitionService> logger)
+            IAppLogger<EventDefinitionService> logger,
+            IEventSchemaValidator schemaValidator,
+            IEventSchemaEvolutionService evolution)
         {
             _repository = repository;
             _unitOfWork = unitOfWork;
             _logger = logger;
+            _schemaValidator = schemaValidator;
+            _evolution = evolution;
         }
 
         public async Task<Result<EventDefinitionCreated>> CreateAsync(
@@ -182,8 +188,9 @@ namespace NuntivusServer.Application.Events
             if (!EventDefinitionValidation.IsValidSchemaVersion(version))
                 return Result.Failure<EventSchemaVersionView>(Error.Validation("version must be greater than 0."));
 
-            if (!EventDefinitionValidation.IsValidSchemaDocument(schema))
-                return Result.Failure<EventSchemaVersionView>(Error.Validation("schema must be valid JSON."));
+            var schemaValidation = _schemaValidator.ValidateSchema(schema);
+            if (schemaValidation.IsFailure)
+                return Result<EventSchemaVersionView>.Fail(schemaValidation.Errors);
 
             if (!EventDefinitionValidation.IsValidCompatibilityMode(EventDefinitionMapping.MapCompatibilityMode(compatibilityMode)))
                 return Result.Failure<EventSchemaVersionView>(Error.Validation("compatibilityMode is invalid."));
@@ -234,51 +241,14 @@ namespace NuntivusServer.Application.Events
             }
         }
 
-        public async Task<Result<EventSchemaVersionView>> ActivateSchemaVersionAsync(
-            string eventType,
-            int version,
-            CancellationToken cancellationToken)
-        {
-            var schemaResult = await GetSchemaVersionAsync(eventType, version, cancellationToken);
-            if (schemaResult.IsFailure)
-                return schemaResult;
+        public Task<Result<EventSchemaVersionView>> ActivateSchemaVersionAsync(
+            string eventType, int version, CancellationToken cancellationToken,
+            string? actorId = null, bool canOverride = false, SchemaActivationOptions? options = null) =>
+            _evolution.ActivateAsync(eventType, version, cancellationToken, actorId, canOverride, options);
 
-            if (schemaResult.Value.State == ContractSchemaState.Deprecated)
-                return Result.Failure<EventSchemaVersionView>(Error.Validation(
-                    "Deprecated schema versions cannot be activated."));
-
-            try
-            {
-                var now = DateTimeOffset.UtcNow;
-
-                _unitOfWork.Begin(true);
-                var activate = await _repository.ActivateSchemaVersionAsync(
-                    eventType.Trim(),
-                    version,
-                    now,
-                    _unitOfWork,
-                    cancellationToken);
-
-                if (activate.IsFailure)
-                {
-                    _unitOfWork.Rollback();
-                    return Result<EventSchemaVersionView>.Fail(activate.Errors);
-                }
-
-                _unitOfWork.Commit();
-            }
-            catch (Exception ex)
-            {
-                _unitOfWork.Rollback();
-                _logger.Error(ex,
-                    "Failed to activate schema version {Version} for {EventType}.",
-                    version,
-                    eventType);
-                return Result.Failure<EventSchemaVersionView>(ex);
-            }
-
-            return await GetSchemaVersionAsync(eventType, version, cancellationToken);
-        }
+        public Task<Result<SchemaCompatibilityReport>> CompareSchemaVersionsAsync(
+            string eventType, int version, int? againstVersion, CancellationToken cancellationToken) =>
+            _evolution.CompareAsync(eventType, version, againstVersion, cancellationToken);
 
         public async Task<Result<EventSchemaVersionView>> DeprecateSchemaVersionAsync(
             string eventType,

@@ -13,6 +13,25 @@ namespace NuntivusServer.IntegrationTests
     public sealed class DatabaseMigrationRunnerTests
     {
         [Fact]
+        public async Task Product_migrations_apply_and_validate_with_production_runner()
+        {
+            await WithPostgresAsync(async connectionString =>
+            {
+                var path = Path.Combine(AppContext.BaseDirectory, "Migrations");
+                var applied = await RunAsync(connectionString, path, DatabaseMigrationMode.Apply);
+                Assert.True(applied.Success);
+                Assert.Equal(Directory.GetFiles(path, "*.sql").Length, applied.AppliedMigrations);
+                var repeated = await RunAsync(connectionString, path, DatabaseMigrationMode.Apply);
+                Assert.True(repeated.Success);
+                Assert.Equal(0, repeated.AppliedMigrations);
+                Assert.True((await RunAsync(connectionString, path, DatabaseMigrationMode.Validate)).Success);
+                await using var connection = new NpgsqlConnection(connectionString);
+                foreach (var table in new[] { "delivery_slo_observations", "alert_rules", "alert_notifications", "alert_webhook_outbox", "portal_accounts", "portal_memberships", "portal_invitations", "destination_failure_counters" })
+                    Assert.True(await connection.ExecuteScalarAsync<bool>("SELECT to_regclass(@Table) IS NOT NULL", new { Table = table }));
+            });
+        }
+
+        [Fact]
         public async Task Apply_IsIdempotent_AndTracksHistory()
         {
             await WithPostgresAsync(async connectionString =>
@@ -69,6 +88,45 @@ namespace NuntivusServer.IntegrationTests
                     var value = await conn.ExecuteScalarAsync<string>(
                         "SELECT encrypted_value FROM managed_secret_versions WHERE name = 'secret.acme.test' AND version = 1");
                     Assert.Equal("encrypted", value);
+                }
+                finally
+                {
+                    Directory.Delete(migrationsDir, recursive: true);
+                }
+            });
+        }
+
+        [Fact]
+        public async Task Event_schema_validation_migration_preserves_historical_rows_and_enforces_invariants()
+        {
+            await WithPostgresAsync(async connectionString =>
+            {
+                var migrationsDir = CreateTempMigrationDirectory();
+                try
+                {
+                    await File.WriteAllTextAsync(Path.Combine(migrationsDir, "001_validation_baseline.sql"), """
+                        CREATE TABLE events(id uuid PRIMARY KEY);
+                        CREATE TABLE event_schema_versions(event_type text NOT NULL, state_code text NOT NULL);
+                        """);
+                    Assert.True((await RunAsync(connectionString, migrationsDir, DatabaseMigrationMode.Apply)).Success);
+                    await using var connection = new NpgsqlConnection(connectionString);
+                    await connection.OpenAsync();
+                    var id = Guid.NewGuid();
+                    await connection.ExecuteAsync("INSERT INTO events(id) VALUES (@Id)", new { Id = id });
+                    File.Copy(Path.Combine(AppContext.BaseDirectory, "Migrations", "011_event_schema_validation.sql"),
+                        Path.Combine(migrationsDir, "002_event_schema_validation.sql"));
+
+                    Assert.True((await RunAsync(connectionString, migrationsDir, DatabaseMigrationMode.Apply)).Success);
+                    Assert.Equal("Unknown", await connection.ExecuteScalarAsync<string>("SELECT schema_validation_status FROM events WHERE id = @Id", new { Id = id }));
+                    Assert.Null(await connection.ExecuteScalarAsync<int?>("SELECT input_schema_version FROM events WHERE id = @Id", new { Id = id }));
+                    var invalid = await Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync(
+                        "UPDATE events SET schema_validation_status = 'Valid' WHERE id = @Id", new { Id = id }));
+                    Assert.Equal("23514", invalid.SqlState);
+
+                    await connection.ExecuteAsync("INSERT INTO event_schema_versions VALUES ('orders.created', 'Active')");
+                    var duplicate = await Assert.ThrowsAsync<PostgresException>(() => connection.ExecuteAsync(
+                        "INSERT INTO event_schema_versions VALUES ('orders.created', 'Active')"));
+                    Assert.Equal("23505", duplicate.SqlState);
                 }
                 finally
                 {

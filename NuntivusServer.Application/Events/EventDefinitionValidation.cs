@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-using System.Text.Json;
 using NuntivusServer.Domain.Events;
 
 namespace NuntivusServer.Application.Events
@@ -13,7 +12,6 @@ namespace NuntivusServer.Application.Events
         public const int EventTypeMaxLength = 128;
         public const int DisplayNameMaxLength = 200;
         public const int DescriptionMaxLength = 2000;
-        public const int SchemaMaxLength = 1_000_000;
 
         public static bool IsValidEventType(string? value) =>
             !string.IsNullOrWhiteSpace(value)
@@ -28,22 +26,6 @@ namespace NuntivusServer.Application.Events
             value is null || value.Trim().Length <= DescriptionMaxLength;
 
         public static bool IsValidSchemaVersion(int value) => value > 0;
-
-        public static bool IsValidSchemaDocument(string? schema)
-        {
-            if (string.IsNullOrWhiteSpace(schema) || schema.Length > SchemaMaxLength)
-                return false;
-
-            try
-            {
-                using var _ = JsonDocument.Parse(schema);
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
 
         public static bool IsValidCompatibilityMode(SchemaCompatibilityMode mode) =>
             mode == SchemaCompatibilityMode.Backward || mode == SchemaCompatibilityMode.Forward;

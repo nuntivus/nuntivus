@@ -50,6 +50,7 @@ namespace NuntivusServer.Infastructure.Deliveries
             services.AddSingleton<IDeliveryExecutor, SqsDeliveryExecutor>();
             services.AddSingleton<IDeliveryExecutorDispatcher, DeliveryExecutorDispatcher>();
             services.AddSingleton<IDeliveryPayloadTransformer, DeliveryPayloadTransformer>();
+            services.AddScoped<IContractPayloadPreparer, ContractPayloadPreparer>();
 
             return services;
         }

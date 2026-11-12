@@ -38,7 +38,13 @@ namespace NuntivusServer.Application.Events
         Task<Result<EventSchemaVersionView>> ActivateSchemaVersionAsync(
             string eventType,
             int version,
-            CancellationToken cancellationToken);
+            CancellationToken cancellationToken,
+            string? actorId = null,
+            bool canOverride = false,
+            SchemaActivationOptions? options = null);
+
+        Task<Result<SchemaCompatibilityReport>> CompareSchemaVersionsAsync(
+            string eventType, int version, int? againstVersion, CancellationToken cancellationToken);
 
         Task<Result<EventSchemaVersionView>> DeprecateSchemaVersionAsync(
             string eventType,

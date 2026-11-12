@@ -96,6 +96,8 @@ namespace NuntivusServer.Common
     public sealed record Error(string Code, string Message)
     {
         public Exception? Exception { get; init; }
+        public string? Path { get; init; }
+        public string? Keyword { get; init; }
 
         public static readonly Error None = new(string.Empty, string.Empty);
 

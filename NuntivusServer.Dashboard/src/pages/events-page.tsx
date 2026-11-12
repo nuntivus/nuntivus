@@ -22,6 +22,7 @@ import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-para
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { DeliveryListItem, EventListQuery } from '../services/api/events-api'
 import { useAppSelector } from '../store/hooks'
+import { DataExportButtons } from '../components/exports/data-export-buttons'
 
 type SortBy = 'type' | 'source' | 'occurredAt' | 'receivedAt'
 type SortDirection = 'asc' | 'desc'
@@ -197,6 +198,7 @@ export function EventsPage() {
           <h1 className="page-title">Events</h1>
           <p className="page-subtitle">Inspect accepted events, delivery outcomes, and source activity.</p>
         </div>
+        <DataExportButtons entity="events" filters={{ ...query, id: idParam }} />
       </div>
 
       <Card className="filter-card">

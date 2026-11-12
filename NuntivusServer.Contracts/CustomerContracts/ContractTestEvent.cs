@@ -11,7 +11,10 @@ namespace NuntivusServer.Contracts.CustomerContracts
 
     public sealed record ContractTestPreviewView(
         bool Matches,
-        string Reason);
+        string Reason,
+        JsonElement? TransformedPayload = null,
+        string? TransformationIdentity = null,
+        int? OutputSchemaVersion = null);
 
     public sealed record ContractTestSendView(
         Guid EventId,

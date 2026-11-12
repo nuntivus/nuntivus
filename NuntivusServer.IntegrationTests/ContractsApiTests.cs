@@ -329,6 +329,41 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Typed_transformation_preview_and_delivery_share_recorded_identity()
+        {
+            await CreateCustomerAsync("typed-transform");
+            await using var connection = new NpgsqlConnection(_fixture.ConnectionString);
+            var before = await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM events WHERE source_id = @Id", new { Id = ContractsApiFixture.SourceId });
+            using var expression = JsonDocument.Parse("""
+                {"op":"object","fields":{"orderId":{"op":"select","path":"/id"},
+                    "label":{"op":"default","value":{"op":"select","path":"/label"},"fallback":{"op":"constant","value":"unknown"}}}}
+                """);
+            var request = ValidRequest("typed-transform") with
+            {
+                Transformation = new ContractPayloadTransformationRequest(2, [], expression.RootElement)
+            };
+            var response = await _client.PostAsJsonAsync("/v1/contracts", request);
+            Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            var created = (await response.Content.ReadFromJsonAsync<ContractCreated>())!;
+            Assert.NotNull(created.Transformation!.Identity);
+            var input = new ContractTestEventRequest("orders.created", JsonSerializer.SerializeToElement(new { id = 42 }), null);
+            var previewResponse = await _client.PostAsJsonAsync($"/v1/contracts/{created.Id:D}/test/preview", input);
+            Assert.Equal(HttpStatusCode.OK, previewResponse.StatusCode);
+            var preview = (await previewResponse.Content.ReadFromJsonAsync<ContractTestPreviewView>())!;
+            Assert.Equal(42, preview.TransformedPayload!.Value.GetProperty("orderId").GetInt32());
+            Assert.Equal("unknown", preview.TransformedPayload.Value.GetProperty("label").GetString());
+            Assert.Equal(created.Transformation.Identity, preview.TransformationIdentity);
+            Assert.Equal(before, await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM events WHERE source_id = @Id", new { Id = ContractsApiFixture.SourceId }));
+            var sentResponse = await _client.PostAsJsonAsync($"/v1/contracts/{created.Id:D}/test/send", input);
+            Assert.Equal(HttpStatusCode.OK, sentResponse.StatusCode);
+            var sent = (await sentResponse.Content.ReadFromJsonAsync<ContractTestSendView>())!;
+            Assert.Equal(preview.TransformationIdentity, await connection.ExecuteScalarAsync<string>(
+                "SELECT transformation_identity FROM deliveries WHERE id = @Id", new { Id = sent.DeliveryId }));
+            Assert.Equal(preview.TransformationIdentity, await connection.ExecuteScalarAsync<string>(
+                "SELECT transformation_identity FROM contracts WHERE id = @Id", new { Id = created.Id }));
+        }
+
+        [Fact]
         public async Task Create_with_too_many_event_types_returns_400()
         {
             await CreateCustomerAsync("acme");
@@ -643,6 +678,33 @@ namespace NuntivusServer.IntegrationTests
                 new { id = body.Id });
 
             Assert.Equal(1, count);
+        }
+
+        [Fact]
+        public async Task Invalid_transformed_output_is_rejected_before_preview_send_persistence()
+        {
+            await CreateCustomerAsync("output-schema");
+            await using var connection = new NpgsqlConnection(_fixture.ConnectionString);
+            var before = await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM events WHERE source_id = @Id", new { Id = ContractsApiFixture.SourceId });
+            Assert.Equal(HttpStatusCode.Created, (await _client.PostAsJsonAsync("/v1/event-definitions",
+                new CreateEventDefinitionRequest("orders.created", "Orders", null))).StatusCode);
+            Assert.Equal(HttpStatusCode.Created, (await _client.PostAsJsonAsync("/v1/event-definitions/orders.created/schemas",
+                new CreateEventSchemaVersionRequest(1, """{"type":"object","required":["id"],"properties":{"id":{"type":"integer"}}}""",
+                    SchemaCompatibilityMode.Backward))).StatusCode);
+            using var expression = JsonDocument.Parse("""{"op":"constant","value":{"id":"not-an-integer"}}""");
+            var request = ValidRequest("output-schema") with
+            {
+                SchemaTargets = [new ContractSchemaTargetRequest("orders.created", 1)],
+                Transformation = new ContractPayloadTransformationRequest(2, [], expression.RootElement)
+            };
+            var createdResponse = await _client.PostAsJsonAsync("/v1/contracts", request);
+            Assert.Equal(HttpStatusCode.Created, createdResponse.StatusCode);
+            var created = (await createdResponse.Content.ReadFromJsonAsync<ContractCreated>())!;
+            var input = new ContractTestEventRequest("orders.created", JsonSerializer.SerializeToElement(new { id = 42 }), null);
+            Assert.Equal(HttpStatusCode.BadRequest, (await _client.PostAsJsonAsync($"/v1/contracts/{created.Id:D}/test/preview", input)).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await _client.PostAsJsonAsync($"/v1/contracts/{created.Id:D}/test/send", input)).StatusCode);
+            Assert.Equal(0, await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM deliveries WHERE contract_id = @Id", new { created.Id }));
+            Assert.Equal(before, await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM events WHERE source_id = @Id", new { Id = ContractsApiFixture.SourceId }));
         }
 
         [Fact]

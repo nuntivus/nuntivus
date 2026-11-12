@@ -276,6 +276,9 @@ namespace NuntivusServer.IntegrationTests
             Assert.NotNull(matching.next_attempt_at);
             Assert.Equal("Dead", nonMatching.status);
             Assert.Null(nonMatching.next_attempt_at);
+            Assert.True(await conn.ExecuteScalarAsync<bool>("SELECT measurement_closed FROM delivery_slo_observations WHERE delivery_id = @Id", new { Id = matchingId }));
+            await conn.ExecuteAsync("UPDATE deliveries SET status = 'Delivered', updated_at = now() WHERE id = @Id", new { Id = matchingId });
+            Assert.Null(await conn.ExecuteScalarAsync<DateTimeOffset?>("SELECT first_delivered_at FROM delivery_slo_observations WHERE delivery_id = @Id", new { Id = matchingId }));
         }
 
         [Fact]

@@ -123,6 +123,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                       AND (d.auth_ref = @Name
                            OR jsonb_path_exists(d.destination_config, '$.** ? (@ == $secret)', jsonb_build_object('secret', @Name)))
                   )
+                  AND NOT EXISTS (SELECT 1 FROM alert_rules WHERE webhook_secret_ref = @Name)
+                  AND NOT EXISTS (SELECT 1 FROM alert_webhook_outbox WHERE secret_ref = @Name AND completed_at IS NULL)
                 RETURNING s.name;
                 """;
             var deleted = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(

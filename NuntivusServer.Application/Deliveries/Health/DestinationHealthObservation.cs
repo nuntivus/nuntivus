@@ -8,5 +8,6 @@ namespace NuntivusServer.Application.Deliveries.Health
         string DestinationType,
         bool Succeeded,
         DateTimeOffset AttemptedAt,
-        double? LatencyMs);
+        double? LatencyMs,
+        Guid? DestinationBindingId = null);
 }

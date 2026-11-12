@@ -91,10 +91,17 @@ export function validateAdvancedContractOptions(state: AdvancedOptionsDraft, eve
     }
   }
   if (state.transformation) {
-    set('transformation.version', positive(state.transformation.version) ? null : 'Version must be a positive integer.')
+    set('transformation.version', ['1', '2'].includes(state.transformation.version) ? null : 'Use operation format version 1 or 2.')
     const mappings = state.transformation.fieldMappings
-    set('transformation.fieldMappings', !mappings.length ? 'Add at least one mapping.' :
-      mappings.length > 100 ? 'At most 100 mappings are allowed.' : null)
+    if (state.transformation.version === '2') {
+      const expression = state.transformation.expression
+      set('transformation.expression', !expression || typeof expression !== 'object' || Array.isArray(expression)
+        || !('op' in expression) || typeof expression.op !== 'string' ? 'Enter a typed expression object with an op.' : null)
+      set('transformation.fieldMappings', mappings.length ? 'Version 2 uses an expression, not legacy mappings.' : null)
+    } else {
+      set('transformation.fieldMappings', !mappings.length ? 'Add at least one mapping.' :
+        mappings.length > 100 ? 'At most 100 mappings are allowed.' : null)
+    }
     const seenTargets = new Set<string>()
     mappings.forEach((mapping, i) => {
       const path = `transformation.fieldMappings.${i}`

@@ -100,6 +100,10 @@ test('contract basics fields are accessible by their visible labels', async () =
                 body.items = [{ eventType: 'order.created', displayName: 'Order created' }]
                 body.totalCount = 1
                 body.totalPages = 1
+            } else if (url.pathname === '/v1/destinations') {
+                body.items = [{ id: 'destination-1', name: 'Order webhook', type: 'Http', enabled: true, configured: true }]
+                body.totalCount = 1
+                body.totalPages = 1
             } else if (url.pathname === '/v1/sources') {
                 body.items = [{ id: 'source-1', name: 'Orders', type: 'HTTP_API', enabled: true }]
                 body.totalCount = 1
@@ -133,12 +137,18 @@ test('contract basics fields are accessible by their visible labels', async () =
         await page.getByRole('option', { name: 'order.created' }).click()
         await page.getByRole('button', { name: 'Next' }).click()
 
-        assert.equal(await page.getByRole('combobox', { name: 'Destination type', exact: true }).count(), 1)
-        assert.equal(await page.getByRole('textbox', { name: 'Destination URL', exact: true }).count(), 1)
-        assert.equal(await page.getByRole('combobox', { name: 'Authentication', exact: true }).count(), 1)
-
+        const destination = page.getByRole('checkbox', { name: 'Select Order webhook', exact: true })
+        await destination.waitFor()
+        assert.equal(await destination.isChecked(), false)
         await page.getByRole('button', { name: 'Next' }).click()
-        assert.deepEqual(await page.getByRole('alert').allTextContents(), ['Destination URL is required.'])
+        assert.deepEqual(await page.getByRole('alert').allTextContents(), ['Select at least one Destination.'])
+
+        await destination.check()
+        assert.equal(await destination.isChecked(), true)
+        await page.getByRole('button', { name: 'Next' }).click()
+        await page.getByRole('heading', { name: 'Review contract', exact: true }).waitFor()
+        assert.equal(await page.getByText('Destinations: destination-1', { exact: true }).count(), 1)
+        assert.equal(await page.getByRole('button', { name: 'Create contract', exact: true }).count(), 1)
     } finally {
         await browser.close()
     }
@@ -178,6 +188,9 @@ test('missing contract destination health does not show a global error notificat
                     updatedAt: '2026-01-01T00:00:00Z',
                     name: 'Contract One',
                 }
+            } else if (url.pathname === '/v1/contracts/contract-1/slo') {
+                status = 404
+                body = { message: 'No SLO policy configured.' }
             } else if (url.pathname === '/v1/destination-health/contracts/contract-1') {
                 status = 404
                 body = { message: "Destination health for contract 'contract-1' was not found." }

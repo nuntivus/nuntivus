@@ -39,7 +39,7 @@ namespace NuntivusServer.Api.Common
                 {
                     var code = NormalizeCode(e.Code);
                     var detail = normalizeDetail(e, code, sanitizeUnexpected);
-                    return new ApiErrorDetail(code, detail);
+                    return new ApiErrorDetail(code, detail, e.Path, e.Keyword);
                 }).ToArray(),
             };
 
@@ -103,5 +103,5 @@ namespace NuntivusServer.Api.Common
         }
     }
 
-    public sealed record ApiErrorDetail(string Code, string Message);
+    public sealed record ApiErrorDetail(string Code, string Message, string? Path = null, string? Keyword = null);
 }

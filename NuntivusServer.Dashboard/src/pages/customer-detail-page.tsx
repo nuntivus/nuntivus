@@ -35,6 +35,7 @@ import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
+import { PortalAccessPanel } from '../features/customers/portal-access-panel'
 
 export function CustomerDetailPage() {
   const { id } = useParams()
@@ -146,6 +147,8 @@ export function CustomerDetailPage() {
         <DetailMetric icon={ContractsIcon} label="Contracts" value={contractsQuery.data?.items.length ?? '-'} supporting="Configured delivery contracts" tone="violet" />
         <DetailMetric icon={CalendarIcon} label="Created" value={new Date(customer.createdAt).toLocaleDateString()} supporting={`Updated ${new Date(customer.updatedAt).toLocaleDateString()}`} />
       </div>
+
+      {currentUser?.roles.includes('Admin') ? <PortalAccessPanel customerId={customer.id} /> : null}
 
       <div className="detail-panel detail-panel-wide customer-detail-wide-panel">
         <CustomerInfoEditor

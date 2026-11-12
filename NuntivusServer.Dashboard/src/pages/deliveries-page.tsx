@@ -29,6 +29,7 @@ import type {
   DestinationType,
 } from '../services/api/deliveries-api'
 import { useAppSelector } from '../store/hooks'
+import { DataExportButtons } from '../components/exports/data-export-buttons'
 
 type SortBy = 'createdAt' | 'updatedAt'
 type SortDirection = 'asc' | 'desc'
@@ -161,6 +162,7 @@ export function DeliveriesPage() {
           <h1 className="page-title">Deliveries</h1>
           <p className="page-subtitle">Track destination delivery status, retries, and processing history.</p>
         </div>
+        <DataExportButtons entity="deliveries" filters={{ ...query }} disabled={invalidQuery} />
       </div>
 
       <Card className="operations-filter-card">

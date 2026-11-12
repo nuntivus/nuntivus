@@ -45,6 +45,8 @@ namespace NuntivusServer.IntegrationTests
             await conn.OpenAsync();
             // contract_event_types cascades from contracts; contracts cascades from customers.
             await conn.ExecuteAsync("TRUNCATE TABLE customers CASCADE;");
+            await conn.ExecuteAsync("TRUNCATE TABLE events CASCADE;");
+            await conn.ExecuteAsync("TRUNCATE TABLE delivery_slo_observations;");
             await conn.ExecuteAsync("TRUNCATE TABLE managed_secrets CASCADE;");
             await conn.ExecuteAsync("TRUNCATE TABLE sources CASCADE;");
             await conn.ExecuteAsync("""

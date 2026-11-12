@@ -22,6 +22,7 @@ using NuntivusServer.Api.Controllers.Events;
 using NuntivusServer.Api.Controllers.Sources;
 using NuntivusServer.Common;
 using NuntivusServer.Infastructure.Configuration;
+using NuntivusServer.Infastructure.Events;
 using NuntivusServer.Infastructure.Caching;
 using NuntivusServer.Infastructure.Deliveries.Http;
 using NuntivusServer.Infastructure.Health;
@@ -252,6 +253,8 @@ builder.Services
         };
     });
 
+builder.Services.AddPortal(builder.Configuration);
+
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(AdminAuthorizationPolicies.Viewer, policy =>
@@ -342,6 +345,9 @@ builder.Services.AddScoped<IEventDefinitionRepository>(sp => new CachedEventDefi
     sp.GetRequiredService<CacheOption>()));
 
 builder.Services.AddScoped<IEventService, EventService>();
+builder.Services.AddSingleton<IEventSchemaValidator, JsonEventSchemaValidator>();
+builder.Services.AddSingleton<ISchemaCompatibilityAnalyzer, SchemaCompatibilityAnalyzer>();
+builder.Services.AddScoped<IEventSchemaEvolutionService, EventSchemaEvolutionService>();
 builder.Services.AddScoped<IEventQueryService, EventQueryService>();
 builder.Services.AddScoped<ISourceAdapter, HttpApiSourceAdapter>();
 builder.Services.AddSingleton<ISourceConfigurationHandler, HttpSourceConfigurationHandler>();
@@ -371,9 +377,16 @@ builder.Services.AddTransient<IDestinationConnectionTester, RabbitMqDestinationC
 builder.Services.AddTransient<IDestinationConnectionTester, SqsDestinationConnectionTester>();
 builder.Services.AddScoped<IHttpSourceAuthenticator, HttpSourceAuthenticator>();
 builder.Services.AddScoped<IEventDefinitionService, EventDefinitionService>();
+builder.Services.AddScoped<IChangeImpactService, ChangeImpactService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContractService, ContractService>();
+builder.Services.AddScoped<IContractSloService, PostgresContractSloService>();
+builder.Services.AddScoped<NuntivusServer.Application.Alerts.IAlertService, PostgresAlertService>();
+builder.Services.AddScoped<NuntivusServer.Application.Exports.IDataExportReader, PostgresDataExportReader>();
 builder.Services.AddScoped<IContractTestEventService, ContractTestEventService>();
+builder.Services.AddScoped<IContractDryRunService, ContractDryRunService>();
+builder.Services.AddSingleton<NuntivusServer.Application.Deliveries.Execution.IDeliveryPayloadTransformer, NuntivusServer.Application.Deliveries.Execution.DeliveryPayloadTransformer>();
+builder.Services.AddScoped<NuntivusServer.Application.Deliveries.Execution.IContractPayloadPreparer, NuntivusServer.Application.Deliveries.Execution.ContractPayloadPreparer>();
 builder.Services.AddScoped<IDashboardOverviewQueryService, DashboardOverviewQueryService>();
 builder.Services.AddSingleton<IContractFilterEvaluator, ContractFilterEvaluator>();
 builder.Services.AddScoped<IDashboardTimeSeriesQueryService, PostgresDashboardTimeSeriesQueryService>();
@@ -439,6 +452,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();
@@ -453,5 +467,4 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 
 app.Run();
 
-// Exposed for WebApplicationFactory<Program> in integration tests.
 public partial class Program { }

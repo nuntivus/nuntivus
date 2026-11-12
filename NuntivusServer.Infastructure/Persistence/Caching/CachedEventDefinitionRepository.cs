@@ -24,6 +24,9 @@ namespace NuntivusServer.Infastructure.Persistence.Caching
             _ttl = (options ?? throw new ArgumentNullException(nameof(options))).Ttl;
         }
 
+        public Task<Result> LockDefinitionAsync(string eventType, IUnitOfWork uow, CancellationToken cancellationToken) =>
+            _inner.LockDefinitionAsync(eventType, uow, cancellationToken);
+
         public Task<Result> InsertAsync(
             EventDefinition definition,
             IUnitOfWork uow,
@@ -81,6 +84,11 @@ namespace NuntivusServer.Infastructure.Persistence.Caching
             int pageSize,
             CancellationToken cancellationToken) =>
             _inner.ListSchemaVersionsAsync(eventType, page, pageSize, cancellationToken);
+
+        public Task<Result<EventSchemaVersion?>> GetActiveSchemaVersionAsync(
+            string eventType,
+            CancellationToken cancellationToken) =>
+            _inner.GetActiveSchemaVersionAsync(eventType, cancellationToken);
 
         public Task<Result> ActivateSchemaVersionAsync(
             string eventType,

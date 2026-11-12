@@ -95,7 +95,9 @@ namespace NuntivusServer.Api.Controllers.Events
                 @event.ReceivedAt,
                 ParseJson(@event.Payload),
                 ParseOptionalJson(@event.Metadata),
-                @event.Deliveries);
+                @event.Deliveries,
+                @event.InputSchemaVersion,
+                @event.SchemaValidationStatus);
         }
 
         private static JsonElement ParseJson(string json)

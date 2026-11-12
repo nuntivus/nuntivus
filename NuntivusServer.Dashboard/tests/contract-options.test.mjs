@@ -59,3 +59,17 @@ test('add/remove mappings, duplicate targets, ordering and unknown section field
   const result = parseRawSection('ordering', '{"keySelector":"customer.id","futureField":"preserved"}', state)
   assert.equal(formStateToBackendConfig(result.state).ordering.futureField, 'preserved')
 })
+
+test('typed expression configuration survives visual and JSON round trips', () => {
+  const config = { transformation: { version: 2, fieldMappings: [], expression: {
+    op: 'default', value: { op: 'select', path: '/label' }, fallback: { op: 'constant', value: 'unknown' },
+  } } }
+  const state = backendConfigToFormState(config)
+  assert.deepEqual(validateAdvancedContractOptions(state), {})
+  assert.deepEqual(formStateToBackendConfig(state).transformation, config.transformation)
+  assert.deepEqual(parseRawSection('transformation', JSON.stringify(config.transformation), state).state.transformation, state.transformation)
+  state.transformation.expression = null
+  assert.ok(validateAdvancedContractOptions(state)['transformation.expression'])
+  state.transformation.fieldMappings.push({ sourceSelector: 'id', targetSelector: 'id' })
+  assert.ok(validateAdvancedContractOptions(state)['transformation.fieldMappings'])
+})

@@ -32,6 +32,7 @@ import {
 import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
+import { SchemaCompatibilityPanel } from '../features/event-definitions/schema-compatibility-panel'
 
 function mapSchemaStateColor(state: string): 'gray' | 'green' | 'amber' {
   const normalized = state.toLowerCase()
@@ -546,6 +547,15 @@ export function EventDefinitionDetailPage() {
           </Flex>
         </form>
       </Card>
+
+      {selectedSchemaVersion && selectedSchemaQuery.data ? (
+        <SchemaCompatibilityPanel
+          key={`${eventType}:${selectedSchemaVersion}`}
+          eventType={eventType}
+          schema={selectedSchemaQuery.data}
+          canOverride={canWriteDefinitions && !!currentUser?.roles.some(role => role.toLowerCase() === 'admin')}
+        />
+      ) : null}
 
       <Card className="detail-panel detail-panel-wide">
         <Flex direction="column" gap="3">

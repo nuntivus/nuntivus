@@ -8,6 +8,8 @@ namespace NuntivusServer.Application.Persistence
 {
     public interface IEventDefinitionRepository
     {
+        Task<Result> LockDefinitionAsync(string eventType, IUnitOfWork uow, CancellationToken cancellationToken);
+
         Task<Result> InsertAsync(
             EventDefinition definition,
             IUnitOfWork uow,
@@ -37,6 +39,10 @@ namespace NuntivusServer.Application.Persistence
         Task<Result<EventSchemaVersion?>> GetSchemaVersionAsync(
             string eventType,
             int version,
+            CancellationToken cancellationToken);
+
+        Task<Result<EventSchemaVersion?>> GetActiveSchemaVersionAsync(
+            string eventType,
             CancellationToken cancellationToken);
 
         Task<Result<PagedResult<EventSchemaVersion>>> ListSchemaVersionsAsync(

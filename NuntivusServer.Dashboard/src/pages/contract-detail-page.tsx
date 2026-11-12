@@ -41,6 +41,7 @@ import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
+import { ContractSloPanel } from '../features/contracts/contract-slo-panel'
 
 function authenticationDetails(configurationText: string) {
   try {
@@ -340,6 +341,8 @@ export function ContractDetailPage() {
       {copiedField ? <Text size="1" color="gray" className="delivery-copy-feedback">{copiedField} copied</Text> : null}
 
       <div className="contract-wide-panel"><DestinationHealthSummary title="Destination health" contractId={contract.id} items={destinationHealthQuery.data ? [destinationHealthQuery.data] : []} isLoading={destinationHealthQuery.isLoading} isError={destinationHealthQuery.isError} error={destinationHealthQuery.error} canReadFailures={canReadFailures} /></div>
+
+      <ContractSloPanel contractId={contract.id} canWrite={canWriteContracts} />
 
       <Card className="contract-wide-panel">
         <Flex direction="column" gap="3">

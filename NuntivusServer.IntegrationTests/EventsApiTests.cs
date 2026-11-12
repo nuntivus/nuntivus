@@ -99,6 +99,22 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task Concurrent_replays_return_one_winner_without_duplicate_outbox_or_audit()
+        {
+            var sourceId = await SeedEventAsync();
+            var responses = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => _client.PostAsJsonAsync(
+                $"/v1/events/{sourceId:D}/replay", new ReplayEventRequest("concurrent-key", null))));
+            Assert.All(responses, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
+            var bodies = await Task.WhenAll(responses.Select(response => response.Content.ReadFromJsonAsync<ReplayEventResponse>()));
+            Assert.Single(bodies.Where(body => body!.Status == "accepted"));
+            Assert.Single(bodies.Select(body => body!.ReplayedEventId).Distinct());
+            var replayed = Guid.Parse(bodies[0]!.ReplayedEventId);
+            await using var connection = new NpgsqlConnection(_fixture.ConnectionString);
+            Assert.Equal(1, await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM outbox_messages WHERE event_id = @Id", new { Id = replayed }));
+            Assert.Equal(1, await connection.ExecuteScalarAsync<int>("SELECT count(*) FROM audit_logs WHERE category = 'event' AND action = 'replayed' AND event_id = @Id", new { Id = sourceId }));
+        }
+
+        [Fact]
         public async Task Replay_missing_event_returns_404()
         {
             var resp = await _client.PostAsJsonAsync(

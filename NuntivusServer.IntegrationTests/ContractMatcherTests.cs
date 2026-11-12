@@ -454,7 +454,10 @@ namespace NuntivusServer.IntegrationTests
                     scope.ServiceProvider.GetRequiredService<IOutboxRepository>(),
                     scope.ServiceProvider.GetRequiredService<IAuditLogRepository>(),
                     scope.ServiceProvider.GetRequiredService<IUnitOfWork>(),
-                    scope.ServiceProvider.GetRequiredService<IAppLogger<EventService>>());
+                    scope.ServiceProvider.GetRequiredService<IAppLogger<EventService>>(),
+                    new NuntivusServer.Infastructure.Persistence.Postgres.PostgresEventDefinitionRepository(
+                        scope.ServiceProvider.GetRequiredService<IDatabaseConnectionFactory>()),
+                    new NuntivusServer.Infastructure.Events.JsonEventSchemaValidator());
 
                 var replayResult = await eventService.ReplayAsync(
                     sourceEvent.Id,

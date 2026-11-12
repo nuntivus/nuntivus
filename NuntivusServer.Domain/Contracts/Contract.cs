@@ -64,7 +64,8 @@ namespace NuntivusServer.Domain.Contracts
                 ? null
                 : new ContractPayloadTransformation(
                     transformation.Version,
-                    transformation.FieldMappings);
+                    transformation.FieldMappings,
+                    transformation.Expression);
             RateLimit = rateLimit;
             Ordering = ordering is null
                 ? null

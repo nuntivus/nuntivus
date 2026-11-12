@@ -34,6 +34,8 @@ export interface ContractFilter {
 export interface ContractTransformation {
   version: number
   fieldMappings: { sourceSelector: string; targetSelector: string }[]
+  expression?: unknown
+  identity?: string | null
 }
 
 export interface ContractRateLimit {
@@ -127,6 +129,9 @@ export interface ContractTestEventRequest {
 export interface ContractTestPreview {
   matches: boolean
   reason: string
+  transformedPayload?: unknown
+  transformationIdentity?: string | null
+  outputSchemaVersion?: number | null
 }
 
 export interface ContractTestSend {

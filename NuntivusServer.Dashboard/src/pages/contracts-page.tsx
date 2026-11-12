@@ -33,6 +33,7 @@ import {
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { ContractListQuery, DestinationType } from '../services/api/contracts-api'
 import { useAppSelector } from '../store/hooks'
+import { DataExportButtons } from '../components/exports/data-export-buttons'
 
 type SortBy = 'createdAt' | 'updatedAt' | 'name' | 'customerId' | 'destinationType'
 type SortDirection = 'asc' | 'desc'
@@ -248,6 +249,7 @@ export function ContractsPage() {
             <NavLink to="/contracts/new">New contract</NavLink>
           </Button>
         ) : null}
+        <DataExportButtons entity="contracts" filters={{ ...query }} />
       </div>
 
       <Card>

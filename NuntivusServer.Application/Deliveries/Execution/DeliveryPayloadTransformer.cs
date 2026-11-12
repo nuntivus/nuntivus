@@ -28,6 +28,11 @@ namespace NuntivusServer.Application.Deliveries.Execution
             if (transformation is null)
                 return Result.Failure<string>(Error.Validation("Transformation configuration could not be parsed."));
 
+            if (transformation.Version == 2)
+                return transformation.Expression is { } expression && transformation.FieldMappings.Count == 0
+                    ? TypedPayloadTransformation.Apply(payload, expression)
+                    : Result.Failure<string>(Error.Validation("Version 2 requires an expression and no legacy field mappings."));
+
             if (transformation.Version != SupportedVersion)
                 return Result.Failure<string>(Error.Validation($"Unsupported transformation version '{transformation.Version}'."));
 

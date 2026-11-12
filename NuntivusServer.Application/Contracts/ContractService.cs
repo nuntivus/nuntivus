@@ -882,7 +882,7 @@ namespace NuntivusServer.Application.Contracts
             return Result.Success();
         }
 
-        private static Result ValidateOrdering(ContractOrderingConfig? ordering)
+        internal static Result ValidateOrdering(ContractOrderingConfig? ordering)
         {
             if (ordering is null)
                 return Result.Success();
@@ -897,7 +897,7 @@ namespace NuntivusServer.Application.Contracts
             return Result.Success();
         }
 
-        private static Result ValidateRateLimit(ContractRateLimitConfig? rateLimit)
+        internal static Result ValidateRateLimit(ContractRateLimitConfig? rateLimit)
         {
             if (rateLimit is null)
                 return Result.Success();
@@ -920,7 +920,7 @@ namespace NuntivusServer.Application.Contracts
             return Result.Success();
         }
 
-        private static Result ValidateFilter(ContractFilterRequest? filter)
+        internal static Result ValidateFilter(ContractFilterRequest? filter)
         {
             if (filter is null)
                 return Result.Success();
@@ -943,13 +943,19 @@ namespace NuntivusServer.Application.Contracts
             return ValidateFilterRules(payloadRules, "payload");
         }
 
-        private static Result ValidateTransformation(ContractPayloadTransformationRequest? transformation)
+        internal static Result ValidateTransformation(ContractPayloadTransformationRequest? transformation)
         {
             if (transformation is null)
                 return Result.Success();
 
-            if (transformation.Version <= 0)
-                return Result.Failure(Error.Validation("Transformation version must be greater than zero."));
+            if (transformation.Version == 2)
+            {
+                if (transformation.FieldMappings is { Count: > 0 } || transformation.Expression is null)
+                    return Result.Failure(Error.Validation("Version 2 requires an expression and no legacy field mappings."));
+                return NuntivusServer.Application.Deliveries.Execution.TypedPayloadTransformation.Validate(transformation.Expression.Value);
+            }
+            if (transformation.Version != 1 || transformation.Expression is not null)
+                return Result.Failure(Error.Validation("Use version 1 with field mappings or version 2 with a typed expression."));
 
             var mappings = transformation.FieldMappings ?? Array.Empty<ContractPayloadFieldMappingRequest>();
             if (mappings.Count == 0)

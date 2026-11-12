@@ -340,6 +340,51 @@ v1
 
 Each version can have its own schema.
 
+New source events are validated against the active JSON Schema 2020-12 version for
+their event type. Events without an active schema remain accepted. Event details
+record the input schema version and whether validation was performed; duplicates
+retain the original result. See [event schema validation](docs/features/event-schema-validation.md)
+for acceptance rules, supported references, and historical-event behavior.
+
+Schema activation also checks backward or forward compatibility against the live
+active version. Breaking and indeterminate changes require an explicit, audited
+administrator override. Select **View schema** in the dashboard to review findings;
+see [schema compatibility](docs/features/schema-compatibility.md) for supported rules.
+
+Contract payload transformations support version-1 field mappings and bounded
+version-2 typed JSON operations, including constants, missing-field defaults,
+conditionals and array mapping. Preview and delivery share output-schema validation.
+See [payload transformations](docs/features/payload-transformations.md) for the format,
+execution limits and recorded content identities.
+
+Schema review and contract editing also offer read-only
+[change impact reports](docs/features/change-impact.md) listing affected customer
+contracts and destination bindings, with bounded sample evidence that is never
+treated as proof of compatibility.
+
+[Full contract dry runs](docs/features/contract-dry-run.md) simulate saved contracts
+or unsaved drafts through input validation, routing, filters and output preparation,
+without saving events or contacting destinations. Explicit test-send remains separate.
+
+[Per-contract SLOs](docs/features/contract-slos.md) measure success and latency over
+rolling 30-day destination-delivery cohorts, with configurable deadlines, explicit
+pending/partial coverage and error budgets preserved independently of delivery retention.
+
+[Alert rules and notifications](docs/features/alerts.md) monitor SLO budget breaches,
+consecutive destination failures and dead-letter backlogs, with an in-app inbox,
+configurable reminders and independently retried secure outbound webhooks.
+
+The invitation-only [customer portal](docs/features/customer-portal.md) supports
+local or Clerk authentication and membership-scoped, read-only contracts and delivery
+history, without exposing administrative credentials or destination configuration.
+
+Operators and administrators can download filtered, snapshot-consistent
+[CSV/JSON metadata exports](docs/features/data-exports.md) for events, deliveries
+and contracts, with bounded row counts and audited operations.
+
+See [product feature verification](docs/features/product-verification.md) for
+automated coverage, deferred SDK/CLI scope and remaining deployment checks.
+
 ```text
 order.created
      │

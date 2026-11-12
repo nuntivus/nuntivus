@@ -213,6 +213,8 @@ export function EventDetailPage() {
     source: detail.source,
     occurredAt: detail.occurredAt,
     receivedAt: detail.receivedAt,
+    inputSchemaVersion: detail.inputSchemaVersion,
+    schemaValidationStatus: detail.schemaValidationStatus,
   }, null, 2)
   const timelineDeliveries = [...detail.deliveries].sort(
     (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
@@ -291,6 +293,8 @@ export function EventDetailPage() {
           <div className="event-information-row"><EventsIcon /><Text weight="medium">Event ID</Text><Text>{detail.id}</Text><Button variant="ghost" size="1" aria-label="Copy event ID" onClick={() => void handleCopy(detail.id, 'id')}><CopyIcon /></Button></div>
           <div className="event-information-row"><EventsIcon /><Text weight="medium">Event type</Text><Text>{detail.type}</Text><Button variant="ghost" size="1" aria-label="Copy event type" onClick={() => void handleCopy(detail.type, 'type')}><CopyIcon /></Button></div>
           <div className="event-information-row"><CodeIcon /><Text weight="medium">Source</Text><Text><EntityReference kind="source" id={detail.source} /></Text><Button variant="ghost" size="1" aria-label="Copy source" onClick={() => void handleCopy(detail.source, 'source')}><CopyIcon /></Button></div>
+          <div className="event-information-row"><CodeIcon /><Text weight="medium">Input schema</Text><Text>{detail.inputSchemaVersion ? `Version ${detail.inputSchemaVersion}` : 'None recorded'}</Text><span /></div>
+          <div className="event-information-row"><CodeIcon /><Text weight="medium">Schema validation</Text><Text>{detail.schemaValidationStatus === 'Valid' ? 'Valid' : detail.schemaValidationStatus === 'NotConfigured' ? 'No active schema at ingestion' : 'Not recorded'}</Text><span /></div>
           <div className="event-information-row"><CalendarIcon /><Text weight="medium">Occurred timestamp</Text><Text>{formatEventDate(detail.occurredAt)}</Text><Button variant="ghost" size="1" aria-label="Copy occurred timestamp" onClick={() => void handleCopy(detail.occurredAt, 'occurred')}><CopyIcon /></Button></div>
           <div className="event-information-row"><ClockIcon /><Text weight="medium">Received timestamp</Text><Text>{formatEventDate(detail.receivedAt)}</Text><Button variant="ghost" size="1" aria-label="Copy received timestamp" onClick={() => void handleCopy(detail.receivedAt, 'received')}><CopyIcon /></Button></div>
           <div className="event-information-row"><DeliveriesIcon /><Text weight="medium">Delivery summary</Text><Flex gap="1" wrap="wrap"><Badge variant="soft">Total {deliverySummary.total}</Badge><Badge color="green" variant="soft">Delivered {deliverySummary.delivered}</Badge><Badge color="amber" variant="soft">Pending {deliverySummary.pending}</Badge><Badge color="red" variant="soft">Failed/Dead {deliverySummary.failedOrDead}</Badge></Flex><span /></div>

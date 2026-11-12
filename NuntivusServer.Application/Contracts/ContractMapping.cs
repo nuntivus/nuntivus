@@ -75,10 +75,10 @@ namespace NuntivusServer.Application.Contracts
                 .Select(m => new ContractPayloadFieldMapping(m.SourceSelector, m.TargetSelector))
                 .ToArray();
 
-            if (mappings.Length == 0)
+            if (mappings.Length == 0 && transformation.Expression is null)
                 return null;
 
-            return new ContractPayloadTransformation(transformation.Version, mappings);
+            return new ContractPayloadTransformation(transformation.Version, mappings, transformation.Expression);
         }
 
         public static ContractRateLimit? ToDomain(this ContractRateLimitConfig? rateLimit) =>
@@ -136,14 +136,14 @@ namespace NuntivusServer.Application.Contracts
 
         public static ContractPayloadTransformationView? ToTransformationView(ContractPayloadTransformation? transformation)
         {
-            if (transformation is null || transformation.FieldMappings.Count == 0)
+            if (transformation is null || (transformation.FieldMappings.Count == 0 && transformation.Expression is null))
                 return null;
 
             var mappings = transformation.FieldMappings
                 .Select(m => new ContractPayloadFieldMappingView(m.SourceSelector, m.TargetSelector))
                 .ToArray();
 
-            return new ContractPayloadTransformationView(transformation.Version, mappings);
+            return new ContractPayloadTransformationView(transformation.Version, mappings, transformation.Expression, transformation.Identity);
         }
 
         public static DomainFilterOperator MapFilterOperator(DtoFilterOperator value) => value switch

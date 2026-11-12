@@ -6,6 +6,8 @@ import { RequireAuth } from './require-auth'
 import { RequirePermission } from './require-permission'
 
 const AuditLogsPage = lazy(() => import('../pages/audit-logs-page').then((module) => ({ default: module.AuditLogsPage })))
+const AlertsPage = lazy(() => import('../pages/alerts-page').then((module) => ({ default: module.AlertsPage })))
+const PortalPage = lazy(() => import('../pages/portal-page').then((module) => ({ default: module.PortalPage })))
 const DashboardPage = lazy(() => import('../pages/dashboard-page').then((module) => ({ default: module.DashboardPage })))
 const CustomersPage = lazy(() => import('../pages/customers-page').then((module) => ({ default: module.CustomersPage })))
 const CustomerDetailPage = lazy(() => import('../pages/customer-detail-page').then((module) => ({ default: module.CustomerDetailPage })))
@@ -49,6 +51,7 @@ const router = createBrowserRouter(createRoutesFromElements(
   <Route element={<RouterServices />}>
     <Route element={<AppShell />}>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/portal" element={<PortalPage />} />
           <Route element={<RequireAuth />}>
             <Route element={<AdminLayout />}>
               <Route index element={<DashboardPage />} />
@@ -74,6 +77,7 @@ const router = createBrowserRouter(createRoutesFromElements(
               </Route>
               <Route element={<RequirePermission permissions={['contracts.read']} />}>
                 <Route path="contracts" element={<ContractsPage />} />
+                <Route path="alerts" element={<AlertsPage />} />
                 <Route path="routing-map" element={<RoutingMapPage />} />
                 <Route path="sources" element={<SourcesPage />} />
                 <Route path="sources/:id" element={<SourceDetailPage />} />

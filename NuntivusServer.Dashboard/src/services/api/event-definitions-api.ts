@@ -4,6 +4,20 @@ import type { PagedResponse } from './paged-response'
 export type EventSchemaState = 'Draft' | 'Active' | 'Deprecated'
 export type SchemaCompatibilityMode = 'Backward' | 'Forward'
 
+export interface SchemaCompatibilityReport {
+  eventType: string
+  version: number
+  againstVersion: number | null
+  mode: SchemaCompatibilityMode
+  status: 'Compatible' | 'Breaking' | 'Indeterminate'
+  findings: { path: string; keyword: string; status: 'Compatible' | 'Breaking' | 'Indeterminate'; message: string }[]
+}
+
+export interface SchemaActivationOptions {
+  overrideCompatibility: boolean
+  reason?: string
+}
+
 export interface EventDefinition {
   eventType: string
   displayName: string
@@ -126,9 +140,18 @@ export async function createSchemaDraft(eventType: string, request: CreateSchema
   )
 }
 
-export async function activateSchemaVersion(eventType: string, version: number) {
+export async function activateSchemaVersion(eventType: string, version: number, options?: SchemaActivationOptions) {
   return apiPost<EventSchemaVersion>(
     `/v1/event-definitions/${encodeURIComponent(eventType)}/schemas/${version}/activate`,
+    options,
+  )
+}
+
+export async function getSchemaCompatibility(eventType: string, version: number, options?: ApiRequestOptions) {
+  return apiGet<SchemaCompatibilityReport>(
+    `/v1/event-definitions/${encodeURIComponent(eventType)}/schemas/${version}/compatibility`,
+    undefined,
+    options,
   )
 }
 

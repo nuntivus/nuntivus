@@ -73,6 +73,7 @@ const navGroups: NavGroup[] = [
     heading: 'Operations',
     items: [
       { to: '/deliveries' as To, label: 'Deliveries', icon: DeliveriesIcon },
+      { to: '/alerts' as To, label: 'Alerts', icon: FailedDeliveriesIcon, permission: 'contracts.read' },
       { to: '/deliveries/failures' as To, label: 'Failed Deliveries', icon: FailedDeliveriesIcon, permission: 'delivery-failures.read' },
       { to: '/audit-logs' as To, label: 'Audit Logs', icon: AuditLogsIcon, permission: 'audit-logs.read' },
     ],
@@ -89,6 +90,7 @@ const navGroups: NavGroup[] = [
 const breadcrumbLabels: Record<string, string> = {
   customers: 'Customers',
   contracts: 'Contracts',
+  alerts: 'Alerts',
   'routing-map': 'Routing map',
   sources: 'Sources',
   destinations: 'Destinations',

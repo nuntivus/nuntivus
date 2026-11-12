@@ -23,6 +23,8 @@ namespace NuntivusServer.Domain.Events
         public DateTimeOffset OccurredAt { get; }
         public DateTimeOffset ReceivedAt { get; }
         public EventMetadata? Metadata { get; }
+        public int? InputSchemaVersion { get; }
+        public EventSchemaValidationStatus SchemaValidationStatus { get; }
 
         private Event(
             Guid id,
@@ -32,8 +34,16 @@ namespace NuntivusServer.Domain.Events
             string payload,
             DateTimeOffset occurredAt,
             DateTimeOffset receivedAt,
-            EventMetadata? metadata)
+            EventMetadata? metadata,
+            int? inputSchemaVersion = null,
+            EventSchemaValidationStatus schemaValidationStatus = EventSchemaValidationStatus.Unknown)
         {
+            if (!Enum.IsDefined(schemaValidationStatus)
+                || (schemaValidationStatus == EventSchemaValidationStatus.Valid
+                    ? inputSchemaVersion is null or <= 0
+                    : inputSchemaVersion is not null))
+                throw new ArgumentException("Schema validation status and input schema version must be consistent.");
+
             Id = id;
             IdempotencyKey = idempotencyKey;
             Type = type;
@@ -42,6 +52,8 @@ namespace NuntivusServer.Domain.Events
             Payload = payload;
             Metadata = metadata;
             ReceivedAt = receivedAt;
+            InputSchemaVersion = inputSchemaVersion;
+            SchemaValidationStatus = schemaValidationStatus;
         }
 
         public static Event Create(
@@ -50,7 +62,9 @@ namespace NuntivusServer.Domain.Events
             string sourceId,
             DateTimeOffset occurredAt,
             string payload,
-            EventMetadata? metadata = null)
+            EventMetadata? metadata = null,
+            int? inputSchemaVersion = null,
+            EventSchemaValidationStatus schemaValidationStatus = EventSchemaValidationStatus.Unknown)
         {
             if (string.IsNullOrWhiteSpace(type))
                 throw new ArgumentException("Event type is required.");
@@ -66,7 +80,9 @@ namespace NuntivusServer.Domain.Events
                 payload,
                 occurredAt,
                 DateTimeOffset.UtcNow,
-                metadata);
+                metadata,
+                inputSchemaVersion,
+                schemaValidationStatus);
         }
 
         public static Event Create(
@@ -75,7 +91,9 @@ namespace NuntivusServer.Domain.Events
             string sourceId,
             DateTimeOffset occurredAt,
             string payload,
-            string? metadata = null)
+            string? metadata = null,
+            int? inputSchemaVersion = null,
+            EventSchemaValidationStatus schemaValidationStatus = EventSchemaValidationStatus.Unknown)
         {
             if (string.IsNullOrWhiteSpace(type))
                 throw new ArgumentException("Event type is required.");
@@ -93,7 +111,9 @@ namespace NuntivusServer.Domain.Events
                 payload,
                 occurredAt,
                 DateTimeOffset.UtcNow,
-                eventMetadata);
+                eventMetadata,
+                inputSchemaVersion,
+                schemaValidationStatus);
         }
 
         /// <summary>
@@ -109,7 +129,10 @@ namespace NuntivusServer.Domain.Events
             DateTimeOffset occurredAt,
             DateTimeOffset receivedAt,
             string payload,
-            EventMetadata? metadata) =>
-            new(id, idempotencyKey, type, sourceId, payload, occurredAt, receivedAt, metadata);
+            EventMetadata? metadata,
+            int? inputSchemaVersion = null,
+            EventSchemaValidationStatus schemaValidationStatus = EventSchemaValidationStatus.Unknown) =>
+            new(id, idempotencyKey, type, sourceId, payload, occurredAt, receivedAt, metadata,
+                inputSchemaVersion, schemaValidationStatus);
     }
 }

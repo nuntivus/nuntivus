@@ -27,7 +27,7 @@ namespace NuntivusServer.Application.Deliveries.Execution
         private readonly IDeliveryOrderingCoordinator _orderingCoordinator;
         private readonly IDeliveryDispatcherMetrics _metrics;
         private readonly IDeliveryExecutorDispatcher _executors;
-        private readonly IDeliveryPayloadTransformer _payloadTransformer;
+        private readonly IContractPayloadPreparer _payloadPreparer;
         private readonly IUnitOfWork _unitOfWork;
         private readonly IAppLogger<DeliveryDispatcherService> _logger;
         private readonly DeliveryDispatcherOption _options;
@@ -38,7 +38,7 @@ namespace NuntivusServer.Application.Deliveries.Execution
             IDeliveryOrderingCoordinator orderingCoordinator,
             IDeliveryDispatcherMetrics metrics,
             IDeliveryExecutorDispatcher executors,
-            IDeliveryPayloadTransformer payloadTransformer,
+            IContractPayloadPreparer payloadPreparer,
             IUnitOfWork unitOfWork,
             IAppLogger<DeliveryDispatcherService> logger,
             DeliveryDispatcherOption? options = null)
@@ -48,7 +48,7 @@ namespace NuntivusServer.Application.Deliveries.Execution
             _orderingCoordinator = orderingCoordinator ?? throw new ArgumentNullException(nameof(orderingCoordinator));
             _metrics = metrics ?? throw new ArgumentNullException(nameof(metrics));
             _executors = executors ?? throw new ArgumentNullException(nameof(executors));
-            _payloadTransformer = payloadTransformer ?? throw new ArgumentNullException(nameof(payloadTransformer));
+            _payloadPreparer = payloadPreparer ?? throw new ArgumentNullException(nameof(payloadPreparer));
             _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _options = options ?? new DeliveryDispatcherOption();
@@ -188,9 +188,9 @@ namespace NuntivusServer.Application.Deliveries.Execution
 
             var attemptNumber = delivery.AttemptNumber;
             var startedAt = DateTimeOffset.UtcNow;
-            var payloadResult = _payloadTransformer.Apply(
-                delivery.Payload,
-                delivery.TransformationConfiguration);
+            var payloadResult = await _payloadPreparer.PrepareAsync(
+                delivery.EventType, delivery.Payload, delivery.TransformationConfiguration,
+                delivery.SchemaVersion, cancellationToken);
 
             DeliveryExecutionResult execution;
             if (payloadResult.IsFailure)
@@ -291,7 +291,8 @@ namespace NuntivusServer.Application.Deliveries.Execution
                         delivery.DestinationType.ToString(),
                         execution.Succeeded,
                         completedAt,
-                        destinationLatencyMs),
+                        destinationLatencyMs,
+                        delivery.DestinationBindingId),
                     _unitOfWork,
                     cancellationToken);
                 destinationHealthResult.EnsureSuccess();

@@ -25,6 +25,8 @@ export interface EventListItem {
   payload: unknown
   metadata: unknown | null
   deliveries: DeliveryListItem[]
+  inputSchemaVersion: number | null
+  schemaValidationStatus: 'Unknown' | 'NotConfigured' | 'Valid'
 }
 
 export interface EventListQuery {
