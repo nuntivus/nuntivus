@@ -28,24 +28,34 @@ namespace NuntivusServer.IntegrationTests
             .WithImage("nats:2.10-alpine")
             .WithCommand("-js")
             .WithPortBinding(4222, true)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(4222))
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(4222))
             .Build();
 
         private readonly IContainer _localStack = new ContainerBuilder()
             .WithImage("localstack/localstack:3.5")
-            .WithEnvironment("SERVICES", "sqs")
+            .WithEnvironment("SERVICES", "sqs,s3")
             .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1")
             .WithEnvironment("AWS_ACCESS_KEY_ID", "test")
             .WithEnvironment("AWS_SECRET_ACCESS_KEY", "test")
             .WithPortBinding(4566, true)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(4566))
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(4566))
+            .Build();
+
+        private readonly IContainer _http = new ContainerBuilder()
+            .WithImage("python:3.12-alpine")
+            .WithEntrypoint("python", "-u", "-c")
+            .WithCommand("from http.server import BaseHTTPRequestHandler,HTTPServer\nimport json\nclass Handler(BaseHTTPRequestHandler):\n sequence=0\n def log_message(self,*args): pass\n def do_HEAD(self):\n  self.send_response(200);self.end_headers()\n def do_GET(self):\n  Handler.sequence+=1\n  body=json.dumps({'type':'stress.created','payload':{'sequence':Handler.sequence}}).encode()\n  self.send_response(200);self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)\n def do_POST(self):\n  self.rfile.read(int(self.headers.get('Content-Length','0')));self.send_response(200);self.end_headers()\nHTTPServer(('0.0.0.0',8080),Handler).serve_forever()")
+            .WithPortBinding(8080, true)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(8080))
             .Build();
 
         public string KafkaBootstrapServers => _kafka.GetBootstrapAddress();
         public string RabbitMqConnectionString => _rabbitMq.GetConnectionString();
         public string NatsUrl => $"nats://{_nats.Hostname}:{_nats.GetMappedPublicPort(4222)}";
         public string LocalStackUrl => $"http://{_localStack.Hostname}:{_localStack.GetMappedPublicPort(4566)}";
+        public string HttpUrl => $"http://{_http.Hostname}:{_http.GetMappedPublicPort(8080)}/";
         public string SqsQueueUrl { get; private set; } = string.Empty;
+        public string S3Bucket => "nuntivus-source-it";
 
         public async Task InitializeAsync()
         {
@@ -53,9 +63,12 @@ namespace NuntivusServer.IntegrationTests
             await _rabbitMq.StartAsync();
             await _nats.StartAsync();
             await _localStack.StartAsync();
+            await _http.StartAsync();
 
             await EnsureNatsStreamAsync();
             await EnsureSqsQueueAsync();
+            var bucket = await _localStack.ExecAsync(new[] { "awslocal", "s3api", "create-bucket", "--bucket", S3Bucket });
+            if (bucket.ExitCode != 0) throw new InvalidOperationException(bucket.Stderr);
         }
 
         public async Task DisposeAsync()
@@ -64,6 +77,7 @@ namespace NuntivusServer.IntegrationTests
             await _rabbitMq.DisposeAsync();
             await _nats.DisposeAsync();
             await _localStack.DisposeAsync();
+            await _http.DisposeAsync();
         }
 
         private async Task EnsureNatsStreamAsync()

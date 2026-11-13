@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+          dotnet-version: 8.0.x
+      - name: Locked restore and Release build
+        shell: bash
+        run: |
+          set -euo pipefail
+          for project in NuntivusServer.Api NuntivusServer.Worker NuntivusServer.UnitTests NuntivusServer.IntegrationTests; do
+            dotnet restore "$project/$project.csproj" --locked-mode
+            dotnet build "$project/$project.csproj" -c Release --no-restore
+          done
+      - name: Unit tests
+        run: dotnet test NuntivusServer.UnitTests -c Release --no-build --logger trx --results-directory TestResults/unit
+      - name: Integration tests (Docker/Testcontainers)
+        run: dotnet test NuntivusServer.IntegrationTests -c Release --no-build --logger trx --results-directory TestResults/integration
+      - name: Dependency audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          for project in NuntivusServer.*/*.csproj; do
+            dotnet list "$project" package --vulnerable --include-transitive --no-restore --format json > /tmp/nuget-audit.json
+            node -e 'const a=require("/tmp/nuget-audit.json"); if(a.projects.some(p=>(p.frameworks??[]).some(f=>[...(f.topLevelPackages??[]),...(f.transitivePackages??[])].some(x=>x.vulnerabilities?.length)))) process.exit(1)'
+          done
+      - name: Test artifacts
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-test-results
+          path: TestResults/**/*.trx
+          retention-days: 7
+          if-no-files-found: ignore
+
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: NuntivusServer.Dashboard
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: NuntivusServer.Dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+      - run: npm audit --omit=dev
+      - run: npm audit
+      - run: npx playwright install --with-deps chromium
+      - name: Browser regressions
+        shell: bash
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:5199
+        run: |
+          set -euo pipefail
+          npm run dev -- --host 127.0.0.1 --port 5199 --strictPort > /tmp/nuntivus-vite.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in {1..60}; do
+            if curl --fail --silent "$PLAYWRIGHT_BASE_URL" > /dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          test "$ready" = true
+          npm run test:e2e
+
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - run: node scripts/check-doc-links.mjs
+      - run: docker compose config --quiet
+
+  deployment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Fresh startup and restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose -p nuntivus-ci -f docker-compose.yml -f tests/deployment/compose.smoke.yml)
+          trap '"${compose[@]}" down --volumes' EXIT
+          "${compose[@]}" up --build -d --wait --wait-timeout 180
+          "${compose[@]}" exec -T api wget -qO- http://localhost:8080/health/ready
+          SMOKE_PROJECT=nuntivus-ci node tests/deployment/smoke.mjs
+          "${compose[@]}" restart api worker
+          "${compose[@]}" up -d --wait --wait-timeout 180
+          "${compose[@]}" exec -T worker wget -qO- http://localhost:8081/health/ready

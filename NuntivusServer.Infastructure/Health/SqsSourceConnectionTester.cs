@@ -12,8 +12,13 @@ namespace NuntivusServer.Infastructure.Health
     public sealed class SqsSourceConnectionTester : ISourceConnectionTester
     {
         private readonly ISecretResolver _secrets;
+        private readonly Sources.ISourceTransportClientFactory _clients;
 
-        public SqsSourceConnectionTester(ISecretResolver secrets) => _secrets = secrets;
+        public SqsSourceConnectionTester(ISecretResolver secrets, Sources.ISourceTransportClientFactory? clients = null)
+        {
+            _secrets = secrets;
+            _clients = clients ?? new Sources.SourceTransportClientFactory();
+        }
 
         public SourceType Type => SourceType.SQS;
 
@@ -24,9 +29,7 @@ namespace NuntivusServer.Infastructure.Health
                 var config = document.RootElement;
                 var credentials = await ConnectionProbeCredentials.SourceAwsAsync(config, _secrets, token);
                 if (credentials.IsFailure) return Result<string>.Fail(credentials.Errors);
-                var region = RegionEndpoint.GetBySystemName(config.GetProperty("region").GetString()!);
-                using var client = credentials.Value is null
-                    ? new AmazonSQSClient(region) : new AmazonSQSClient(credentials.Value, region);
+                using var client = _clients.CreateSqs(config, credentials.Value);
                 await client.GetQueueAttributesAsync(new GetQueueAttributesRequest
                 {
                     QueueUrl = config.GetProperty("queueUrl").GetString()!,

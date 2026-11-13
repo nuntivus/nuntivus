@@ -1,18 +1,14 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: nuntivus-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: nuntivus
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - nuntivus-postgres-data:/var/lib/postgresql/data
-      # SQL files in /docker-entrypoint-initdb.d run on first start, in name order.
-      - ./001_create_events.sql:/docker-entrypoint-initdb.d/001_create_events.sql:ro
-      - ./002_create_outbox_messages.sql:/docker-entrypoint-initdb.d/002_create_outbox_messages.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d nuntivus"]
       interval: 5s
@@ -21,12 +17,11 @@ services:
 
   nats:
     image: nats:2.10-alpine
-    container_name: nuntivus-nats
     # -js enables JetStream, -sd points to the persistent store, -m exposes monitoring.
     command: ["-js", "-sd", "/data", "-m", "8222"]
     ports:
-      - "4222:4222"   # client
-      - "8222:8222"   # monitoring
+      - "127.0.0.1:4222:4222"   # client
+      - "127.0.0.1:8222:8222"   # monitoring
     volumes:
       - nuntivus-nats-data:/data
     healthcheck:
@@ -35,64 +30,55 @@ services:
       timeout: 5s
       retries: 10
 
-  # One-shot container that provisions the JetStream stream once NATS is healthy.
-  nats-init:
-    image: natsio/nats-box:latest
-    container_name: nuntivus-nats-init
+  migrate:
+    build:
+      context: .
+      dockerfile: NuntivusServer.Api/Dockerfile
     depends_on:
-      nats:
+      postgres:
         condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -e
-        nats --server nats://nats:4222 stream add NUNTIVUS_EVENTS \
-          --subjects "event.>" \
-          --storage file \
-          --retention limits \
-          --replicas 1 \
-          --discard old \
-          --max-msgs=-1 \
-          --max-bytes=-1 \
-          --max-age=0 \
-          --max-msg-size=-1 \
-          --dupe-window=2m \
-          --defaults || \
-        nats --server nats://nats:4222 stream info NUNTIVUS_EVENTS
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Database__PostgresConnectionString: "Host=postgres;Port=5432;Database=nuntivus;Username=postgres;Password=postgres"
+    command: ["--migrate"]
     restart: "no"
 
   api:
     build:
       context: .
       dockerfile: NuntivusServer.Api/Dockerfile
-    container_name: nuntivus-api
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=nuntivus;Username=postgres;Password=postgres"
+      Database__PostgresConnectionString: "Host=postgres;Port=5432;Database=nuntivus;Username=postgres;Password=postgres"
+      DatabaseMigrations__Mode: Validate
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
 
   worker:
     build:
       context: .
       dockerfile: NuntivusServer.Worker/Dockerfile
-    container_name: nuntivus-worker
     depends_on:
       postgres:
         condition: service_healthy
       nats:
         condition: service_healthy
-      nats-init:
+      migrate:
         condition: service_completed_successfully
     environment:
       DOTNET_ENVIRONMENT: Development
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=nuntivus;Username=postgres;Password=postgres"
+      Database__PostgresConnectionString: "Host=postgres;Port=5432;Database=nuntivus;Username=postgres;Password=postgres"
+      DatabaseMigrations__Mode: Validate
       Nats__Url: "nats://nats:4222"
       Nats__Stream: "NUNTIVUS_EVENTS"
+      Nats__Subjects__0: event.>
+      Nats__Subjects__1: delivery.>
 
 volumes:
   nuntivus-postgres-data:

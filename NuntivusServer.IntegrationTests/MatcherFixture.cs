@@ -48,7 +48,7 @@ namespace NuntivusServer.IntegrationTests
             .WithImage("nats:2.10-alpine")
             .WithCommand("-js")
             .WithPortBinding(4222, true)
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(4222))
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(4222))
             .Build();
 
         public string ConnectionString => _postgres.GetConnectionString();

@@ -1,5 +1,6 @@
 import { Badge, Button, Card, Flex, Heading, Table, Text, TextField } from '@radix-ui/themes'
 import { useState, type FormEvent } from 'react'
+import { flushSync } from 'react-dom'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FormDialog } from '../components/dialogs/form-dialog'
@@ -43,7 +44,7 @@ export function DestinationsPage() {
     if (!name.trim()) { setError('Name is required.'); return }
     try {
       const result = await create.mutateAsync({ name: name.trim(), description: description.trim() || null, type })
-      setFormOpen(false)
+      flushSync(() => setFormOpen(false))
       notifications.success('Destination created. Configure it before enabling.', 'Destinations')
       navigate(`/destinations/${encodeURIComponent(result.id)}?edit=1`)
     } catch (cause) { setError(getApiErrorMessage(cause, 'Unable to save Destination.')) }

@@ -1,0 +1,32 @@
+services:
+  postgres:
+    ports: !reset []
+  nats:
+    ports: !reset []
+  api:
+    ports: !reset []
+  receiver:
+    image: node:22-alpine
+    working_dir: /harness
+    command: ["node", "pipeline.mjs", "receiver"]
+    volumes:
+      - ./tests/performance:/harness:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/metrics').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+  loadgen:
+    image: node:22-alpine
+    working_dir: /harness
+    command: ["node", "pipeline.mjs"]
+    profiles: ["performance"]
+    volumes:
+      - ./tests/performance:/harness
+    environment:
+      PERF_EVENTS: ${PERF_EVENTS:-500}
+      PERF_CONCURRENCY: ${PERF_CONCURRENCY:-1,8,32}
+      PERF_RUN_ID: ${PERF_RUN_ID:-local}
+    depends_on:
+      receiver:
+        condition: service_healthy

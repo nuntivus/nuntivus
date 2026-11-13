@@ -94,11 +94,15 @@ namespace NuntivusServer.Application.Security
 
         public bool IsPrivateNetworkAddress(IPAddress address)
         {
+            if (address.IsIPv4MappedToIPv6)
+                address = address.MapToIPv4();
             if (IPAddress.IsLoopback(address))
                 return true;
 
             if (address.AddressFamily == AddressFamily.InterNetworkV6)
             {
+                if (address.Equals(IPAddress.IPv6Any))
+                    return true;
                 if (address.IsIPv6LinkLocal || address.IsIPv6Multicast || address.IsIPv6SiteLocal)
                     return true;
 
@@ -130,6 +134,8 @@ namespace NuntivusServer.Application.Security
             if (v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127)
                 return true;
             if (v4[0] == 0)
+                return true;
+            if (v4[0] >= 224)
                 return true;
 
             return false;

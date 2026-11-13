@@ -1,6 +1,15 @@
 **/.classpath
 **/.dockerignore
 **/.env
+**/.env.*
+**/dist
+**/backups
+**/test-results
+**/playwright-report
+**/*.pfx
+**/*.p12
+**/*.pem
+**/*.key
 **/.git
 **/.gitignore
 **/.project
@@ -21,10 +30,5 @@
 **/obj
 **/secrets.dev.yaml
 **/values.dev.yaml
-LICENSE
 README.md
 !**/.gitignore
-!.git/HEAD
-!.git/config
-!.git/packed-refs
-!.git/refs/heads/**

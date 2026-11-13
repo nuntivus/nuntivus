@@ -1,5 +1,6 @@
 import { Button, Card, Flex, Heading, Select, Text, TextField } from '@radix-ui/themes'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
+import { useFormDraft } from '../hooks/use-form-draft'
 import { hasPermission } from '../auth/permissions'
 import {
   type InstanceSettings,
@@ -50,18 +51,9 @@ export function SettingsPage() {
     resetToDefault: resetPreferencesToDefault,
   } = useLocalUserPreferences(currentUser?.subject)
 
-  const [instanceDraft, setInstanceDraft] = useState<InstanceSettings | null>(null)
-  const [preferencesDraft, setPreferencesDraft] = useState<UserPreferences>(preferences)
-
-  useEffect(() => {
-    if (instanceQuery.data) {
-      setInstanceDraft(instanceQuery.data)
-    }
-  }, [instanceQuery.data])
-
-  useEffect(() => {
-    setPreferencesDraft(preferences)
-  }, [preferences])
+  const scope = currentUser?.subject ?? 'anonymous'
+  const [instanceDraft, setInstanceDraft] = useFormDraft<InstanceSettings | null>(instanceQuery.data ?? null, scope)
+  const [preferencesDraft, setPreferencesDraft] = useFormDraft<UserPreferences>(preferences, scope)
 
   const instanceDirty = useMemo(() => {
     if (!instanceDraft || !instanceQuery.data) {

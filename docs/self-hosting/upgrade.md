@@ -31,6 +31,9 @@ Script behavior:
 - rolls back to previous tag if health validation fails
 
 Use `-SkipBackup` only when you have a verified recent backup.
+Use `-Build` for local source builds instead of pulling images. Registry releases
+must actually exist at your configured image names; this repository does not
+promise a published image for every arbitrary tag.
 
 ## 2. Upgrade command
 

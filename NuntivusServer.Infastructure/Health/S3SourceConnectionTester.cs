@@ -12,8 +12,13 @@ namespace NuntivusServer.Infastructure.Health
     public sealed class S3SourceConnectionTester : ISourceConnectionTester
     {
         private readonly ISecretResolver _secrets;
+        private readonly Sources.ISourceTransportClientFactory _clients;
 
-        public S3SourceConnectionTester(ISecretResolver secrets) => _secrets = secrets;
+        public S3SourceConnectionTester(ISecretResolver secrets, Sources.ISourceTransportClientFactory? clients = null)
+        {
+            _secrets = secrets;
+            _clients = clients ?? new Sources.SourceTransportClientFactory();
+        }
 
         public SourceType Type => SourceType.S3;
 
@@ -24,9 +29,7 @@ namespace NuntivusServer.Infastructure.Health
                 var config = document.RootElement;
                 var credentials = await ConnectionProbeCredentials.SourceAwsAsync(config, _secrets, token);
                 if (credentials.IsFailure) return Result<string>.Fail(credentials.Errors);
-                var region = RegionEndpoint.GetBySystemName(config.GetProperty("region").GetString()!);
-                using var client = credentials.Value is null
-                    ? new AmazonS3Client(region) : new AmazonS3Client(credentials.Value, region);
+                using var client = _clients.CreateS3(config, credentials.Value);
                 await client.ListObjectsV2Async(new ListObjectsV2Request
                 {
                     BucketName = config.GetProperty("bucket").GetString()!,

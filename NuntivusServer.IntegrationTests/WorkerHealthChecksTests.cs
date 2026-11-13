@@ -6,6 +6,8 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using NATS.Client.Core;
 using NATS.Client.JetStream;
 using NATS.Client.JetStream.Models;
+using Microsoft.Extensions.Configuration;
+using NuntivusServer.Common.Logging;
 
 namespace NuntivusServer.IntegrationTests
 {
@@ -86,6 +88,47 @@ namespace NuntivusServer.IntegrationTests
             var jetStreamCheck = new JetStreamHealthCheck(js, natsOption);
             var jetStreamResult = await jetStreamCheck.CheckHealthAsync(new HealthCheckContext());
             Assert.Equal(HealthStatus.Healthy, jetStreamResult.Status);
+        }
+
+        [Fact]
+        public async Task Bootstrap_creates_and_updates_stream_when_binding_appends_duplicate_subjects()
+        {
+            var prefix = $"bootstrap-{Guid.NewGuid():N}";
+            var options = new NatsOption { Subjects = [$"{prefix}.events.>", $"{prefix}.deliveries.>"] };
+            new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Url"] = _fixture.NatsUrl,
+                ["Stream"] = $"BOOTSTRAP_{Guid.NewGuid():N}",
+                ["Subjects:0"] = options.Subjects[0],
+                ["Subjects:1"] = options.Subjects[1],
+            }).Build().Bind(options);
+            Assert.Equal(4, options.Subjects.Length);
+            await using var connection = new NatsConnection(NatsOpts.Default with { Url = options.Url });
+            var js = new NatsJSContext(connection);
+            var bootstrap = new NatsJetStreamBootstrapper(connection, js, options,
+                new NullAppLogger<NatsJetStreamBootstrapper>());
+            try
+            {
+                await bootstrap.StartAsync(CancellationToken.None);
+                await bootstrap.StartAsync(CancellationToken.None);
+                var stream = await js.GetStreamAsync(options.Stream);
+                Assert.Equal(options.Subjects.Distinct(StringComparer.Ordinal), stream.Info.Config.Subjects);
+            }
+            finally
+            {
+                await js.DeleteStreamAsync(options.Stream);
+            }
+        }
+
+        private sealed class NullAppLogger<T> : IAppLogger<T>
+        {
+            public void Debug(string messageTemplate, params object?[] args) { }
+            public void Information(string messageTemplate, params object?[] args) { }
+            public void Warning(string messageTemplate, params object?[] args) { }
+            public void Error(string messageTemplate, params object?[] args) { }
+            public void Error(Exception exception, string messageTemplate, params object?[] args) { }
+            public void Fatal(string messageTemplate, params object?[] args) { }
+            public void Fatal(Exception exception, string messageTemplate, params object?[] args) { }
         }
 
         private static async Task EnsureStreamAsync(INatsJSContext js, NatsOption options)

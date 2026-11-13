@@ -1,14 +1,11 @@
 services:
   postgres:
     image: ${NUNTIVUS_POSTGRES_IMAGE}
-    container_name: nuntivus-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${NUNTIVUS_POSTGRES_DB}
       POSTGRES_USER: ${NUNTIVUS_POSTGRES_USER}
-      POSTGRES_PASSWORD: ${NUNTIVUS_POSTGRES_PASSWORD}
-    ports:
-      - "${NUNTIVUS_POSTGRES_PORT}:5432"
+      POSTGRES_PASSWORD: ${NUNTIVUS_POSTGRES_PASSWORD:?Set a unique database password}
     volumes:
       - nuntivus-postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -20,12 +17,8 @@ services:
 
   nats:
     image: ${NUNTIVUS_NATS_IMAGE}
-    container_name: nuntivus-nats
     restart: unless-stopped
     command: ["-js", "-sd", "/data", "-m", "8222"]
-    ports:
-      - "${NUNTIVUS_NATS_CLIENT_PORT}:4222"
-      - "${NUNTIVUS_NATS_MONITOR_PORT}:8222"
     volumes:
       - nuntivus-nats-data:/data
     healthcheck:
@@ -37,7 +30,6 @@ services:
 
   migrate:
     image: nuntivus-api:${NUNTIVUS_IMAGE_TAG}
-    container_name: nuntivus-migrate
     restart: "no"
     build:
       context: .
@@ -47,15 +39,13 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: ${NUNTIVUS_ENVIRONMENT}
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${NUNTIVUS_POSTGRES_DB};Username=${NUNTIVUS_POSTGRES_USER};Password=${NUNTIVUS_POSTGRES_PASSWORD}
       Database__PostgresConnectionString: Host=postgres;Port=5432;Database=${NUNTIVUS_POSTGRES_DB};Username=${NUNTIVUS_POSTGRES_USER};Password=${NUNTIVUS_POSTGRES_PASSWORD}
       DatabaseMigrations__Mode: Apply
-      DestinationCredentials__EncryptionKey: ${NUNTIVUS_DESTINATION_CREDENTIALS_KEY}
+      DestinationCredentials__EncryptionKey: ${NUNTIVUS_DESTINATION_CREDENTIALS_KEY:?Set a base64 32-byte encryption key}
     command: ["--migrate"]
 
   api:
     image: nuntivus-api:${NUNTIVUS_IMAGE_TAG}
-    container_name: nuntivus-api
     build:
       context: .
       dockerfile: NuntivusServer.Api/Dockerfile
@@ -68,11 +58,18 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: ${NUNTIVUS_ENVIRONMENT}
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${NUNTIVUS_POSTGRES_DB};Username=${NUNTIVUS_POSTGRES_USER};Password=${NUNTIVUS_POSTGRES_PASSWORD}
-      DestinationCredentials__EncryptionKey: ${NUNTIVUS_DESTINATION_CREDENTIALS_KEY}
+      Database__PostgresConnectionString: Host=postgres;Port=5432;Database=${NUNTIVUS_POSTGRES_DB};Username=${NUNTIVUS_POSTGRES_USER};Password=${NUNTIVUS_POSTGRES_PASSWORD}
+      DatabaseMigrations__Mode: Validate
+      DestinationCredentials__EncryptionKey: ${NUNTIVUS_DESTINATION_CREDENTIALS_KEY:?Set a base64 32-byte encryption key}
+      LocalAuth__Enabled: ${NUNTIVUS_LOCAL_AUTH_ENABLED:-true}
+      LocalAuth__SigningKey: ${NUNTIVUS_LOCAL_AUTH_SIGNING_KEY:-}
+      Authentication__Authority: ${NUNTIVUS_AUTHORITY:-}
+      Authentication__Audience: ${NUNTIVUS_AUDIENCE:-}
+      ReverseProxy__KnownProxies__0: ${NUNTIVUS_PROXY_IP:-127.0.0.1}
+      ReverseProxy__HttpsPort: ${NUNTIVUS_HTTPS_PORT:-443}
       HostOptions__ShutdownTimeout: 00:00:${NUNTIVUS_SHUTDOWN_TIMEOUT_SECONDS}
     ports:
-      - "${NUNTIVUS_API_PORT}:8080"
+      - "127.0.0.1:${NUNTIVUS_API_PORT}:8080"
     stop_grace_period: 40s
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health/ready"]
@@ -83,7 +80,6 @@ services:
 
   worker:
     image: nuntivus-worker:${NUNTIVUS_IMAGE_TAG}
-    container_name: nuntivus-worker
     build:
       context: .
       dockerfile: NuntivusServer.Worker/Dockerfile
@@ -97,12 +93,13 @@ services:
         condition: service_completed_successfully
     environment:
       DOTNET_ENVIRONMENT: ${NUNTIVUS_ENVIRONMENT}
-      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=${NUNTIVUS_POSTGRES_DB};Username=${NUNTIVUS_POSTGRES_USER};Password=${NUNTIVUS_POSTGRES_PASSWORD}
+      Database__PostgresConnectionString: Host=postgres;Port=5432;Database=${NUNTIVUS_POSTGRES_DB};Username=${NUNTIVUS_POSTGRES_USER};Password=${NUNTIVUS_POSTGRES_PASSWORD}
+      DatabaseMigrations__Mode: Validate
       Nats__Url: ${NUNTIVUS_NATS_URL}
       Nats__Stream: ${NUNTIVUS_NATS_STREAM}
       Nats__Subjects__0: event.>
       Nats__Subjects__1: delivery.>
-      DestinationCredentials__EncryptionKey: ${NUNTIVUS_DESTINATION_CREDENTIALS_KEY}
+      DestinationCredentials__EncryptionKey: ${NUNTIVUS_DESTINATION_CREDENTIALS_KEY:?Set a base64 32-byte encryption key}
       OpenTelemetry__OtlpEndpoint: ${NUNTIVUS_OTLP_ENDPOINT}
       HostOptions__ShutdownTimeout: 00:00:${NUNTIVUS_SHUTDOWN_TIMEOUT_SECONDS}
     stop_grace_period: 40s

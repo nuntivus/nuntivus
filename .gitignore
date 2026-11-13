@@ -10,6 +10,19 @@
 *.userosscache
 *.sln.docstates
 *.env
+.env.*
+**/.env.*
+!**/.env.example
+*.bak
+*.pfx
+*.p12
+*.pem
+*.key
+backups/
+**/test-results/
+**/playwright-report/
+**/node_modules/
+**/dist/
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -81,6 +94,7 @@ dlldata.c
 
 # Benchmark Results
 BenchmarkDotNet.Artifacts/
+tests/performance/results/
 
 # .NET Core
 project.lock.json

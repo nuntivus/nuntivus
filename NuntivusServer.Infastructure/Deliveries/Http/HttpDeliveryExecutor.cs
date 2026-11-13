@@ -17,6 +17,7 @@ using NuntivusServer.Application.Deliveries.Execution;
 using NuntivusServer.Application.Observability;
 using NuntivusServer.Application.Security;
 using NuntivusServer.Common.Logging;
+using NuntivusServer.Infastructure.Http;
 using NuntivusServer.Contracts.CustomerContracts;
 using DomainDestinationType = NuntivusServer.Domain.Contracts.DestinationType;
 
@@ -117,9 +118,6 @@ namespace NuntivusServer.Infastructure.Deliveries.Http
                     destinationValidation.Errors[0].Message);
             }
 
-            var destinationAddressValidation = await ValidateDestinationAddressAsync(destinationUri, cancellationToken);
-            if (destinationAddressValidation is not null)
-                return destinationAddressValidation;
 
             var method = config.Method?.ToUpperInvariant() ?? "POST";
             if (method is not ("GET" or "POST" or "PUT" or "PATCH" or "DELETE"))
@@ -198,6 +196,11 @@ namespace NuntivusServer.Infastructure.Deliveries.Http
                 return DeliveryExecutionResult.Failure(
                     DeliveryFailureCategory.Timeout,
                     $"HTTP request timed out after {timeout.TotalSeconds}s.");
+            }
+            catch (HttpRequestException ex) when (ValidatedHttpConnection.IsPolicyFailure(ex))
+            {
+                return DeliveryExecutionResult.Failure(DeliveryFailureCategory.ConfigurationInvalid,
+                    "HTTP endpoint is blocked by network policy.");
             }
             catch (HttpRequestException ex)
             {
@@ -439,45 +442,6 @@ namespace NuntivusServer.Infastructure.Deliveries.Http
             return Convert.ToHexString(hash).ToLowerInvariant();
         }
 
-        private async Task<DeliveryExecutionResult?> ValidateDestinationAddressAsync(
-            Uri destinationUri,
-            CancellationToken cancellationToken)
-        {
-            IReadOnlyCollection<IPAddress> addresses = Array.Empty<IPAddress>();
-            try
-            {
-                if (IPAddress.TryParse(destinationUri.DnsSafeHost, out var hostIp))
-                {
-                    addresses = new[] { hostIp };
-                }
-                else
-                {
-                    addresses = await Dns.GetHostAddressesAsync(destinationUri.DnsSafeHost, cancellationToken);
-                }
-            }
-            catch (SocketException)
-            {
-                // DNS may fail transiently; do not misclassify as unsafe.
-                return null;
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-
-            var addressValidation = _securityPolicy.ValidateResolvedAddresses(
-                addresses,
-                SecurityContext,
-                _security);
-            if (addressValidation.IsFailure)
-            {
-                return DeliveryExecutionResult.Failure(
-                    DeliveryFailureCategory.ConfigurationInvalid,
-                    addressValidation.Errors[0].Message);
-            }
-
-            return null;
-        }
 
         private static async Task<DeliveryExecutionResult> ClassifyResponseAsync(
             HttpResponseMessage response,

@@ -24,13 +24,25 @@ At minimum configure:
 - `NUNTIVUS_POSTGRES_PASSWORD`
 - `NUNTIVUS_DESTINATION_CREDENTIALS_KEY` (base64, 32-byte key)
 - `NUNTIVUS_ENVIRONMENT=Production`
+- `NUNTIVUS_LOCAL_AUTH_SIGNING_KEY` (a separate base64 key, at least 32 bytes)
+
+Generate independent keys using `openssl rand -base64 32`. There are no production
+default secrets. Alternatively, set `NUNTIVUS_LOCAL_AUTH_ENABLED=false` and configure
+both `NUNTIVUS_AUTHORITY` and `NUNTIVUS_AUDIENCE` for your identity provider.
+See [admin authentication](admin-authentication.md) for initial account setup.
 
 Optional:
 
 - `NUNTIVUS_OTLP_ENDPOINT`
 - `NUNTIVUS_API_PORT`
 - `NUNTIVUS_SHUTDOWN_TIMEOUT_SECONDS`
-- `NUNTIVUS_DATABASE_CONNECTION_STRING` (alternative to compose-generated `ConnectionStrings__Postgres`)
+- `NUNTIVUS_PROXY_IP` (the exact trusted reverse-proxy address observed by the API)
+- `NUNTIVUS_HTTPS_PORT` (external HTTPS port, default 443)
+
+The stock Compose stack sets `Database__PostgresConnectionString` consistently for
+migrations, API, and Worker. For an external database, change that canonical setting
+in an overlay for all three services; setting only `ConnectionStrings__Postgres`
+does not override an already populated `Database` setting.
 
 ## 4. Standardized runtime configuration
 
@@ -140,5 +152,17 @@ curl http://localhost:${NUNTIVUS_API_PORT}/health/ready
 
 - Do not commit `.env` with secrets
 - Use unique credentials per environment
-- Rotate DB/NATS credentials and encryption keys through your secret manager
-- Restrict host/network access to Postgres and NATS ports
+- Rotate database and identity-provider credentials through your secret manager.
+- Preserve the destination encryption key with backups. Replacing it without
+  re-encrypting existing managed secrets makes those secrets unreadable; do not
+  treat key rotation as a configuration-only change.
+- PostgreSQL, NATS client, and NATS monitoring have no host port publications.
+  Only trusted containers should join their Compose network. External brokers
+  require authentication and TLS; internal-only deployment is not a substitute
+  for access controls on the Docker host.
+- API port publication binds to loopback. Use an HTTPS reverse proxy and configure
+  its exact observed IP in `NUNTIVUS_PROXY_IP`. Do not trust all forwarded headers.
+  The API processes trusted forwarded headers before HTTPS redirection.
+- Use container-local readiness checks rather than assuming host HTTP is HTTPS.
+- Configure a non-localhost HTTPS dashboard API URL and approved origins at your
+  reverse proxy when hosting the dashboard separately.

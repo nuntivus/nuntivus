@@ -19,12 +19,15 @@ namespace NuntivusServer.Worker.Sources
     {
         private readonly ISourceEventProcessor _processor;
         private readonly ISecretResolver _secrets;
+        private readonly NuntivusServer.Infastructure.Sources.ISourceTransportClientFactory _clients;
 
-        public BrokerSourceRunner(SourceType type, ISourceEventProcessor processor, ISecretResolver secrets)
+        public BrokerSourceRunner(SourceType type, ISourceEventProcessor processor, ISecretResolver secrets,
+            NuntivusServer.Infastructure.Sources.ISourceTransportClientFactory? clients = null)
         {
             Type = type;
             _processor = processor;
             _secrets = secrets;
+            _clients = clients ?? new NuntivusServer.Infastructure.Sources.SourceTransportClientFactory();
         }
 
         public SourceType Type { get; }
@@ -86,20 +89,8 @@ namespace NuntivusServer.Worker.Sources
 
         private async Task RunKafkaAsync(JsonElement config, SourceLease lease, string? secret, CancellationToken token)
         {
-            var settings = new Confluent.Kafka.ConsumerConfig
-            {
-                BootstrapServers = config.GetProperty("bootstrapServers").GetString(),
-                GroupId = $"{config.GetProperty("groupId").GetString()}-{lease.SourceId}",
-                EnableAutoCommit = false,
-                AutoOffsetReset = AutoOffsetReset.Earliest,
-                SecurityProtocol = secret is null ? SecurityProtocol.Ssl : SecurityProtocol.SaslSsl,
-            };
-            if (secret is not null)
-            {
-                settings.SaslMechanism = SaslMechanism.Plain;
-                settings.SaslUsername = config.GetProperty("username").GetString();
-                settings.SaslPassword = secret;
-            }
+            var settings = _clients.CreateKafkaConsumer(config, secret,
+                $"{config.GetProperty("groupId").GetString()}-{lease.SourceId}");
             using var consumer = new ConsumerBuilder<Ignore, string>(settings).Build();
             consumer.Subscribe(config.GetProperty("topic").GetString());
             var retries = 0;
@@ -123,10 +114,9 @@ namespace NuntivusServer.Worker.Sources
 
         private async Task RunSqsAsync(JsonElement config, SourceLease lease, string? secret, CancellationToken token)
         {
-            var region = RegionEndpoint.GetBySystemName(config.GetProperty("region").GetString());
-            using var client = secret is not null && config.TryGetProperty("accessKeyId", out var accessKey)
-                ? new AmazonSQSClient(new BasicAWSCredentials(accessKey.GetString(), secret), region)
-                : new AmazonSQSClient(region);
+            using var client = _clients.CreateSqs(config,
+                secret is not null && config.TryGetProperty("accessKeyId", out var accessKey)
+                    ? new BasicAWSCredentials(accessKey.GetString(), secret) : null);
             var queue = config.GetProperty("queueUrl").GetString();
             while (!token.IsCancellationRequested)
             {

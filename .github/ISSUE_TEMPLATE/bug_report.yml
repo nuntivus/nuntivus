@@ -1,0 +1,24 @@
+name: Bug report
+description: Report a reproducible non-security defect.
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials or customer data. Report vulnerabilities privately using SECURITY.md.
+  - type: input
+    id: revision
+    attributes:
+      label: Revision and environment
+      description: Commit/tag, operating system, and relevant runtime versions.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include expected and actual behavior with redacted diagnostics.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Tests or checks performed

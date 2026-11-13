@@ -10,8 +10,13 @@ namespace NuntivusServer.Infastructure.Health
     public sealed class KafkaSourceConnectionTester : ISourceConnectionTester
     {
         private readonly ISecretResolver _secrets;
+        private readonly Sources.ISourceTransportClientFactory _clients;
 
-        public KafkaSourceConnectionTester(ISecretResolver secrets) => _secrets = secrets;
+        public KafkaSourceConnectionTester(ISecretResolver secrets, Sources.ISourceTransportClientFactory? clients = null)
+        {
+            _secrets = secrets;
+            _clients = clients ?? new Sources.SourceTransportClientFactory();
+        }
 
         public SourceType Type => SourceType.KAFKA;
 
@@ -22,19 +27,7 @@ namespace NuntivusServer.Infastructure.Health
                 var config = document.RootElement;
                 var secret = await ConnectionProbeCredentials.SourceSecretAsync(config, _secrets, token);
                 if (secret.IsFailure) return Result<string>.Fail(secret.Errors);
-                var settings = new AdminClientConfig
-                {
-                    BootstrapServers = config.GetProperty("bootstrapServers").GetString(),
-                    SecurityProtocol = secret.Value is null ? SecurityProtocol.Ssl : SecurityProtocol.SaslSsl,
-                    SocketTimeoutMs = 5000,
-                    AllowAutoCreateTopics = false
-                };
-                if (secret.Value is not null)
-                {
-                    settings.SaslMechanism = SaslMechanism.Plain;
-                    settings.SaslUsername = config.GetProperty("username").GetString();
-                    settings.SaslPassword = secret.Value;
-                }
+                var settings = _clients.CreateKafkaAdmin(config, secret.Value);
                 return await Task.Run(() =>
                 {
                     token.ThrowIfCancellationRequested();

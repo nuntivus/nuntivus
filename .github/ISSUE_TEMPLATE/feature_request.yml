@@ -1,0 +1,16 @@
+name: Feature request
+description: Discuss a focused feature or architecture change.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the use case without private data.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach and alternatives
+    validations:
+      required: true

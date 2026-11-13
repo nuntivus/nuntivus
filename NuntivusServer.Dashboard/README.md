@@ -34,15 +34,30 @@ Optional `.env.local` values:
 
 - `VITE_API_BASE_URL` (default: `https://localhost:7123`)
 
+Use Node.js 24 and `npm ci` to install the locked dependencies. For the development
+Compose API, set `VITE_API_BASE_URL=http://localhost:8080` in `.env.local` before
+starting Vite. Production builds require a non-localhost HTTPS API URL.
+
 ## Scripts
 
 - `npm run dev` - start local dev server
 - `npm run lint` - run eslint
 - `npm run build` - type-check and build
+- `npm test` - run non-browser regression tests
+- `npm run test:e2e` - run browser journeys against a running Vite server
 - `npm run preview` - preview production build
 
-## Current MVP baseline
+## Authentication and coverage
 
-- Admin shell with routes (`/`, `/deliveries`, `/settings`)
-- Direct API probe to `/health/ready`
-- Provider composition for Router + Query + Redux + Context + Radix Theme
+The dashboard manages Sources, Destinations, customers, contracts, event schemas,
+deliveries, SLOs, alerts, and permission-gated exports. The customer portal uses a
+separate read-only session. There is no built-in default admin password.
+
+See [admin authentication](../docs/self-hosting/admin-authentication.md) for account
+setup and [development validation](../docs/development.md) for browser installation,
+test server configuration, and audit commands. Browser tests mock API boundaries;
+they are not production integration certification.
+
+## License
+
+[Apache License 2.0](../LICENSE). Dependencies retain their own licenses.

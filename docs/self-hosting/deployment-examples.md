@@ -21,8 +21,12 @@ Recommended VM baseline:
 
 Expose only API through a reverse proxy (Nginx/Caddy/Traefik):
 
-- proxy external HTTPS traffic to `nuntivus-api:8080`
+- proxy external HTTPS traffic to `api:8080` on the Compose network, or to the
+  loopback-published API port from a host proxy
 - keep Postgres and NATS internal/private
+- set `NUNTIVUS_PROXY_IP` to the proxy address actually observed inside the API
+  container, and forward `X-Forwarded-Proto: https` and the real client address
+- do not publish internal broker/database/monitor ports in an overlay
 
 ## Example 3: Scale worker replicas
 
@@ -39,7 +43,8 @@ docker compose --env-file .env -f docker-compose.prod.yml up -d --scale worker=3
 If using managed PostgreSQL:
 
 - remove/disable `postgres` service in your deployment overlay
-- set `ConnectionStrings__Postgres` to managed instance connection string
+- set `Database__PostgresConnectionString` to the managed instance connection
+  string for migrate, API, and Worker; require TLS/certificate validation
 - keep `migrate` service (pointed to managed DB)
 
 ## Example 5: External NATS cluster

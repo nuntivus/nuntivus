@@ -7,6 +7,7 @@ using NuntivusServer.Api.Security;
 using NuntivusServer.Application.Security;
 using NuntivusServer.Common;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace NuntivusServer.Api.Controllers.Auth
 {
@@ -30,6 +31,7 @@ namespace NuntivusServer.Api.Controllers.Auth
 
         [AllowAnonymous]
         [HttpPost("local/login")]
+        [EnableRateLimiting(ApiProtection.LoginPolicy)]
         public async Task<IActionResult> LocalLogin(
             [FromBody] LocalLoginRequest request,
             CancellationToken cancellationToken)

@@ -39,6 +39,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Options;
+using NuntivusServer.Infastructure.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -254,6 +255,7 @@ builder.Services
     });
 
 builder.Services.AddPortal(builder.Configuration);
+builder.Services.AddProtection(builder.Configuration);
 
 builder.Services.AddAuthorization(options =>
 {
@@ -361,7 +363,10 @@ builder.Services.AddScoped<ISourceAdapterRegistry, SourceAdapterRegistry>();
 builder.Services.AddScoped<ISourceIngestionService, SourceIngestionService>();
 builder.Services.AddScoped<ISourceService, SourceService>();
 builder.Services.AddScoped<IDestinationService, DestinationService>();
-builder.Services.AddHttpClient("connection-test").ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddHttpClient("connection-test").ConfigurePrimaryHttpMessageHandler(sp =>
+    new ValidatedHttpConnection(sp.GetRequiredService<IEndpointSecurityPolicy>(),
+        new EndpointSecurityContext(EndpointDirection.Source, "http-polling", "Source"),
+        sp.GetRequiredService<HttpDestinationSecurityOption>()).CreateHandler());
 builder.Services.AddTransient<ISourceConnectionTester, HttpApiSourceConnectionTester>();
 builder.Services.AddTransient<ISourceConnectionTester, FolderSourceConnectionTester>();
 builder.Services.AddTransient<ISourceConnectionTester, HttpPollingSourceConnectionTester>();
@@ -377,7 +382,9 @@ builder.Services.AddSingleton<NuntivusServer.Infastructure.Deliveries.Nats.NatsD
 builder.Services.AddSingleton<NuntivusServer.Infastructure.Deliveries.RabbitMq.RabbitMqDeliveryExecutor>();
 builder.Services.AddSingleton<NuntivusServer.Infastructure.Deliveries.Sqs.SqsDeliveryExecutor>();
 builder.Services.AddHttpClient(HttpDeliveryExecutor.HttpClientName).ConfigurePrimaryHttpMessageHandler(sp =>
-    new SocketsHttpHandler { AllowAutoRedirect = sp.GetRequiredService<HttpDestinationSecurityOption>().AllowRedirects });
+    new ValidatedHttpConnection(sp.GetRequiredService<IEndpointSecurityPolicy>(),
+        new EndpointSecurityContext(EndpointDirection.Destination, "http", "Destination"),
+        sp.GetRequiredService<HttpDestinationSecurityOption>()).CreateHandler());
 builder.Services.AddTransient<IDestinationConnectionTester, KafkaDestinationConnectionTester>();
 builder.Services.AddTransient<IDestinationConnectionTester, NatsDestinationConnectionTester>();
 builder.Services.AddTransient<IDestinationConnectionTester, RabbitMqDestinationConnectionTester>();
@@ -439,6 +446,15 @@ if (migrateOnly)
 
 await app.Services.EnsureDatabaseMigrationsAsync();
 
+if (args.Any(arg => string.Equals(arg, "--create-admin", StringComparison.OrdinalIgnoreCase)))
+{
+    await LocalAdminBootstrap.RunAsync(app.Services, builder.Configuration["AdminBootstrap:Username"], CancellationToken.None);
+    return;
+}
+
+if (app.Environment.IsProduction() && !ApiProtection.HasProductionAuthentication(builder.Configuration))
+    throw new InvalidOperationException("Production requires valid LocalAuth settings or an HTTPS Authentication:Authority and Authentication:Audience.");
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -448,10 +464,12 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {
-    app.UseHttpsRedirection();
+    app.UseWhen(context => !context.Request.Path.StartsWithSegments("/health"),
+        pipeline => pipeline.UseHttpsRedirection());
 }
 
 if (app.Environment.IsDevelopment())

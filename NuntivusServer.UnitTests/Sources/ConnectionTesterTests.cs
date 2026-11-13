@@ -134,6 +134,45 @@ namespace NuntivusServer.UnitTests.Sources
             Assert.Equal(8, testers.Select(tester => tester.GetType()).Distinct().Count());
         }
 
+        [Theory]
+        [InlineData(SourceType.HTTP_API, "{\"authentication\":{\"type\":\"token\",\"secretRef\":\"secret.probe.missing\"}}")]
+        [InlineData(SourceType.HTTP_POLLING, "{\"url\":\"https://example.com/events\",\"secretRef\":\"secret.probe.missing\"}")]
+        [InlineData(SourceType.RABBITMQ, "{\"uri\":\"amqps://broker.example.com\",\"queue\":\"events\",\"secretRef\":\"secret.probe.missing\"}")]
+        [InlineData(SourceType.KAFKA, "{\"bootstrapServers\":\"broker:9093\",\"topic\":\"events\",\"username\":\"probe\",\"secretRef\":\"secret.probe.missing\"}")]
+        [InlineData(SourceType.NATS, "{\"url\":\"tls://broker.example.com\",\"stream\":\"EVENTS\",\"subject\":\"events\",\"durable\":\"probe\",\"secretRef\":\"secret.probe.missing\"}")]
+        [InlineData(SourceType.SQS, "{\"region\":\"us-east-1\",\"queueUrl\":\"https://sqs.us-east-1.amazonaws.com/123/events\",\"accessKeyId\":\"fixture-id\",\"secretRef\":\"secret.probe.missing\"}")]
+        [InlineData(SourceType.S3, "{\"region\":\"us-east-1\",\"bucket\":\"events\",\"prefix\":\"incoming/\",\"accessKeyId\":\"fixture-id\",\"secretRef\":\"secret.probe.missing\"}")]
+        public async Task Missing_managed_credentials_stop_each_probe_before_network(SourceType type, string config)
+        {
+            var secrets = new MissingSecrets();
+            var factory = new FakeFactory();
+            ISourceConnectionTester tester = type switch
+            {
+                SourceType.HTTP_API => new HttpApiSourceConnectionTester(secrets),
+                SourceType.HTTP_POLLING => new HttpPollingSourceConnectionTester(factory, new HttpDestinationSecurityOption(), secrets),
+                SourceType.RABBITMQ => new RabbitMqSourceConnectionTester(secrets),
+                SourceType.KAFKA => new KafkaSourceConnectionTester(secrets),
+                SourceType.NATS => new NatsSourceConnectionTester(secrets),
+                SourceType.SQS => new SqsSourceConnectionTester(secrets),
+                SourceType.S3 => new S3SourceConnectionTester(secrets),
+                _ => throw new InvalidOperationException(type.ToString())
+            };
+            var result = await tester.TestAsync(config, CancellationToken.None);
+            Assert.True(result.IsFailure);
+            Assert.Equal(1, secrets.Calls);
+            Assert.Equal(0, factory.RequestCount);
+        }
+
+        private sealed class MissingSecrets : ISecretResolver
+        {
+            public int Calls { get; private set; }
+            public Task<Result<string>> ResolveAsync(string secretRef, CancellationToken cancellationToken)
+            {
+                Calls++;
+                return Task.FromResult(Result.Failure<string>(NuntivusServer.Common.Error.Validation("Managed credential unavailable.")));
+            }
+        }
+
         private sealed class UnusedSecrets : ISecretResolver
         {
             public Task<Result<string>> ResolveAsync(string secretRef, CancellationToken cancellationToken) =>

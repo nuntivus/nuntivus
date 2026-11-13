@@ -4,13 +4,51 @@ Nuntivus admin endpoints (`/v1/admin/*`) are protected by JWT authentication and
 
 ## Authentication architecture decision
 
-Nuntivus uses external identity-provider issued access tokens (OIDC/OAuth2) validated by the API with JWT bearer authentication.
+Nuntivus supports local administration credentials or external identity-provider
+access tokens (OIDC/OAuth2), validated by JWT bearer authentication.
 
-- Nuntivus does not implement local username/password login.
-- Session lifetime, re-authentication, and token issuance are owned by the identity provider.
+- Local login uses `POST /v1/auth/local/login` and requires `LocalAuth:Enabled=true`
+  and a generated base64 signing key of at least 32 bytes. Never reuse development keys.
+- With external-only authentication, the identity provider owns token issuance.
 - Frontend authorization checks are UX-only; backend authorization remains the security boundary.
 
 ## Required configuration
+
+Production must configure local authentication or an HTTPS external authority
+and audience. Stock production Compose selects local authentication through
+`.env.example`; supply a separate signing key before startup.
+
+### Initial local administrator
+
+There is no default admin password and no anonymous bootstrap API. After migrations,
+run the local-only command with access to the deployment configuration:
+
+```sh
+# Development Compose; omit -T for a no-echo interactive password prompt.
+docker compose run --rm -e AdminBootstrap__Username=admin api --create-admin
+# Production Compose:
+docker compose --env-file .env -f docker-compose.prod.yml run --rm -e AdminBootstrap__Username=admin api --create-admin
+```
+
+The command reads the password from the terminal (or standard input), creates the
+initial Admin role and credential atomically, and writes an audit without the password.
+It refuses to run if admin users already exist. Protect Docker/database access;
+this is an operator bootstrap tool, not a remotely callable endpoint.
+
+### Request protection and session assumptions
+
+`RequestProtection:LoginPermitLimit` defaults to 10 per client IP per minute;
+`IngestionPermitLimit` defaults to 6000 per client IP/Source per minute.
+`WindowSeconds` defaults to 60. These are per API process, not distributed quotas.
+Set appropriate deployment limits and retry after HTTP 429. Delivery quotas remain
+separate. Reverse-proxy headers affect client identity only for explicitly trusted IPs.
+
+Dashboard bearer tokens use session storage and are accessible to JavaScript.
+Serve trusted assets over HTTPS, avoid untrusted scripts, and configure a suitable
+content-security policy at the hosting proxy. Backend authorization is authoritative;
+session storage does not protect against a compromised frontend/XSS.
+
+### External identity provider
 
 Configure these API settings:
 

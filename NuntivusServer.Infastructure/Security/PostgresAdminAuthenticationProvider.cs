@@ -11,6 +11,7 @@ namespace NuntivusServer.Infastructure.Security
     public sealed class PostgresAdminAuthenticationProvider : IAdminAuthenticationProvider
     {
         private static readonly Error InvalidCredentials = Error.Unauthorized("Invalid username or password.");
+        private static readonly string DummyPasswordHash = new Pbkdf2PasswordHasher().Hash(Guid.NewGuid().ToString("N"));
 
         private readonly IAdminLocalCredentialRepository _credentials;
         private readonly IAdminUserRoleRepository _roles;
@@ -41,7 +42,8 @@ namespace NuntivusServer.Infastructure.Security
                 return Result<AdminAuthenticatedIdentity>.Fail(credentialResult.Errors);
 
             var credential = credentialResult.Value;
-            if (credential is null || !_passwordHasher.Verify(password, credential.PasswordHash))
+            var passwordMatches = _passwordHasher.Verify(password, credential?.PasswordHash ?? DummyPasswordHash);
+            if (credential is null || !passwordMatches)
                 return Result.Failure<AdminAuthenticatedIdentity>(InvalidCredentials);
 
             var assignmentResult = await _roles.GetBySubjectAsync(subject, cancellationToken);

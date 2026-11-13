@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Net;
 using System.Net.Http;
+using NuntivusServer.Infastructure.Http;
 
 namespace NuntivusServer.Infastructure.Deliveries
 {
@@ -32,11 +33,9 @@ namespace NuntivusServer.Infastructure.Deliveries
                 .ConfigurePrimaryHttpMessageHandler(sp =>
                 {
                     var security = sp.GetRequiredService<HttpDestinationSecurityOption>();
-                    return new SocketsHttpHandler
-                    {
-                        AllowAutoRedirect = security.AllowRedirects,
-                        AutomaticDecompression = DecompressionMethods.None
-                    };
+                    return new ValidatedHttpConnection(sp.GetRequiredService<IEndpointSecurityPolicy>(),
+                        new EndpointSecurityContext(EndpointDirection.Destination, "http", "Destination"),
+                        security).CreateHandler();
                 });
 
             services.TryAddSingleton(new DestinationCredentialOption());

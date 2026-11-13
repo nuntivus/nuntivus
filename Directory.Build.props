@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+	<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+	<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+	<None Include="$(MSBuildThisFileDirectory)LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" Pack="true" PackagePath="" />
+  </ItemGroup>
+</Project>

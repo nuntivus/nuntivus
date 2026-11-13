@@ -19,7 +19,9 @@ function writeSessionToken(token: string | null) {
 
     window.sessionStorage.setItem(AUTH_TOKEN_KEY, token)
   } catch {
+    return false
   }
+  return true
 }
 
 export function getStoredToken(): string | null {

@@ -1,0 +1,11 @@
+title = "Nuntivus secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Known deterministic development-only signing/encryption sample, including decoded form; never use in production"
+condition = "AND"
+paths = ['''(^|/)(KairoServer|NuntivusServer)\.(Api|Worker)/appsettings\.Development\.json$''']
+regexTarget = "secret"
+regexes = ['''^MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=$''', '''^0123456789abcdef0123456789abcdef$''']

@@ -15,6 +15,6 @@ export default defineConfig({
         __APP_VERSION__: JSON.stringify(appVersion),
     },
     server: {
-        port: 54097,
+        port: 5173,
     }
 })

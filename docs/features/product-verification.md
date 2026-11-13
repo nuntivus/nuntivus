@@ -8,10 +8,10 @@ The .NET/TypeScript SDKs and declarative configuration CLI were explicitly defer
 
 ## Automated coverage
 
-Final verification results: workspace build successful; 323 integration tests
-passed; 253 unit tests passed; dashboard build successful; all 70 dashboard
-tests passed after the test maintenance described below. The
-production-only npm dependency audit reported zero vulnerabilities.
+Verification results are recorded per run in CI and the publication readiness
+report. Historical passing counts are not a guarantee for the current revision.
+Run the complete checks below before a release, including separate production
+and development dependency audits.
 
 - Unit tests cover schema validation/compatibility, deterministic transformations, shared preparation, endpoint safety and spreadsheet-safe formatting.
 - Integration tests exercise API permissions, persisted snapshots, atomic audits, dry-run no-write guarantees, SLO replay/retention accounting, alert lifecycle/leases, portal issuer-qualified membership isolation, credential recovery and consistent metadata exports.

@@ -20,16 +20,18 @@ namespace NuntivusServer.Worker.Sources
         private readonly ISourceIngestionStateRepository _state;
         private readonly ISecretResolver _secrets;
         private readonly string? _folderRoot;
+        private readonly NuntivusServer.Infastructure.Sources.ISourceTransportClientFactory _clients;
 
         public ScanSourceRunner(SourceType type, ISourceEventProcessor processor,
             ISourceIngestionStateRepository state, ISecretResolver secrets,
-            IConfiguration configuration)
+            IConfiguration configuration, NuntivusServer.Infastructure.Sources.ISourceTransportClientFactory? clients = null)
         {
             Type = type;
             _processor = processor;
             _state = state;
             _secrets = secrets;
             _folderRoot = configuration["Sources:FolderRoot"];
+            _clients = clients ?? new NuntivusServer.Infastructure.Sources.SourceTransportClientFactory();
         }
 
         public SourceType Type { get; }
@@ -56,28 +58,7 @@ namespace NuntivusServer.Worker.Sources
         private async Task PollHttpAsync(JsonElement config, SourceLease lease, CancellationToken token)
         {
             var endpoint = new Uri(config.GetProperty("url").GetString()!);
-            var policy = new EndpointSecurityPolicy();
-            var context = new EndpointSecurityContext(EndpointDirection.Source, "http-polling", "events.publish");
-            var security = new EndpointSecurityOption { AllowHttpScheme = false };
-            policy.ValidateEndpointUri(endpoint, context, security).EnsureSuccess();
-            using var handler = new SocketsHttpHandler
-            {
-                AllowAutoRedirect = false,
-                UseProxy = false,
-                ConnectCallback = async (connection, ct) =>
-                {
-                    var addresses = await Dns.GetHostAddressesAsync(connection.DnsEndPoint.Host, ct);
-                    policy.ValidateResolvedAddresses(addresses, context, security).EnsureSuccess();
-                    var socket = new Socket(addresses[0].AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-                    try
-                    {
-                        await socket.ConnectAsync(addresses[0], connection.DnsEndPoint.Port, ct);
-                        return new NetworkStream(socket, ownsSocket: true);
-                    }
-                    catch { socket.Dispose(); throw; }
-                }
-            };
-            using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
+            using var client = _clients.CreatePollingHttpClient(endpoint);
             var method = config.TryGetProperty("method", out var selectedMethod)
                 ? selectedMethod.GetString()!.ToUpperInvariant() : "GET";
             if (method is not ("GET" or "POST"))
@@ -144,12 +125,11 @@ namespace NuntivusServer.Worker.Sources
 
         private async Task ScanS3Async(JsonElement config, SourceLease lease, CancellationToken token)
         {
-            var region = RegionEndpoint.GetBySystemName(config.GetProperty("region").GetString());
             var secret = config.TryGetProperty("secretRef", out var reference)
                 ? (await _secrets.ResolveAsync(reference.GetString()!, token)).EnsureValue() : null;
-            using var client = secret is not null && config.TryGetProperty("accessKeyId", out var accessKey)
-                ? new AmazonS3Client(new BasicAWSCredentials(accessKey.GetString(), secret), region)
-                : new AmazonS3Client(region);
+            using var client = _clients.CreateS3(config,
+                secret is not null && config.TryGetProperty("accessKeyId", out var accessKey)
+                    ? new BasicAWSCredentials(accessKey.GetString(), secret) : null);
             var bucket = config.GetProperty("bucket").GetString()!;
             var prefix = config.GetProperty("prefix").GetString()!;
             string? nextToken = null;

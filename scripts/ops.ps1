@@ -11,7 +11,8 @@ param(
 	[string]$DbDumpPath,
 	[string]$JetStreamDumpPath,
 	[string]$Tag,
-	[switch]$SkipBackup
+	[switch]$SkipBackup,
+	[switch]$Build
 )
 
 Set-StrictMode -Version Latest
@@ -90,50 +91,44 @@ function Set-EnvValue([string]$Path, [string]$Key, [string]$Value)
 	Set-Content -LiteralPath $Path -Value $lines
 }
 
-function Invoke-Compose([string[]]$ComposeArgs)
+function Invoke-Compose
 {
+	param([string[]]$ComposeArgs)
+
 	& docker compose --env-file $EnvFile -f $ComposeFile @ComposeArgs
-	if ($LASTEXITCODE -ne 0)
-	{
-		throw "docker compose command failed: docker compose --env-file $EnvFile -f $ComposeFile $($ComposeArgs -join ' ')"
-	}
+	if ($LASTEXITCODE -ne 0) { throw "docker compose command failed ($LASTEXITCODE)." }
 }
 
 function Get-ComposeContainerId([string]$Service)
 {
-	$id = (& docker compose --env-file $EnvFile -f $ComposeFile ps -q $Service).Trim()
-	if ([string]::IsNullOrWhiteSpace($id))
+	$ids = @(& docker compose --env-file $EnvFile -f $ComposeFile ps -a -q $Service | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+	if ($LASTEXITCODE -ne 0 -or $ids.Count -ne 1)
 	{
-		throw "Unable to resolve container id for service '$Service'. Make sure the stack is running."
+		throw "Unable to resolve exactly one container for service '$Service'. Make sure the stack exists."
 	}
-
-	return $id
+	return $ids[0].Trim()
 }
 
-function Wait-ApiReady([int]$Port)
+function Wait-ApiReady
 {
-	$uri = "http://localhost:$Port/health/ready"
-	$attempts = 30
-
-	for ($attempt = 1; $attempt -le $attempts; $attempt++)
+	for ($attempt = 1; $attempt -le 30; $attempt++)
 	{
-		try
-		{
-			$response = Invoke-WebRequest -Uri $uri -Method Get -TimeoutSec 5 -UseBasicParsing
-			if ($response.StatusCode -eq 200)
-			{
-				Write-Info "API readiness check succeeded at $uri"
-				return
-			}
-		}
-		catch
-		{
-		}
-
+		& docker compose --env-file $EnvFile -f $ComposeFile exec -T api wget -qO- http://localhost:8080/health/ready 2>$null | Out-Null
+		if ($LASTEXITCODE -eq 0) { Write-Info "API readiness check succeeded inside the container."; return }
 		Start-Sleep -Seconds 2
 	}
+	throw "API container readiness check did not pass."
+}
 
-	throw "API readiness check did not pass at $uri after $attempts attempts."
+function Get-JetStreamVolume
+{
+	$id = Get-ComposeContainerId -Service "nats"
+	$inspection = & docker inspect $id
+	if ($LASTEXITCODE -ne 0) { throw "Unable to inspect the NATS container." }
+	$container = @($inspection | ConvertFrom-Json)[0]
+	$mounts = @($container.Mounts | Where-Object { $_.Destination -eq "/data" -and $_.Type -eq "volume" })
+	if ($mounts.Count -ne 1 -or [string]::IsNullOrWhiteSpace($mounts[0].Name)) { throw "Unable to resolve the NATS data volume." }
+	return $mounts[0].Name
 }
 
 function Invoke-NuntivusBackup
@@ -150,53 +145,70 @@ function Invoke-NuntivusBackup
 	$dbDumpName = "nuntivus-postgres-$timestamp.sql"
 	$dbDumpPath = Join-Path $backupDir $dbDumpName
 
-	Write-Info "Creating PostgreSQL backup..."
-	Invoke-Compose @("exec", "-T", "postgres", "sh", "-ec", "pg_dump -U '$dbUser' -d '$dbName' -Fp -f /tmp/$dbDumpName")
-	$postgresContainer = Get-ComposeContainerId -Service "postgres"
-	& docker cp "$postgresContainer`:/tmp/$dbDumpName" "$dbDumpPath"
-	if ($LASTEXITCODE -ne 0)
-	{
-		throw "Failed to copy PostgreSQL dump from container."
-	}
-
-	Invoke-Compose @("exec", "-T", "postgres", "sh", "-ec", "rm -f /tmp/$dbDumpName")
-
 	$jetStreamDumpName = "nuntivus-jetstream-$timestamp.tgz"
 	$jetStreamDumpPath = Join-Path $backupDir $jetStreamDumpName
 	$resolvedBackupDir = (Resolve-Path -LiteralPath $backupDir).Path
 
-	Write-Info "Creating JetStream backup..."
-	& docker run --rm -v "nuntivus-nats-data:/data" -v "${resolvedBackupDir}:/backup" alpine sh -ec "cd /data && tar czf /backup/$jetStreamDumpName ."
-	if ($LASTEXITCODE -ne 0)
+	Write-Info "Creating backups..."
+	$jetStreamVolume = Get-JetStreamVolume
+
+	try
 	{
-		throw "Failed to create JetStream volume archive."
+		Invoke-Compose @("stop", "api", "worker", "nats")
+		Write-Info "Creating PostgreSQL backup..."
+		Invoke-Compose @("exec", "-T", "postgres", "sh", "-ec", "pg_dump -U '$dbUser' -d '$dbName' -Fp --clean --if-exists --no-owner --no-privileges -f /tmp/$dbDumpName")
+		$postgresContainer = Get-ComposeContainerId -Service "postgres"
+		& docker cp "$postgresContainer`:/tmp/$dbDumpName" "$dbDumpPath"
+		if ($LASTEXITCODE -ne 0)
+		{
+			throw "Failed to copy PostgreSQL dump from container."
+		}
+
+		Invoke-Compose @("exec", "-T", "postgres", "sh", "-ec", "rm -f /tmp/$dbDumpName")
+
+		Write-Info "Creating JetStream backup..."
+		& docker run --rm -v "${jetStreamVolume}:/data:ro" -v "${resolvedBackupDir}:/backup" alpine:3.21 sh -ec "cd /data && tar czf /backup/$jetStreamDumpName ."
+		if ($LASTEXITCODE -ne 0)
+		{
+			throw "Failed to create JetStream volume archive."
+		}
+
+		$manifest = [ordered]@{
+			schemaVersion = "1.0"
+			generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+			generatedBy = "scripts/ops.ps1"
+			dashboardImportCompatible = $true
+			imageTag = $currentTag
+			composeFile = $ComposeFile
+			envFile = $EnvFile
+			files = @(
+				[ordered]@{
+					type = "postgres-sql"
+					path = $dbDumpName
+					sha256 = (Get-FileHash -LiteralPath $dbDumpPath -Algorithm SHA256).Hash
+					bytes = (Get-Item -LiteralPath $dbDumpPath).Length
+				},
+				[ordered]@{
+					type = "jetstream-archive"
+					path = $jetStreamDumpName
+					sha256 = (Get-FileHash -LiteralPath $jetStreamDumpPath -Algorithm SHA256).Hash
+					bytes = (Get-Item -LiteralPath $jetStreamDumpPath).Length
+				}
+			)
+		}
+
+		$manifestPath = Join-Path $backupDir "manifest.json"
+		$manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath
+
+		Write-Info "Backup completed: $backupDir"
+		return $backupDir
 	}
-
-	$manifest = [ordered]@{
-		schemaVersion = "1.0"
-		generatedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
-		generatedBy = "scripts/ops.ps1"
-		dashboardImportCompatible = $true
-		imageTag = $currentTag
-		composeFile = $ComposeFile
-		envFile = $EnvFile
-		files = @(
-			[ordered]@{
-				type = "postgres-sql"
-				path = $dbDumpName
-			},
-			[ordered]@{
-				type = "jetstream-archive"
-				path = $jetStreamDumpName
-			}
-		)
+	finally
+	{
+		Write-Info "Starting services back up..."
+		Invoke-Compose @("start", "nats", "worker", "api")
+		Wait-ApiReady
 	}
-
-	$manifestPath = Join-Path $backupDir "manifest.json"
-	$manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath
-
-	Write-Info "Backup completed: $backupDir"
-	return $backupDir
 }
 
 function Invoke-NuntivusRestore
@@ -219,10 +231,11 @@ function Invoke-NuntivusRestore
 	$envMap = Get-EnvMap -Path $EnvFile
 	$dbUser = Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_POSTGRES_USER"
 	$dbName = Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_POSTGRES_DB"
-	$apiPort = [int](Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_API_PORT" -Default "8080")
 
 	Write-Info "Stopping API/worker/NATS before restore..."
 	Invoke-Compose @("stop", "api", "worker", "nats")
+
+	$jetStreamVolume = Get-JetStreamVolume
 
 	Write-Info "Restoring PostgreSQL..."
 	$postgresContainer = Get-ComposeContainerId -Service "postgres"
@@ -240,13 +253,13 @@ function Invoke-NuntivusRestore
 	$jetStreamParent = Split-Path -Path $resolvedJetStreamPath -Parent
 	$jetStreamFile = Split-Path -Path $resolvedJetStreamPath -Leaf
 
-	& docker run --rm -v "nuntivus-nats-data:/data" alpine sh -ec "rm -rf /data/*"
+	& docker run --rm -v "${jetStreamVolume}:/data" alpine:3.21 sh -ec "find /data -mindepth 1 -maxdepth 1 -exec rm -rf {} +"
 	if ($LASTEXITCODE -ne 0)
 	{
 		throw "Failed to clear JetStream volume before restore."
 	}
 
-	& docker run --rm -v "nuntivus-nats-data:/data" -v "${jetStreamParent}:/backup" alpine sh -ec "cd /data && tar xzf /backup/$jetStreamFile"
+	& docker run --rm -v "${jetStreamVolume}:/data" -v "${jetStreamParent}:/backup" alpine:3.21 sh -ec "cd /data && tar xzf /backup/$jetStreamFile"
 	if ($LASTEXITCODE -ne 0)
 	{
 		throw "Failed to extract JetStream archive."
@@ -254,7 +267,7 @@ function Invoke-NuntivusRestore
 
 	Write-Info "Starting stack after restore..."
 	Invoke-Compose @("up", "-d")
-	Wait-ApiReady -Port $apiPort
+	Wait-ApiReady
 
 	Write-Info "Restore completed successfully."
 }
@@ -268,7 +281,6 @@ function Invoke-NuntivusUpgrade
 
 	$envMap = Get-EnvMap -Path $EnvFile
 	$previousTag = Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_IMAGE_TAG" -Default "latest"
-	$apiPort = [int](Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_API_PORT" -Default "8080")
 
 	if (-not $SkipBackup)
 	{
@@ -282,12 +294,12 @@ function Invoke-NuntivusUpgrade
 	try
 	{
 		Write-Info "Pulling updated images..."
-		Invoke-Compose @("pull")
+		if ($Build) { Invoke-Compose @("build", "api", "worker", "migrate") } else { Invoke-Compose @("pull", "api", "worker", "migrate") }
 
 		Write-Info "Applying upgrade..."
 		Invoke-Compose @("up", "-d")
 
-		Wait-ApiReady -Port $apiPort
+		Wait-ApiReady
 		Write-Info "Upgrade completed successfully."
 	}
 	catch
@@ -302,11 +314,10 @@ function Invoke-NuntivusUpgrade
 function Invoke-NuntivusRun
 {
 	$envMap = Get-EnvMap -Path $EnvFile
-	$apiPort = [int](Get-RequiredEnvValue -Map $envMap -Key "NUNTIVUS_API_PORT" -Default "8080")
 
 	Write-Info "Starting Nuntivus production stack..."
 	Invoke-Compose @("up", "-d")
-	Wait-ApiReady -Port $apiPort
+	Wait-ApiReady
 
 	Write-Info "Nuntivus stack is running."
 }

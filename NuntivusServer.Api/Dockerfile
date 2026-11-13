@@ -13,7 +13,7 @@ EXPOSE 8080
 
 
 # This stage is used to build the service project
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.401 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["NuntivusServer.Api/NuntivusServer.Api.csproj", "NuntivusServer.Api/"]
@@ -22,8 +22,8 @@ COPY ["NuntivusServer.Common/NuntivusServer.Common.csproj", "NuntivusServer.Comm
 COPY ["NuntivusServer.Contracts/NuntivusServer.Contracts.csproj", "NuntivusServer.Contracts/"]
 COPY ["NuntivusServer.Domain/NuntivusServer.Domain.csproj", "NuntivusServer.Domain/"]
 COPY ["NuntivusServer.Infastructure/NuntivusServer.Infastructure.csproj", "NuntivusServer.Infastructure/"]
-RUN dotnet restore "./NuntivusServer.Api/NuntivusServer.Api.csproj"
 COPY . .
+RUN dotnet restore "./NuntivusServer.Api/NuntivusServer.Api.csproj" --locked-mode
 WORKDIR "/src/NuntivusServer.Api"
 RUN dotnet build "./NuntivusServer.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
@@ -36,5 +36,6 @@ RUN dotnet publish "./NuntivusServer.Api.csproj" -c $BUILD_CONFIGURATION -o /app
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+COPY LICENSE /app/LICENSE
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD wget -qO- http://localhost:8080/health/ready || exit 1
 ENTRYPOINT ["dotnet", "NuntivusServer.Api.dll"]

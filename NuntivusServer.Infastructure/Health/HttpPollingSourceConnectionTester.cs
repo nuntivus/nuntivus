@@ -32,12 +32,6 @@ namespace NuntivusServer.Infastructure.Health
                 var url = config.GetProperty("url").GetString()!;
                 if (!HttpDestinationSecurityPolicy.TryValidateDestinationUri(url, _security, out var uri, out var error))
                     return Result.Failure<string>(Error.Validation(error));
-                if (!_security.AllowPrivateNetworkDestinations)
-                {
-                    var addresses = await Dns.GetHostAddressesAsync(uri.Host, token);
-                    if (addresses.Any(HttpDestinationSecurityPolicy.IsPrivateNetworkAddress))
-                        return Result.Failure<string>(Error.Validation("HTTP endpoint resolves to a private-network address."));
-                }
                 var secret = await ConnectionProbeCredentials.SourceSecretAsync(config, _secrets, token);
                 if (secret.IsFailure) return Result<string>.Fail(secret.Errors);
                 using var request = new HttpRequestMessage(HttpMethod.Head, url);

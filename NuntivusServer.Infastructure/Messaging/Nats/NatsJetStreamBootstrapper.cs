@@ -49,7 +49,7 @@ namespace NuntivusServer.Infastructure.Messaging.Nats
 
             var config = new StreamConfig(
                 name: _options.Stream,
-                subjects: _options.Subjects)
+                subjects: _options.Subjects.Distinct(StringComparer.Ordinal).ToArray())
             {
                 Retention = StreamConfigRetention.Limits,
                 Storage = StreamConfigStorage.File,

@@ -1,59 +1,33 @@
-# Restore Guide
+# Restore guide
 
-Use this guide to restore Nuntivus from PostgreSQL and JetStream backups.
+Restore only trusted backups into the intended deployment. This operation replaces
+application database and JetStream state; validate backups in staging first.
 
-## Fast path (recommended)
-
-From repository root:
+From the repository root:
 
 ```powershell
 ./scripts/ops.ps1 restore -DbDumpPath backups/<timestamp>/nuntivus-postgres-<timestamp>.sql -JetStreamDumpPath backups/<timestamp>/nuntivus-jetstream-<timestamp>.tgz
 ```
 
-The script stops dependent services, restores Postgres and JetStream, restarts the stack, and waits for API readiness.
+Use `-ComposeFile` and `-EnvFile` when working with an overlay. The supported script
+format is plain SQL from `ops.ps1 backup`, not a custom-format `pg_dump -Fc` file.
+Verify the manifest hashes before restoration and restore the original destination
+credential encryption key through your secret manager.
 
-## 1. Stop application services
+The script stops API, Worker, and NATS; executes SQL with `ON_ERROR_STOP`; clears
+and restores the actual Compose NATS volume; restarts the stack; and checks API
+readiness inside its container. PostgreSQL must remain running. No internal-service
+host ports are required. If restoration fails, dependent services stay stopped;
+investigate before bringing an inconsistent snapshot online.
 
-```bash
-docker compose --env-file .env -f docker-compose.prod.yml stop api worker
-```
+## Post-restore checks
 
-## 2. Restore PostgreSQL
+- API and Worker container health checks pass.
+- Migration validation accepts the restored history.
+- Worker logs show JetStream consumers running.
+- Expected customers, contracts, events, and delivery state are present.
+- Managed credentials decrypt with the restored key.
+- A test Source event is accepted and delivered to a controlled receiver.
 
-Replace `<dump-file>` with your backup file.
-
-```bash
-cat <dump-file> | docker compose --env-file .env -f docker-compose.prod.yml exec -T postgres \
-  pg_restore -U "$NUNTIVUS_POSTGRES_USER" -d "$NUNTIVUS_POSTGRES_DB" --clean --if-exists --no-owner --no-privileges
-```
-
-## 3. Restore JetStream volume
-
-1. stop NATS service
-2. clear existing data
-3. extract backup archive
-
-```bash
-docker compose --env-file .env -f docker-compose.prod.yml stop nats
-
-docker run --rm -v nuntivus-nats-data:/data alpine sh -c 'rm -rf /data/*'
-
-docker run --rm \
-  -v nuntivus-nats-data:/data \
-  -v "${PWD}:/backup" \
-  alpine sh -c 'cd /data && tar xzf /backup/<jetstream-backup-file>.tgz'
-```
-
-## 4. Restart stack
-
-```bash
-docker compose --env-file .env -f docker-compose.prod.yml up -d
-```
-
-## 5. Post-restore validation
-
-- API readiness returns healthy
-  - `GET /health/ready`
-- migrations service completed successfully
-- worker logs show NATS/JetStream bootstrap completion
-- expected events/contracts/customers are present
+Never extract untrusted archives into a database or broker volume. Keep a verified
+pre-restore backup and use your deployment's recovery procedures for failure.

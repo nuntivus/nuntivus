@@ -57,20 +57,39 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public void RabbitMq_exclusive_queue_rejects_another_connection()
+        {
+            var factory = new ConnectionFactory { Uri = new Uri(_fx.RabbitMqConnectionString) };
+            using var owner = factory.CreateConnection();
+            using var ownerChannel = owner.CreateModel();
+            var queue = ownerChannel.QueueDeclare().QueueName;
+            using var probe = factory.CreateConnection();
+            using var probeChannel = probe.CreateModel();
+            var error = Assert.Throws<RabbitMQ.Client.Exceptions.OperationInterruptedException>(() =>
+                probeChannel.QueueDeclarePassive(queue));
+            Assert.Equal(405, error.ShutdownReason.ReplyCode);
+        }
+
+        [Fact]
         public async Task RabbitMq_source_test_leaves_messages_untouched()
         {
             var factory = new ConnectionFactory { Uri = new Uri(_fx.RabbitMqConnectionString) };
             using var connection = factory.CreateConnection();
             using var channel = connection.CreateModel();
-            var queue = channel.QueueDeclare().QueueName;
-            channel.BasicPublish("", queue, null, System.Text.Encoding.UTF8.GetBytes("{\"test\":true}"));
-            var tester = new RabbitMqSourceConnectionTester(new NoopSecretResolver());
-            var config = JsonSerializer.Serialize(new { uri = _fx.RabbitMqConnectionString, queue });
-            var result = await tester.TestAsync(config, CancellationToken.None);
-            Assert.True(result.IsSuccess, result.IsFailure ? result.Errors[0].Message : null);
-            var state = channel.QueueDeclarePassive(queue);
-            Assert.Equal(1u, state.MessageCount);
-            Assert.Equal(0u, state.ConsumerCount);
+            var queue = channel.QueueDeclare($"source-probe-{Guid.NewGuid():N}", durable: false,
+                exclusive: false, autoDelete: false).QueueName;
+            try
+            {
+                channel.BasicPublish("", queue, null, System.Text.Encoding.UTF8.GetBytes("{\"test\":true}"));
+                var tester = new RabbitMqSourceConnectionTester(new NoopSecretResolver());
+                var config = JsonSerializer.Serialize(new { uri = _fx.RabbitMqConnectionString, queue });
+                var result = await tester.TestAsync(config, CancellationToken.None);
+                Assert.True(result.IsSuccess, result.IsFailure ? result.Errors[0].Message : null);
+                var state = channel.QueueDeclarePassive(queue);
+                Assert.Equal(1u, state.MessageCount);
+                Assert.Equal(0u, state.ConsumerCount);
+            }
+            finally { channel.QueueDelete(queue); }
         }
 
         [Fact]

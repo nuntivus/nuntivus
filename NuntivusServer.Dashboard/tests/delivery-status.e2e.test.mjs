@@ -50,7 +50,7 @@ for (const initialStatus of ['Failed', 3]) {
             assert.deepEqual(await page.locator('.delivery-status-dot').allTextContents(), ['✓', '✓', '✓', '✓'])
             assert.equal(await page.locator('.delivery-error-callout').count(), 0)
             assert.equal(await page.locator('.delivery-metric.delivery-tone-success').count(), 1)
-            await page.getByRole('tab', { name: /Attempts/ }).click()
+            await page.getByText('Delivery attempts', { exact: true }).waitFor()
             await page.getByText('Success', { exact: true }).waitFor()
             assert.ok(successfulAttemptsRequests > 0)
             assert.ok(successfulFailureRequests > 0)

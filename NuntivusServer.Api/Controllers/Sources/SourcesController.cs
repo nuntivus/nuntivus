@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NuntivusServer.Api.Common;
 using NuntivusServer.Api.Security;
 using NuntivusServer.Api.Controllers.Events;
@@ -82,6 +83,7 @@ namespace NuntivusServer.Api.Controllers.Sources
 
         [AcceptVerbs("POST", "PUT", "PATCH", Route = "{id:guid}/events")]
         [AllowAnonymous]
+        [EnableRateLimiting(ApiProtection.IngestionPolicy)]
         public async Task<IActionResult> Ingest(Guid id, [FromBody] WebhookIngestRequest request,
             CancellationToken cancellationToken)
         {

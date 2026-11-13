@@ -1,5 +1,5 @@
 import { Button, Flex, ScrollArea, Text, TextField } from '@radix-ui/themes'
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 
 type JsonViewerProps = {
   value: unknown
@@ -13,7 +13,7 @@ type JsonViewerProps = {
 
 function safeStringify(value: unknown) {
   try {
-    return JSON.stringify(value, null, 2)
+    return JSON.stringify(value, null, 2) ?? 'null'
   } catch {
     return '{"error":"Unable to format JSON"}'
   }
@@ -62,28 +62,34 @@ function highlightText(line: string, term: string) {
   )
 }
 
-export function JsonViewer({
-  value,
+export function JsonViewer(props: JsonViewerProps) {
+  const jsonText = useMemo(() => safeStringify(props.value), [props.value])
+  const [collapsed, setCollapsed] = useState(props.defaultCollapsed ?? false)
+  return <JsonViewerContent key={`${props.largePayloadThreshold ?? 200_000}:${jsonText}`}
+    {...props} jsonText={jsonText} collapsed={collapsed}
+    onToggleCollapsed={() => setCollapsed((current) => !current)} />
+}
+
+function JsonViewerContent({
+  jsonText,
+  collapsed,
+  onToggleCollapsed,
   maxHeight = 360,
-  defaultCollapsed = false,
   searchPlaceholder = 'Search JSON',
   copyLabel = 'Copy JSON',
   largePayloadThreshold = 200_000,
   previewChars = 20_000,
-}: JsonViewerProps) {
-  const jsonText = useMemo(() => safeStringify(value), [value])
-  const [collapsed, setCollapsed] = useState(defaultCollapsed)
+}: Omit<JsonViewerProps, 'value' | 'defaultCollapsed'> & {
+  jsonText: string
+  collapsed: boolean
+  onToggleCollapsed: () => void
+}) {
   const [searchTerm, setSearchTerm] = useState('')
   const [copied, setCopied] = useState(false)
-  const [showFullContent, setShowFullContent] = useState(false)
+  const [showFullContent, setShowFullContent] = useState(jsonText.length <= largePayloadThreshold)
 
   const isLargePayload = jsonText.length > largePayloadThreshold
 
-  useEffect(() => {
-    setSearchTerm('')
-    setCopied(false)
-    setShowFullContent(!isLargePayload)
-  }, [isLargePayload, jsonText])
 
   const displayedText = showFullContent
     ? jsonText
@@ -133,7 +139,7 @@ export function JsonViewer({
           type="button"
           size="1"
           variant="soft"
-          onClick={() => setCollapsed((current) => !current)}
+          onClick={onToggleCollapsed}
         >
           {collapsed ? 'Expand' : 'Collapse'}
         </Button>
