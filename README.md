@@ -18,24 +18,102 @@ Publish business events once; define how each customer receives them.
 Processing is **at least once**; external consumers must tolerate duplicates.
 See the [architecture](docs/architecture.md) and [feature limitations](docs/features/product-verification.md).
 
+## Docker quick-start (local only)
+
+Requires Docker Engine/Desktop with Linux containers and Docker Compose 2.24.4+.
+Download [docker-compose.quickstart.yml](docker-compose.quickstart.yml) into an
+empty folder. No source checkout, .NET, Node.js, or `.env` configuration is needed.
+
+From that folder, run:
+
+```sh
+docker compose -f docker-compose.quickstart.yml up -d --wait
+```
+
+Compose downloads the published `sasaspo/nuntivus-server-api`,
+`sasaspo/nuntivus-server-worker`, and `sasaspo/nuntivus-server-dashboard` images
+(version `0.1.0`), plus PostgreSQL and NATS. It generates unique database and NATS
+credentials, an encryption key, a signing key, and an initial administrator
+password; applies migrations; and starts the complete application. The Dashboard's
+API address is configured automatically. Nothing is built locally.
+
+Open **http://localhost:5173** and sign in as **admin**. Retrieve the generated
+initial password locally:
+
+```sh
+docker compose -f docker-compose.quickstart.yml exec -T api cat /run/nuntivus-api/admin-password
+```
+
+Keep this password private. It is not a shared default and is not printed in
+startup logs. Existing administrators and generated secrets are preserved on
+subsequent starts; the command retrieves the original bootstrap password, not a
+replacement for a password you later change.
+
+Only the Dashboard and API (`http://localhost:8080`) publish loopback-bound ports.
+PostgreSQL, NATS, and Worker ports remain private. The stack intentionally runs in
+Development mode for local HTTP and loopback CORS. **Do not expose this stack
+publicly or use it as a production deployment.** If ports 5173 or 8080 are already
+in use, stop the conflicting local services before starting.
+
+```sh
+docker compose -f docker-compose.quickstart.yml ps
+docker compose -f docker-compose.quickstart.yml down
+docker compose -f docker-compose.quickstart.yml up -d --wait
+```
+
+`down` keeps data and secrets in the `nuntivus-quickstart` project's named volumes.
+Back up database, NATS, and secret volumes together; do not remove secret volumes
+while keeping the database. Adding `--volumes` to `down` **permanently deletes the
+local installation**, including its data and encryption keys. The source-based
+development workflow below and production deployment remain separate.
+
 ## Development quick-start
 
-Requires Docker Compose with Linux containers. The default stack is for local
-experimentation only and uses development credentials on loopback-bound ports.
+Requires Docker Compose 2.24.4+ with Linux containers and PowerShell 5.1+.
+The default stack is for local experimentation only and uses development
+credentials on loopback-bound ports. Node.js and .NET run inside Docker.
 
 ```sh
 git clone https://github.com/nuntivus/nuntivus-server.git
 cd nuntivus-server
-docker compose up --build -d
 ```
 
-The stack runs PostgreSQL, NATS JetStream, migrations, the API, and Worker.
-Check readiness at `http://localhost:8080/health/ready`; development Swagger is
-available at `http://localhost:8080/swagger`.
+Start backend **and frontend** with one command:
 
-### Dashboard
+```powershell
+.\start.ps1
+```
 
-Requires Node.js 24. Run separately:
+The script starts PostgreSQL, NATS JetStream, migrations, API, Worker and the
+dashboard in the isolated `nuntivus-local` Compose project. It waits for readiness
+and offers initial administrator setup only when no admin exists. Dashboard:
+`http://localhost:5173`; API readiness: `http://localhost:8080/health/ready`;
+development Swagger: `http://localhost:8080/swagger`.
+
+```powershell
+.\start.ps1 -Services be                 # Backend and its dependencies only
+.\start.ps1 -Services fe                 # Frontend only; use an existing API
+.\start.ps1 -Services postgres,nats      # Selected infrastructure only
+.\start.ps1 -ApiPort 8081 -FrontendPort 5174
+.\start.ps1 -Action status
+.\start.ps1 -Action stop                 # Stop API, Worker and dashboard
+.\start.ps1 -Action down                 # Stop the entire local project; keep data
+```
+
+PostgreSQL/NATS have no published host ports, so an existing NATS on port `4222`
+is left untouched. `-Services` also accepts `api`, `worker` and `migrate`; Compose
+starts their required dependencies. Use `-ApiBaseUrl` for a frontend targeting
+another API, `-NoBuild` to reuse backend images, and `-SkipAdminSetup` for
+noninteractive startup. `-ProjectName` selects a separate local project. On a
+restricted Windows execution policy, run
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1` without
+changing the machine policy. Stopping selected apps leaves infrastructure
+running; `-Action down` removes containers/networks, not data volumes.
+
+### Alternative: run the dashboard on the host
+
+For host-side frontend development, Node.js 24 is required. Start only the
+backend with `.\start.ps1 -Services be`, then:
 
 ```sh
 cd NuntivusServer.Dashboard

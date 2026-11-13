@@ -1,0 +1,33 @@
+services:
+  postgres:
+    ports: !reset []
+  nats:
+    ports: !reset []
+  api:
+    ports: !override
+      - "127.0.0.1:${NUNTIVUS_LOCAL_API_PORT:-8080}:8080"
+  dashboard:
+    image: node:24-alpine
+    profiles: ["fe"]
+    working_dir: /app
+    command: ["sh", "-ec", "npm ci --no-audit --no-fund && exec npm run dev -- --host 0.0.0.0 --port 5173 --strictPort"]
+    environment:
+      VITE_API_BASE_URL: ${NUNTIVUS_LOCAL_API_URL:-http://localhost:8080}
+      VITE_APP_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "127.0.0.1:${NUNTIVUS_LOCAL_FE_PORT:-5173}:5173"
+    volumes:
+      - ./NuntivusServer.Dashboard:/app
+      - nuntivus-dashboard-modules:/app/node_modules
+      - nuntivus-dashboard-npm-cache:/root/.npm
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      start_period: 60s
+      retries: 40
+
+volumes:
+  nuntivus-dashboard-modules:
+  nuntivus-dashboard-npm-cache:

@@ -1,3 +1,11 @@
+import { resolveApiBaseUrl, type RuntimeFrontendConfig } from './runtime-config'
+
+declare global {
+  interface Window {
+    __NUNTIVUS_CONFIG__?: RuntimeFrontendConfig
+  }
+}
+
 type RuntimeEnvironment = 'development' | 'staging' | 'production' | 'test' | (string & {})
 
 type FrontendConfig = {
@@ -12,11 +20,6 @@ type FrontendConfig = {
 function parseRuntimeEnvironment(value: string): RuntimeEnvironment {
   const normalized = value.trim().toLowerCase()
   return normalized || 'development'
-}
-
-function parseApiBaseUrl(value: string): string {
-  const parsed = new URL(value)
-  return parsed.origin
 }
 
 function parseFeatureFlags(value: string | undefined): ReadonlySet<string> {
@@ -34,25 +37,16 @@ function parseFeatureFlags(value: string | undefined): ReadonlySet<string> {
 
 const mode = import.meta.env.MODE
 const isProduction = import.meta.env.PROD
-const runtimeEnvironment = parseRuntimeEnvironment(import.meta.env.VITE_APP_ENV ?? mode)
+const runtimeConfig = window.__NUNTIVUS_CONFIG__
+const runtimeEnvironment = parseRuntimeEnvironment(runtimeConfig?.runtimeEnvironment ?? import.meta.env.VITE_APP_ENV ?? mode)
 const version = (import.meta.env.VITE_APP_VERSION?.trim() || __APP_VERSION__).trim() || '0.0.0'
-
-const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
-const fallbackApiBaseUrl = import.meta.env.DEV ? 'https://localhost:7123' : undefined
-const rawApiBaseUrl = configuredApiBaseUrl || fallbackApiBaseUrl
-
-if (!rawApiBaseUrl) {
-  throw new Error('API base URL is required. Set VITE_API_BASE_URL.')
-}
-
-const apiBaseUrl = parseApiBaseUrl(rawApiBaseUrl)
-
-if (isProduction) {
-  const host = new URL(apiBaseUrl).hostname.toLowerCase()
-  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
-    throw new Error('Production API base URL must not target localhost.')
-  }
-}
+const apiBaseUrl = resolveApiBaseUrl(
+  runtimeConfig?.apiBaseUrl,
+  import.meta.env.VITE_API_BASE_URL,
+  import.meta.env.DEV,
+  isProduction,
+  window.location.hostname,
+)
 
 export const frontendConfig: FrontendConfig = {
   apiBaseUrl,
@@ -60,7 +54,7 @@ export const frontendConfig: FrontendConfig = {
   mode,
   isProduction,
   version,
-  featureFlags: parseFeatureFlags(import.meta.env.VITE_FEATURE_FLAGS),
+  featureFlags: parseFeatureFlags(runtimeConfig?.featureFlags ?? import.meta.env.VITE_FEATURE_FLAGS),
 }
 
 export function isFeatureEnabled(flag: string): boolean {

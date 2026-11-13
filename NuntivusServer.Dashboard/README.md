@@ -36,7 +36,56 @@ Optional `.env.local` values:
 
 Use Node.js 24 and `npm ci` to install the locked dependencies. For the development
 Compose API, set `VITE_API_BASE_URL=http://localhost:8080` in `.env.local` before
-starting Vite. Production builds require a non-localhost HTTPS API URL.
+starting Vite. Public production deployments should use an HTTPS API origin.
+Docker deployments use the runtime settings below instead of `.env.local`.
+
+## Docker image
+
+Build from the repository root with Docker Desktop using Linux containers:
+
+```powershell
+docker build -f NuntivusServer.Dashboard/Dockerfile -t sasaspo/nuntivus-server-dashboard:0.1.0 .
+```
+
+Run against a local development API on port 8080:
+
+```powershell
+docker run --rm --name nuntivus-dashboard -p 127.0.0.1:5173:8080 -e NUNTIVUS_API_BASE_URL=http://localhost:8080 sasaspo/nuntivus-server-dashboard:0.1.0
+```
+
+Open `http://localhost:5173`. The image runs nginx as a non-root user on port 8080,
+supports direct navigation to Dashboard routes, and exposes `/health/live` for
+container health checks. This endpoint checks static serving, not API connectivity.
+
+The same image supports different installations through startup settings:
+
+- `NUNTIVUS_API_BASE_URL` (required): browser-reachable HTTP(S) API origin, without
+  credentials, a path, query, or fragment. Do not use Docker service names such as
+  `http://api:8080`; requests originate from the user's browser, not the container.
+- `NUNTIVUS_APP_ENV` (optional): environment label, default `production`.
+- `NUNTIVUS_FEATURE_FLAGS` (optional): comma-separated public feature flags.
+
+Settings are generated at startup, loaded before the app, and served without
+caching. Recreate the container to change its environment. These settings are public;
+never include tokens, passwords, or other secrets. No API address is baked into the
+image. Local API origins are supported only when the Dashboard is also opened from
+a loopback browser origin.
+
+For public deployments, use a trusted HTTPS reverse proxy serving the Dashboard
+and API under the same origin, and set `NUNTIVUS_API_BASE_URL` to that origin.
+The API currently enables loopback CORS only in Development; a separate production
+Dashboard origin requires deliberate CORS configuration, which this image does not
+provide. Do not mix an HTTPS Dashboard with an HTTP API.
+
+After local validation and Docker Hub login, publish manually:
+
+```powershell
+docker push sasaspo/nuntivus-server-dashboard:0.1.0
+```
+
+Use a new version tag for subsequent releases. Building or running the image does
+not publish it. The container remains subject to the project's early-development,
+not-production-ready status.
 
 ## Scripts
 

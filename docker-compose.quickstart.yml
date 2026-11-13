@@ -1,0 +1,227 @@
+name: nuntivus-quickstart
+
+x-api: &api
+  image: sasaspo/nuntivus-server-api:${NUNTIVUS_IMAGE_TAG:-0.1.0}
+  entrypoint:
+    - /bin/sh
+    - -ec
+    - |
+      export Database__PostgresConnectionString="$$(cat /run/nuntivus/database-connection)"
+      export DestinationCredentials__EncryptionKey="$$(cat /run/nuntivus/encryption-key)"
+      export LocalAuth__SigningKey="$$(cat /run/nuntivus-api/signing-key)"
+      exec "$$@"
+    - --
+  environment: &api-environment
+    ASPNETCORE_ENVIRONMENT: Development
+    ASPNETCORE_URLS: http://+:8080
+    DatabaseMigrations__Mode: Validate
+    LocalAuth__Enabled: "true"
+    AdminBootstrap__Username: admin
+    HostOptions__ShutdownTimeout: "00:00:30"
+  volumes:
+    - shared-secrets:/run/nuntivus:ro
+    - api-secrets:/run/nuntivus-api:ro
+
+services:
+  initialize:
+    image: postgres:16-alpine
+    user: "0:0"
+    restart: "no"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        umask 077
+        mkdir -p /shared /api /postgres /nats
+        secret() {
+          if [ ! -e "$$1" ]; then
+            head -c 32 /dev/urandom | base64 > "$$1.tmp"
+            mv "$$1.tmp" "$$1"
+          fi
+          test -s "$$1"
+        }
+        secret /postgres/password
+        secret /shared/encryption-key
+        secret /shared/nats-token
+        secret /api/signing-key
+        secret /api/admin-password
+        printf 'Host=postgres;Port=5432;Database=nuntivus;Username=nuntivus;Password=%s' "$$(cat /postgres/password)" > /shared/database-connection
+        printf 'jetstream { store_dir: "/data" }\nhttp: 8222\nauthorization { token: "%s" }\n' "$$(cat /shared/nats-token)" > /nats/nats.conf
+        chown -R 1654:1654 /shared /api
+        chown -R 70:70 /postgres
+        chmod 700 /shared /api /postgres /nats
+        chmod 600 /shared/* /api/* /postgres/* /nats/*
+        echo 'Local installation secrets are ready. Existing secrets were preserved.'
+    volumes:
+      - shared-secrets:/shared
+      - api-secrets:/api
+      - postgres-secrets:/postgres
+      - nats-secrets:/nats
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      initialize:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_DB: nuntivus
+      POSTGRES_USER: nuntivus
+      POSTGRES_PASSWORD_FILE: /run/nuntivus-postgres/password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - postgres-secrets:/run/nuntivus-postgres:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nuntivus -d nuntivus"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    depends_on:
+      initialize:
+        condition: service_completed_successfully
+    command: ["-c", "/run/nuntivus-nats/nats.conf"]
+    volumes:
+      - nats-data:/data
+      - nats-secrets:/run/nuntivus-nats:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  migrate:
+    <<: *api
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["dotnet", "NuntivusServer.Api.dll", "--migrate"]
+    healthcheck:
+      disable: true
+
+  admin-check:
+    image: postgres:16-alpine
+    user: "0:0"
+    restart: "no"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        export PGPASSWORD="$$(cat /run/nuntivus-postgres/password)"
+        count="$$(psql -h postgres -U nuntivus -d nuntivus -Atc 'SELECT COUNT(*) FROM admin_users;')"
+        rm -f /run/nuntivus-api/bootstrap-required
+        if [ "$$count" = '0' ]; then
+          umask 077
+          touch /run/nuntivus-api/bootstrap-required
+          chown 1654:1654 /run/nuntivus-api/bootstrap-required
+        fi
+    volumes:
+      - postgres-secrets:/run/nuntivus-postgres:ro
+      - api-secrets:/run/nuntivus-api
+
+  bootstrap:
+    <<: *api
+    restart: "no"
+    depends_on:
+      admin-check:
+        condition: service_completed_successfully
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        if [ -f /run/nuntivus-api/bootstrap-required ]; then
+          dotnet NuntivusServer.Api.dll --create-admin < /run/nuntivus-api/admin-password
+          rm /run/nuntivus-api/bootstrap-required
+        else
+          echo 'An administrator already exists; credentials were not changed.'
+        fi
+    volumes:
+      - shared-secrets:/run/nuntivus:ro
+      - api-secrets:/run/nuntivus-api
+    healthcheck:
+      disable: true
+
+  api:
+    <<: *api
+    restart: unless-stopped
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    command: ["dotnet", "NuntivusServer.Api.dll"]
+    ports:
+      - "127.0.0.1:${NUNTIVUS_API_PORT:-8080}:8080"
+    stop_grace_period: 40s
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  worker:
+    image: sasaspo/nuntivus-server-worker:${NUNTIVUS_IMAGE_TAG:-0.1.0}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export Database__PostgresConnectionString="$$(cat /run/nuntivus/database-connection)"
+        export DestinationCredentials__EncryptionKey="$$(cat /run/nuntivus/encryption-key)"
+        export Nats__Token="$$(cat /run/nuntivus/nats-token)"
+        exec "$$@"
+      - --
+    command: ["dotnet", "NuntivusServer.Worker.dll"]
+    environment:
+      DOTNET_ENVIRONMENT: Development
+      DatabaseMigrations__Mode: Validate
+      Nats__Url: nats://nats:4222
+      HostOptions__ShutdownTimeout: "00:00:30"
+    volumes:
+      - shared-secrets:/run/nuntivus:ro
+    stop_grace_period: 40s
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  dashboard:
+    image: sasaspo/nuntivus-server-dashboard:${NUNTIVUS_IMAGE_TAG:-0.1.0}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NUNTIVUS_API_BASE_URL: http://localhost:${NUNTIVUS_API_PORT:-8080}
+      NUNTIVUS_APP_ENV: development
+    ports:
+      - "127.0.0.1:${NUNTIVUS_DASHBOARD_PORT:-5173}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  postgres-data:
+  nats-data:
+  shared-secrets:
+  api-secrets:
+  postgres-secrets:
+  nats-secrets:

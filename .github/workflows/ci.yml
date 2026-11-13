@@ -103,6 +103,7 @@ jobs:
           node-version: '24'
       - run: node scripts/check-doc-links.mjs
       - run: docker compose config --quiet
+      - run: node --test tests/deployment/quickstart.test.mjs
 
   deployment:
     runs-on: ubuntu-latest
@@ -126,3 +127,5 @@ jobs:
           "${compose[@]}" restart api worker
           "${compose[@]}" up -d --wait --wait-timeout 180
           "${compose[@]}" exec -T worker wget -qO- http://localhost:8081/health/ready
+      - name: Published-image local quick start
+        run: node tests/deployment/quickstart.smoke.mjs
