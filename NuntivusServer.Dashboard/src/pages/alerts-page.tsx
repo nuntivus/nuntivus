@@ -2,6 +2,7 @@ import { Badge, Button, Card, Flex, Heading, Select, Text, TextField } from '@ra
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { FormErrorText } from '../components/forms/form-feedback'
+import { EntitySelect } from '../components/forms/entity-select'
 import { hasPermission } from '../auth/permissions'
 import { useAppSelector } from '../store/hooks'
 import { useUnsavedChangesGuard } from '../hooks/use-unsaved-changes-guard'
@@ -73,7 +74,8 @@ export function AlertsPage() {
       <Flex gap="2"><Button variant="soft" disabled={rulePage === 1} onClick={() => setRulePage(rulePage - 1)}>Previous rules</Button><Button variant="soft" disabled={!rules.data?.hasNext} onClick={() => setRulePage(rulePage + 1)}>Next rules</Button></Flex>
     </Flex></Card>
     {canWrite ? <Card><form onSubmit={save}><Flex direction="column" gap="3" style={{ maxWidth: 560 }}><Heading size="4">Create rule</Heading>
-      {([['contractId', 'Contract ID'], ['name', 'Rule name'], ['threshold', 'Count threshold (SLO rules use 0)'], ['reminderSeconds', 'Reminder interval in seconds (0 disables)'], ['webhookUrl', 'HTTPS webhook URL (optional)'], ['webhookSecretRef', 'Managed bearer secret reference (optional)']] as const).map(([key, label]) => <Flex direction="column" gap="1" key={key}><Text as="label" htmlFor={`alert-${key}`}>{label}</Text><TextField.Root id={`alert-${key}`} value={draft[key]} disabled={pending} onChange={event => setDraft({ ...draft, [key]: event.target.value })} /></Flex>)}
+      <Flex direction="column" gap="1"><Text as="label" htmlFor="alert-contractId">Contract ID</Text><EntitySelect id="alert-contractId" kind="contract" aria-label="Contract ID" value={draft.contractId} disabled={pending} onChange={contractId => setDraft({ ...draft, contractId })} /></Flex>
+      {([['name', 'Rule name'], ['threshold', 'Count threshold (SLO rules use 0)'], ['reminderSeconds', 'Reminder interval in seconds (0 disables)'], ['webhookUrl', 'HTTPS webhook URL (optional)'], ['webhookSecretRef', 'Managed bearer secret reference (optional)']] as const).map(([key, label]) => <Flex direction="column" gap="1" key={key}><Text as="label" htmlFor={`alert-${key}`}>{label}</Text><TextField.Root id={`alert-${key}`} value={draft[key]} disabled={pending} onChange={event => setDraft({ ...draft, [key]: event.target.value })} /></Flex>)}
       <Select.Root value={draft.signal} onValueChange={signal => setDraft({ ...draft, signal, threshold: signal.startsWith('Slo') ? '0' : '1' })}><Select.Trigger aria-label="Alert signal" /><Select.Content>{['SloSuccess', 'SloLatency', 'DestinationFailures', 'DeadLetters'].map(signal => <Select.Item key={signal} value={signal}>{signal}</Select.Item>)}</Select.Content></Select.Root>
       <Text size="1" color="gray">Firing and recovery are always recorded. Reminders use the configured interval. Webhook delivery is retried with a stable notification ID; receivers should deduplicate.</Text>
       <Button type="submit" disabled={pending}>Create alert rule</Button>

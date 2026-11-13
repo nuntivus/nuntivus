@@ -5,6 +5,8 @@ namespace NuntivusServer.Api.Controllers.Deliveries
 {
     public sealed class DeliveryListApiRequest : PagedRequest
     {
+        public string? Search { get; set; }
+
         public Guid? EventId { get; set; }
 
         public string? CustomerId { get; set; }

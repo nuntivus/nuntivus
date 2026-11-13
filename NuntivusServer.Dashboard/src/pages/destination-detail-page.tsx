@@ -4,7 +4,7 @@ import { NavLink, useParams, useSearchParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { DetailPageHeader } from '../components/states/detail-page-header'
 import { DetailLoadingState } from '../components/states/detail-loading-state'
-import { EventsIcon, OverviewIcon } from '../components/icons/nav-icons'
+import { EventsIcon } from '../components/icons/nav-icons'
 import { DestinationConfigurationForm } from '../features/contracts/destination-forms/destination-configuration-form'
 import { normalizeConfiguration } from '../features/contracts/destination-forms/normalize-configuration'
 import { hydrateDestinationForm, mergeDestinationConfiguration } from '../features/contracts/destination-forms/stored-configuration'
@@ -161,13 +161,9 @@ export function DestinationDetailPage() {
   const { currentUser } = useAppSelector(state => state.auth)
   const canWrite = hasPermission(currentUser, 'contracts.write')
   const query = useDestinationDetailQuery(id)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [selectedTab, setSelectedTab] = useState<'overview' | 'configuration'>(
-    searchParams.get('edit') === '1' && canWrite ? 'configuration' : 'overview')
-  const editing = canWrite && (editingId === id || searchParams.get('edit') === '1')
+  const [editorRevision, setEditorRevision] = useState(0)
   const closeEditor = () => {
-    setEditingId(null)
-    setSelectedTab('overview')
+    setEditorRevision(previous => previous + 1)
     if (searchParams.has('edit')) setSearchParams(previous => { const next = new URLSearchParams(previous); next.delete('edit'); return next }, { replace: true })
   }
   if (!id) return <Card><Text color="red">Invalid Destination ID.</Text></Card>
@@ -183,33 +179,9 @@ export function DestinationDetailPage() {
     <div className="source-detail-top">
       <DetailPageHeader title={item.name} description="Shared destination configuration and contract usage." icon={EventsIcon}
         actions={<><Badge color={statusColor}>{status}</Badge><Button asChild variant="soft"><NavLink to="/destinations">← Back to Destinations</NavLink></Button></>} />
-      <div className="source-detail-tabs" role="tablist" aria-label="Destination sections">
-        <button type="button" role="tab" id="destination-tab-overview" aria-controls="destination-panel-overview" aria-selected={selectedTab === 'overview'} onClick={() => setSelectedTab('overview')}>Overview</button>
-        <button type="button" role="tab" id="destination-tab-configuration" aria-controls="destination-panel-configuration" aria-selected={selectedTab === 'configuration'} onClick={() => {
-          if (canWrite) setEditingId(item.id)
-          setSelectedTab('configuration')
-        }}>Configuration</button>
-      </div>
     </div>
-    <div id="destination-panel-overview" role="tabpanel" aria-labelledby="destination-tab-overview" className="source-detail-content" hidden={selectedTab !== 'overview'}>
-      <Card className="source-overview-card">
-        <Heading size="4" className="source-section-title"><OverviewIcon /> Destination Overview</Heading>
-        <div className="source-overview-fields">
-          <div><Text size="2" color="gray">Destination ID</Text><Text size="2">{item.id}</Text></div>
-          <div><Text size="2" color="gray">Type</Text><Text size="2">{normalizeDestinationType(item.type) ?? String(item.type)}</Text></div>
-          <div><Text size="2" color="gray">Status</Text><Badge color={statusColor}>{status}</Badge></div>
-          <div><Text size="2" color="gray">Description</Text><Text size="2">{item.description || '—'}</Text></div>
-        </div>
-        <div className="source-overview-dates">
-          <div><Text size="2" color="gray">Created</Text><Text size="2">{new Date(item.createdAt).toLocaleString()}</Text></div>
-          <div><Text size="2" color="gray">Last updated</Text><Text size="2">{new Date(item.updatedAt).toLocaleString()}</Text></div>
-        </div>
-        <Text as="p" size="2" color="gray">Edits here apply to new links or explicitly refreshed contract snapshots.</Text>
-      </Card>
-      {canWrite && <Button style={{ alignSelf: 'start' }} onClick={() => { setEditingId(item.id); setSelectedTab('configuration') }}>{item.configured ? 'Edit destination' : 'Configure destination'}</Button>}
-    </div>
-    <div id="destination-panel-configuration" role="tabpanel" aria-labelledby="destination-tab-configuration" className="source-detail-content" hidden={selectedTab !== 'configuration'}>
-      {editing ? <DestinationEditor key={`${item.id}-${item.updatedAt}`} item={item} onCancel={closeEditor} /> : <ConfigurationDetails item={item} />}
+    <div className="source-detail-content">
+      {canWrite ? <DestinationEditor key={`${item.id}-${item.updatedAt}-${editorRevision}`} item={item} onCancel={closeEditor} /> : <ConfigurationDetails item={item} />}
     </div>
   </div>
 }

@@ -357,6 +357,18 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                 var where = new StringBuilder(" WHERE 1 = 1");
                 var parameters = new DynamicParameters();
 
+                if (query.Id.HasValue)
+                {
+                    where.Append(" AND e.id = @Id");
+                    parameters.Add("Id", query.Id.Value);
+                }
+
+                if (!string.IsNullOrWhiteSpace(query.Search))
+                {
+                    where.Append(" AND (e.id::text ILIKE @Search OR e.type ILIKE @Search OR e.idempotency_key ILIKE @Search)");
+                    parameters.Add("Search", $"%{query.Search.Trim()}%");
+                }
+
                 if (!string.IsNullOrWhiteSpace(query.Type))
                 {
                     where.Append(" AND e.type = @Type");

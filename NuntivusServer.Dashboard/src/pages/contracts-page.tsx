@@ -13,6 +13,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { EntityReference } from '../components/links/entity-reference'
+import { EntitySelect } from '../components/forms/entity-select'
 import { PowerIcon, SearchIcon, TestEventIcon } from '../components/icons/nav-icons'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
@@ -305,12 +306,13 @@ export function ContractsPage() {
                 </Flex>
               ) : null}
 
-              <TextField.Root
-                placeholder="Filter customer id"
+              <EntitySelect kind="customer"
+                aria-label="Customer ID"
+                placeholder="Filter customer"
                 value={customerIdParam}
-                onChange={(event) =>
+                onChange={(value) =>
                   updateParams({
-                    customerId: event.target.value.trim() || null,
+                    customerId: value || null,
                     page: '1',
                   })
                 }

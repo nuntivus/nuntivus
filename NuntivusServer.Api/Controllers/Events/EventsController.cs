@@ -53,7 +53,9 @@ namespace NuntivusServer.Api.Controllers.Events
                 request.SortBy,
                 request.SortDirection,
                 request.Page,
-                request.PageSize);
+                request.PageSize,
+                request.Search,
+                request.Id);
 
             var result = await _eventQueries.ListAsync(query, cancellationToken);
             return result.ToPagedOk(HttpContext, MapEvent);

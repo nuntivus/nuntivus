@@ -26,20 +26,19 @@ async function openPage(permissions, handler) {
     return { browser, page }
 }
 
-test('invalid delivery event IDs stay on the filter and never call the API', async () => {
+test('invalid delivery event IDs from links stay on the filter and never call the API', async () => {
     let requests = 0
     const { browser, page } = await openPage(['deliveries.read'], async (route, url) => {
         if (url.pathname === '/v1/deliveries') requests++
         return false
     })
     try {
-        await page.goto(`${appUrl}/deliveries`)
-        await page.getByRole('textbox', { name: 'Event ID' }).waitFor()
+        await page.goto(`${appUrl}/deliveries?eventId=not-a-guid`)
+        await page.getByRole('combobox', { name: 'Event ID', exact: true }).waitFor()
         const beforeSubmit = requests
-        await page.getByRole('textbox', { name: 'Event ID' }).fill('not-a-guid')
         await page.getByRole('button', { name: 'Apply filters' }).click()
         assert.equal(await page.getByRole('alert').first().textContent(), 'Event ID must be a valid GUID.')
-        assert.equal(new URL(page.url()).searchParams.has('eventId'), false)
+        assert.equal(new URL(page.url()).searchParams.get('eventId'), 'not-a-guid')
         assert.equal(requests, beforeSubmit)
         assert.equal(await page.locator('.global-error').count(), 0)
     } finally { await browser.close() }

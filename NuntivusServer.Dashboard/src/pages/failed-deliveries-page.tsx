@@ -15,6 +15,7 @@ import { hasPermission } from '../auth/permissions'
 import { ErrorPreview } from '../components/errors/error-preview'
 import { DataExportButtons } from '../components/exports/data-export-buttons'
 import { FieldErrorText } from '../components/forms/form-feedback'
+import { EntitySelect } from '../components/forms/entity-select'
 import { EntityReference } from '../components/links/entity-reference'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
@@ -190,19 +191,19 @@ export function FailedDeliveriesPage() {
             <Heading size="4">Filters</Heading>
 
             <Flex wrap="wrap" gap="2">
-              <TextField.Root
+              <EntitySelect kind="customer"
                 aria-label="Customer ID"
                 placeholder="Customer ID"
                 value={customerIdInput}
-                onChange={(event) => setCustomerIdInput(event.target.value)}
+                onChange={setCustomerIdInput}
               />
-              <TextField.Root
+              <EntitySelect kind="contract"
                 aria-label="Contract ID"
                 aria-invalid={!!contractIdError}
                 aria-describedby={contractIdError ? 'failed-contract-id-error' : undefined}
                 placeholder="Contract ID"
                 value={contractIdInput}
-                onChange={(event) => { setContractIdInput(event.target.value); setContractIdError(null) }}
+                onChange={(value) => { setContractIdInput(value); setContractIdError(null) }}
               />
               <FieldErrorText id="failed-contract-id-error" message={contractIdError} />
               <TextField.Root

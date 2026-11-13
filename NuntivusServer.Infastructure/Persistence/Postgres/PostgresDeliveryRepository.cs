@@ -379,6 +379,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         LIMIT 1
                     ) lf ON TRUE
                     WHERE (@EventId IS NULL OR d.event_id = @EventId)
+                        AND (@Search IS NULL OR d.id::text ILIKE @Search OR d.event_type ILIKE @Search)
                         AND (@CustomerId IS NULL OR d.customer_id = @CustomerId)
                         AND (@ContractId IS NULL OR d.contract_id = @ContractId)
                         AND (@DestinationType IS NULL OR d.destination_type = @DestinationType)
@@ -401,6 +402,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     SELECT COUNT(*)
                     FROM deliveries d
                     WHERE (@EventId IS NULL OR d.event_id = @EventId)
+                        AND (@Search IS NULL OR d.id::text ILIKE @Search OR d.event_type ILIKE @Search)
                         AND (@CustomerId IS NULL OR d.customer_id = @CustomerId)
                         AND (@ContractId IS NULL OR d.contract_id = @ContractId)
                         AND (@DestinationType IS NULL OR d.destination_type = @DestinationType)
@@ -427,6 +429,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     new
                     {
                         query.EventId,
+                        Search = string.IsNullOrWhiteSpace(query.Search) ? null : $"%{query.Search.Trim()}%",
                         CustomerId = string.IsNullOrWhiteSpace(query.CustomerId) ? null : query.CustomerId,
                         query.ContractId,
                         DestinationType = string.IsNullOrWhiteSpace(query.DestinationType) ? null : query.DestinationType,

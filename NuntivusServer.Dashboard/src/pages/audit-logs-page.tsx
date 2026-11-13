@@ -14,6 +14,7 @@ import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { JsonViewer } from '../components/json/json-viewer'
 import { EntityReference } from '../components/links/entity-reference'
+import { EntitySelect } from '../components/forms/entity-select'
 import { EyeIcon } from '../components/icons/nav-icons'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
@@ -228,32 +229,32 @@ export function AuditLogsPage() {
                 value={actorIdInput}
                 onChange={(event) => setActorIdInput(event.target.value)}
               />
-              <TextField.Root
+              <EntitySelect kind="customer"
                 aria-label="Customer ID"
                 placeholder="Customer ID"
                 value={customerIdInput}
-                onChange={(event) => setCustomerIdInput(event.target.value)}
+                onChange={setCustomerIdInput}
               />
             </Flex>
 
             <Flex wrap="wrap" gap="2">
-              <TextField.Root
+              <EntitySelect kind="contract"
                 aria-label="Contract ID"
                 placeholder="Contract ID"
                 value={contractIdInput}
-                onChange={(event) => setContractIdInput(event.target.value)}
+                onChange={setContractIdInput}
               />
-              <TextField.Root
+              <EntitySelect kind="delivery"
                 aria-label="Delivery ID"
                 placeholder="Delivery ID"
                 value={deliveryIdInput}
-                onChange={(event) => setDeliveryIdInput(event.target.value)}
+                onChange={setDeliveryIdInput}
               />
-              <TextField.Root
+              <EntitySelect kind="event"
                 aria-label="Event ID"
                 placeholder="Event ID"
                 value={eventIdInput}
-                onChange={(event) => setEventIdInput(event.target.value)}
+                onChange={setEventIdInput}
               />
               <TextField.Root
                 aria-label="Operation ID"

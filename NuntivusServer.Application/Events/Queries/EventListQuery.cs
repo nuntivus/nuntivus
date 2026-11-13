@@ -12,5 +12,7 @@ namespace NuntivusServer.Application.Events.Queries
         string? SortBy,
         string? SortDirection,
         int Page,
-        int PageSize);
+        int PageSize,
+        string? Search = null,
+        Guid? Id = null);
 }

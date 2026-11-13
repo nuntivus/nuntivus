@@ -5,6 +5,10 @@ namespace NuntivusServer.Api.Controllers.Events
 {
     public sealed class EventListApiRequest : PagedRequest
     {
+        public Guid? Id { get; set; }
+
+        public string? Search { get; set; }
+
         public string? Type { get; set; }
 
         public string? Source { get; set; }

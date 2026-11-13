@@ -73,7 +73,8 @@ namespace NuntivusServer.Api.Controllers.Deliveries
                 request.SortBy,
                 request.SortDirection,
                 request.Page,
-                request.PageSize);
+                request.PageSize,
+                request.Search);
 
             var result = await _queries.ListAsync(query, cancellationToken);
             return result.ToPagedOk(HttpContext);

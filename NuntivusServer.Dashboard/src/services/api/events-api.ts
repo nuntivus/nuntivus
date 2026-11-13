@@ -30,6 +30,8 @@ export interface EventListItem {
 }
 
 export interface EventListQuery {
+  id?: string
+  search?: string
   type?: string
   source?: string
   occurredFrom?: string
@@ -61,6 +63,8 @@ export interface ReplayHistoryItem {
 
 export async function listEvents(query: EventListQuery, options?: ApiRequestOptions) {
   return apiGet<PagedResponse<EventListItem>>('/v1/events', {
+    id: query.id?.trim() || null,
+    search: query.search?.trim() || null,
     type: query.type?.trim() ? query.type.trim() : null,
     source: query.source?.trim() ? query.source.trim() : null,
     occurredFrom: query.occurredFrom ?? null,

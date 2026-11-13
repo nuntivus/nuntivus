@@ -14,7 +14,8 @@ for (const role of ['Operator', 'Viewer']) {
       await page.route('https://localhost:7123/**', async route => {
         const url = new URL(route.request().url())
         let body = { items: [], page: 1, pageSize: 20, totalCount: 0, hasNext: false }
-        if (url.pathname === '/v1/admin/users/me') body = { subject: 'export-user', roles: [role], permissions: ['delivery-failures.read', 'deliveries.read'] }
+        if (url.pathname === '/v1/admin/users/me') body = { subject: 'export-user', roles: [role], permissions: ['delivery-failures.read', 'deliveries.read', 'customers.read'] }
+        else if (url.pathname === '/v1/customers') body = { ...body, items: [{ id: 'unapplied-customer', name: 'Unapplied customer' }] }
         else if (url.pathname === '/v1/exports/deliveries') {
           exports.push(url)
           await route.fulfill({ status: 200, contentType: 'text/csv', body: '"id"\r\n' })
@@ -25,7 +26,8 @@ for (const role of ['Operator', 'Viewer']) {
       await page.goto(`${appUrl}/deliveries/failures?customerId=customer-1&contractId=${contract}&failureCategory=Timeout&status=Dead&page=2&pageSize=50&sortDirection=desc`)
       await page.getByRole('heading', { name: 'Failures', exact: true }).waitFor()
       if (role === 'Viewer') { assert.equal(await page.getByRole('button', { name: 'Export CSV', exact: true }).count(), 0); return }
-      await page.getByRole('textbox', { name: 'Customer ID', exact: true }).fill('unapplied-customer')
+      await page.getByRole('combobox', { name: 'Customer ID', exact: true }).click()
+      await page.getByRole('option', { name: /Unapplied customer/ }).click()
       const download = page.waitForEvent('download')
       await page.getByRole('button', { name: 'Export CSV', exact: true }).click()
       assert.equal((await download).suggestedFilename(), 'deliveries.csv')

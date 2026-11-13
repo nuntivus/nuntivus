@@ -485,6 +485,39 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task List_deliveries_searches_ids_and_event_types_with_matching_counts()
+        {
+            var now = DateTimeOffset.UtcNow;
+            var (eventId, contractId, customerId) = await SeedGraphAsync(now);
+            var secondEventId = await SeedEventAsync(now);
+            var thirdEventId = await SeedEventAsync(now);
+            var target = Guid.NewGuid();
+            await InsertDeliveryAsync(Guid.NewGuid(), eventId, contractId, customerId, "Pending", 0, now, now);
+            await InsertDeliveryAsync(Guid.NewGuid(), secondEventId, contractId, customerId, "Pending", 0, now, now);
+            await InsertDeliveryAsync(target, thirdEventId, contractId, customerId, "Pending", 0, now, now);
+            await using var connection = new NpgsqlConnection(_fixture.ConnectionString);
+            await connection.ExecuteAsync("UPDATE deliveries SET event_type = 'invoices.paid' WHERE id = @Id;", new { Id = target });
+
+            var page1 = await _client.GetFromJsonAsync<PagedResponse<DeliveryQueryDto>>("/v1/deliveries?search=ORDERS&pageSize=1&page=1");
+            var page2 = await _client.GetFromJsonAsync<PagedResponse<DeliveryQueryDto>>("/v1/deliveries?search=ORDERS&pageSize=1&page=2");
+            Assert.Equal(2L, page1!.TotalCount);
+            Assert.True(page1.HasNext);
+            Assert.Equal(2L, page2!.TotalCount);
+            Assert.False(page2.HasNext);
+            Assert.NotEqual(Assert.Single(page1.Items).Id, Assert.Single(page2.Items).Id);
+
+            foreach (var search in new[] { target.ToString("D")[..8], "INVOICES" })
+            {
+                var result = await _client.GetFromJsonAsync<PagedResponse<DeliveryQueryDto>>($"/v1/deliveries?search={search}&customerId={customerId}&pageSize=1");
+                Assert.Equal(1L, result!.TotalCount);
+                Assert.Equal(target, Assert.Single(result.Items).Id);
+            }
+            var noMatches = await _client.GetFromJsonAsync<PagedResponse<DeliveryQueryDto>>($"/v1/deliveries?search={Uri.EscapeDataString("' OR 1=1 --")}");
+            Assert.Equal(0L, noMatches!.TotalCount);
+            Assert.Empty(noMatches.Items);
+        }
+
+        [Fact]
         public async Task List_deliveries_includes_attempt_summary_and_latest_failure()
         {
             var now = DateTimeOffset.UtcNow;

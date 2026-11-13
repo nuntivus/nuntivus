@@ -68,14 +68,8 @@ test('source list Edit opens the detail form and saves changes in place', async 
     await page.getByRole('link', { name: 'Edit' }).click()
     await page.getByRole('heading', { name: 'HTTP Source Configuration' }).waitFor()
     assert.match(page.url(), /\/sources\/source-1\?edit=1$/)
-    assert.equal(await page.getByRole('tab', { name: 'Configuration' }).getAttribute('aria-selected'), 'true')
-    await page.getByRole('tab', { name: 'Overview' }).click()
-    await page.getByRole('heading', { name: 'Source Overview' }).waitFor()
-    assert.equal(await page.getByRole('heading', { name: 'HTTP Source Configuration' }).isVisible(), false)
-    await page.getByRole('tab', { name: 'Events' }).click()
+    assert.equal(await page.getByRole('tab').count(), 0)
     await page.getByRole('heading', { name: 'HTTP ingestion' }).waitFor()
-    assert.equal(await page.getByRole('heading', { name: 'Source Overview' }).isVisible(), false)
-    await page.getByRole('tab', { name: 'Configuration' }).click()
     const nameBox = await page.getByRole('textbox', { name: /Name/ }).boundingBox()
     const typeBox = await page.getByRole('combobox', { name: 'Source type' }).boundingBox()
     assert.ok(nameBox && typeBox && typeBox.x > nameBox.x)
@@ -87,12 +81,11 @@ test('source list Edit opens the detail form and saves changes in place', async 
     await page.getByRole('textbox', { name: /Name/ }).fill('Updated source')
     await page.getByText('Advanced Settings', { exact: true }).click()
     await page.getByRole('combobox', { name: 'Source authentication' }).waitFor()
-    await page.getByRole('tab', { name: 'Overview' }).click()
-    await page.getByRole('tab', { name: 'Configuration' }).click()
     assert.equal(await page.getByRole('textbox', { name: /Name/ }).inputValue(), 'Updated source')
     await page.getByRole('button', { name: 'Save changes' }).click()
-    await page.getByRole('tab', { name: 'Overview' }).waitFor()
-    await page.getByRole('heading', { name: 'Source Overview' }).waitFor()
+    await page.waitForURL(/\/sources\/source-1$/)
+    await page.getByRole('heading', { name: 'Updated source', exact: true }).waitFor()
+    await page.getByRole('heading', { name: 'HTTP Source Configuration' }).waitFor()
     assert.equal(requests[0].name, 'Updated source')
     assert.doesNotMatch(page.url(), /edit=1/)
   } finally { await browser.close() }
@@ -105,25 +98,21 @@ test('source creation and editing require write permission', async () => {
     await page.getByText(/permission|access denied|forbidden/i).first().waitFor()
     assert.equal(await page.getByRole('button', { name: 'Create source' }).count(), 0)
     await page.goto(`${appUrl}/sources/source-1?edit=1`)
-    await page.getByRole('heading', { name: 'Source Overview' }).waitFor()
+    await page.getByRole('heading', { name: 'HTTP_API configuration', exact: true }).waitFor()
     assert.equal(await page.getByRole('button', { name: 'Save changes' }).count(), 0)
   } finally { await browser.close() }
 })
 
-test('destination detail editor uses the Source layout and keeps edits across tabs', async () => {
+test('destination detail directly shows its editor using the Source layout', async () => {
   const { browser, page } = await openApp()
   try {
     await page.goto(`${appUrl}/destinations/destination-1?edit=1`)
     await page.getByRole('heading', { name: 'Http Destination Configuration' }).waitFor()
-    assert.equal(await page.getByRole('tab', { name: 'Configuration' }).getAttribute('aria-selected'), 'true')
+    assert.equal(await page.getByRole('tab').count(), 0)
     const name = await page.getByRole('textbox', { name: /Name/ }).boundingBox()
     const type = await page.getByRole('textbox', { name: 'Type' }).boundingBox()
     assert.ok(name && type && type.x > name.x)
     await page.getByRole('textbox', { name: /Name/ }).fill('Updated destination')
-    await page.getByRole('tab', { name: 'Overview' }).click()
-    await page.getByRole('heading', { name: 'Destination Overview' }).waitFor()
-    assert.equal(await page.getByRole('heading', { name: 'Http Destination Configuration' }).isVisible(), false)
-    await page.getByRole('tab', { name: 'Configuration' }).click()
     assert.equal(await page.getByRole('textbox', { name: /Name/ }).inputValue(), 'Updated destination')
     await page.getByText('Advanced Settings', { exact: true }).click()
     const url = await page.getByRole('textbox', { name: 'Destination URL' }).boundingBox()
@@ -144,9 +133,28 @@ test('destination read-only visitors can view configuration but cannot edit', as
   const { browser, page } = await openApp(['contracts.read'])
   try {
     await page.goto(`${appUrl}/destinations/destination-1?edit=1`)
-    await page.getByRole('heading', { name: 'Destination Overview' }).waitFor()
-    await page.getByRole('tab', { name: 'Configuration' }).click()
     await page.getByRole('heading', { name: 'Http configuration' }).waitFor()
+    assert.equal(await page.getByRole('tab').count(), 0)
     assert.equal(await page.getByRole('button', { name: 'Save changes' }).count(), 0)
+  } finally { await browser.close() }
+})
+
+test('source and destination show configuration without tabs or Edit buttons and Cancel resets drafts', async () => {
+  const { browser, page } = await openApp()
+  try {
+    for (const item of [
+      { path: '/sources/source-1', edit: 'Edit source', editor: 'HTTP Source Configuration', name: 'Original source' },
+      { path: '/destinations/destination-1', edit: 'Edit destination', editor: 'Http Destination Configuration', name: 'Webhook' },
+    ]) {
+      await page.goto(`${appUrl}${item.path}`)
+      await page.getByRole('heading', { name: item.editor }).waitFor()
+      assert.equal(await page.getByRole('tab').count(), 0)
+      assert.equal(await page.getByRole('button', { name: item.edit, exact: true }).count(), 0)
+      assert.equal(await page.getByRole('button', { name: 'Configure destination', exact: true }).count(), 0)
+      await page.getByRole('textbox', { name: /Name/ }).fill('Unsaved draft')
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+      await page.getByRole('heading', { name: item.editor }).waitFor()
+      assert.equal(await page.getByRole('textbox', { name: /Name/ }).inputValue(), item.name)
+    }
   } finally { await browser.close() }
 })

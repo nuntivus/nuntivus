@@ -44,6 +44,7 @@ export interface DeliveryListItem {
 }
 
 export interface DeliveryListQuery {
+  search?: string
   eventId?: string
   customerId?: string
   contractId?: string
@@ -96,6 +97,7 @@ export interface DeliveryOperationResponse {
 
 export async function listDeliveries(query: DeliveryListQuery, options?: ApiRequestOptions) {
   return apiGet<PagedResponse<DeliveryListItem>>('/v1/deliveries', {
+    search: query.search?.trim() || null,
     eventId: query.eventId?.trim() ? query.eventId.trim() : null,
     customerId: query.customerId?.trim() ? query.customerId.trim() : null,
     contractId: query.contractId?.trim() ? query.contractId.trim() : null,

@@ -12,9 +12,9 @@ import {
 import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { EntityReference } from '../components/links/entity-reference'
+import { EntitySelect } from '../components/forms/entity-select'
 import { hasPermission } from '../auth/permissions'
 import { ListFeedback } from '../components/lists/list-feedback'
-import { SearchIcon } from '../components/icons/nav-icons'
 import { ListPagination } from '../components/lists/list-pagination'
 import { DetailAction, NavigableTableRow } from '../components/tables/table-actions'
 import { useEventsQuery } from '../features/events/use-events'
@@ -110,6 +110,7 @@ export function EventsPage() {
 
   const query = useMemo<EventListQuery>(
     () => ({
+      id: idParam,
       type: typeParam,
       source: sourceParam,
       occurredFrom: occurredFromParam || undefined,
@@ -122,6 +123,7 @@ export function EventsPage() {
       pageSize: pageSizeParam,
     }),
     [
+      idParam,
       occurredFromParam,
       occurredToParam,
       pageParam,
@@ -183,11 +185,6 @@ export function EventsPage() {
     occurredToParam.trim().length > 0 ||
     receivedFromParam.trim().length > 0 ||
     receivedToParam.trim().length > 0
-  const filteredById = idParam.trim()
-    ? events.filter((item) =>
-      item.id.toLowerCase().includes(idParam.trim().toLowerCase()),
-    )
-    : events
 
   const paging = eventsQuery.data
 
@@ -213,18 +210,13 @@ export function EventsPage() {
                 <label className="filter-label" htmlFor="events-filter-id">
                   Event ID
                 </label>
-                <TextField.Root
+                <EntitySelect kind="event"
                   id="events-filter-id"
-                  size="2"
                   aria-label="Event ID"
                   placeholder="Search by event ID"
                   value={idInput}
-                  onChange={(event) => setIdInput(event.target.value)}
-                >
-                  <TextField.Slot>
-                    <SearchIcon width={15} height={15} />
-                  </TextField.Slot>
-                </TextField.Root>
+                  onChange={setIdInput}
+                />
               </div>
 
               <div className="filter-field">
@@ -245,13 +237,12 @@ export function EventsPage() {
                 <label className="filter-label" htmlFor="events-filter-source">
                   Source
                 </label>
-                <TextField.Root
+                <EntitySelect kind="source"
                   id="events-filter-source"
-                  size="2"
                   aria-label="Source"
-                  placeholder="service name"
+                  placeholder="Select source"
                   value={sourceInput}
-                  onChange={(event) => setSourceInput(event.target.value)}
+                  onChange={setSourceInput}
                 />
               </div>
 
@@ -367,7 +358,7 @@ export function EventsPage() {
             isLoading={eventsQuery.isLoading}
             isError={eventsQuery.isError}
             error={eventsQuery.error}
-            isEmpty={filteredById.length === 0}
+            isEmpty={events.length === 0}
             loadingMessage="Loading events..."
             errorMessage={
               eventsQuery.error instanceof ApiError && eventsQuery.error.status === 403
@@ -432,7 +423,7 @@ export function EventsPage() {
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
-                    {filteredById.map((item) => {
+                    {events.map((item) => {
                       const summary = summarizeDeliveries(item.deliveries)
 
                       return (

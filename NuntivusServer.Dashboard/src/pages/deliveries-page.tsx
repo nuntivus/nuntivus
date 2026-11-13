@@ -7,12 +7,12 @@ import {
   Select,
   Table,
   Text,
-  TextField,
 } from '@radix-ui/themes'
 import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText } from '../components/forms/form-feedback'
+import { EntitySelect } from '../components/forms/entity-select'
 import { EntityReference } from '../components/links/entity-reference'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
@@ -171,32 +171,32 @@ export function DeliveriesPage() {
             <Heading size="4">Filters</Heading>
 
             <Flex wrap="wrap" gap="2">
-              <TextField.Root
+              <EntitySelect kind="event"
                 aria-label="Event ID"
                 aria-invalid={!!filterErrors.eventId}
                 aria-describedby={filterErrors.eventId ? 'delivery-event-id-error' : undefined}
                 placeholder="Event ID"
                 value={eventIdInput}
-                onChange={(event) => {
-                  setEventIdInput(event.target.value)
+                onChange={(value) => {
+                  setEventIdInput(value)
                   setFilterErrors((previous) => ({ ...previous, eventId: null }))
                 }}
               />
               <FieldErrorText id="delivery-event-id-error" message={filterErrors.eventId} />
-              <TextField.Root
+              <EntitySelect kind="customer"
                 aria-label="Customer ID"
                 placeholder="Customer ID"
                 value={customerIdInput}
-                onChange={(event) => setCustomerIdInput(event.target.value)}
+                onChange={setCustomerIdInput}
               />
-              <TextField.Root
+              <EntitySelect kind="contract"
                 aria-label="Contract ID"
                 aria-invalid={!!filterErrors.contractId}
                 aria-describedby={filterErrors.contractId ? 'delivery-contract-id-error' : undefined}
                 placeholder="Contract ID"
                 value={contractIdInput}
-                onChange={(event) => {
-                  setContractIdInput(event.target.value)
+                onChange={(value) => {
+                  setContractIdInput(value)
                   setFilterErrors((previous) => ({ ...previous, contractId: null }))
                 }}
               />

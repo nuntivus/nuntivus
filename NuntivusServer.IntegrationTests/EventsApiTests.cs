@@ -33,6 +33,42 @@ namespace NuntivusServer.IntegrationTests
         public Task DisposeAsync() => Task.CompletedTask;
 
         [Fact]
+        public async Task List_events_supports_search_pagination_and_exact_id()
+        {
+            await SeedEventAsync();
+            await SeedEventAsync();
+            var target = await SeedEventAsync();
+            await using var connection = new NpgsqlConnection(_fixture.ConnectionString);
+            await connection.ExecuteAsync(
+                "UPDATE events SET type = 'invoices.paid', idempotency_key = 'unique-reference' WHERE id = @Id;",
+                new { Id = target });
+
+            var page1 = await _client.GetFromJsonAsync<PagedResponse<EventQueryDto>>("/v1/events?search=ORDERS&pageSize=1&page=1");
+            var page2 = await _client.GetFromJsonAsync<PagedResponse<EventQueryDto>>("/v1/events?search=ORDERS&pageSize=1&page=2");
+            Assert.Equal(2L, page1!.TotalCount);
+            Assert.Single(page1.Items);
+            Assert.True(page1.HasNext);
+            Assert.Equal(2L, page2!.TotalCount);
+            Assert.Single(page2.Items);
+            Assert.False(page2.HasNext);
+            Assert.NotEqual(page1.Items[0].Id, page2.Items[0].Id);
+
+            foreach (var search in new[] { target.ToString("D")[..8], "INVOICES", "unique-reference" })
+            {
+                var result = await _client.GetFromJsonAsync<PagedResponse<EventQueryDto>>($"/v1/events?search={search}&pageSize=1");
+                Assert.Equal(1L, result!.TotalCount);
+                Assert.Equal(target, Assert.Single(result.Items).Id);
+            }
+
+            var exact = await _client.GetFromJsonAsync<PagedResponse<EventQueryDto>>($"/v1/events?id={target:D}&pageSize=1");
+            Assert.Equal(1L, exact!.TotalCount);
+            Assert.Equal(target, Assert.Single(exact.Items).Id);
+            var noMatches = await _client.GetFromJsonAsync<PagedResponse<EventQueryDto>>($"/v1/events?search={Uri.EscapeDataString("' OR 1=1 --")}");
+            Assert.Equal(0L, noMatches!.TotalCount);
+            Assert.Empty(noMatches.Items);
+        }
+
+        [Fact]
         public async Task Replay_existing_event_creates_new_event_and_tracks_lineage()
         {
             var sourceId = await SeedEventAsync();
