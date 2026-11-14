@@ -1,9 +1,11 @@
 import { AlertDialog, Button, Card, Flex, Heading, Spinner, Text, TextField } from '@radix-ui/themes'
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
+import logo from '../assets/nuntivus-logo.svg'
 import { FieldErrorText } from '../components/forms/form-feedback'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { clearAuthError, loginWithCredentials } from '../store/auth-slice'
+import './login-page.css'
 
 export function LoginPage() {
   const [username, setUsername] = useState('')
@@ -39,70 +41,105 @@ export function LoginPage() {
   }
 
   return (
-    <Flex align="center" justify="center" minHeight="100dvh" px="4">
-      <Card size="3" style={{ width: '100%', maxWidth: 560 }}>
-        <form onSubmit={handleSubmit}>
-          <Flex direction="column" gap="4">
-            <Heading size="6">Admin login</Heading>
-            <Text size="2" color="gray">
-              Sign in with your admin username and password.
-            </Text>
-
-            {restoringSession ? (
-              <Flex align="center" gap="2">
-                <Spinner size="2" />
-                <Text size="2" color="gray">
-                  Validating existing session...
-                </Text>
-              </Flex>
-            ) : null}
-
-            {error ? (
-              <AlertDialog.Root open>
-                <AlertDialog.Content maxWidth="520px">
-                  <AlertDialog.Title>Login failed</AlertDialog.Title>
-                  <AlertDialog.Description>{error}</AlertDialog.Description>
-                  <Flex justify="end" mt="4">
-                    <AlertDialog.Action>
-                      <Button variant="soft" onClick={() => dispatch(clearAuthError())}>
-                        Dismiss
-                      </Button>
-                    </AlertDialog.Action>
-                  </Flex>
-                </AlertDialog.Content>
-              </AlertDialog.Root>
-            ) : null}
-
-            <TextField.Root
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              placeholder="Username"
-              disabled={restoringSession}
-              aria-invalid={usernameError ? 'true' : 'false'}
-              aria-describedby={usernameError ? 'login-username-error' : undefined}
-            />
-            <FieldErrorText id="login-username-error" message={usernameError} />
-
-            <TextField.Root
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Password"
-              disabled={restoringSession}
-              aria-invalid={passwordError ? 'true' : 'false'}
-              aria-describedby={passwordError ? 'login-password-error' : undefined}
-            />
-            <FieldErrorText id="login-password-error" message={passwordError} />
-
-            <Button
-              type="submit"
-              disabled={!!usernameError || !!passwordError || status === 'loading' || restoringSession}
-            >
-              {status === 'loading' ? 'Signing in...' : 'Sign in'}
-            </Button>
+    <Flex asChild align="center" justify="center" className="login-page">
+      <main aria-labelledby="login-heading">
+        <Flex direction="column" gap="5" className="login-shell">
+          <Flex direction="column" align="center" gap="2" className="login-brand">
+            <img src={logo} alt="Nuntivus logo" width="72" height="60" className="login-logo" />
+            <Text className="login-brand-name">Nuntivus</Text>
+            <Text size="2" color="gray">Event delivery, under control.</Text>
           </Flex>
-        </form>
-      </Card>
+          <Card size="3" className="login-card">
+            <form onSubmit={handleSubmit} aria-labelledby="login-heading">
+              <Flex direction="column" gap="4">
+                <Flex direction="column" gap="2" mb="2" className="login-heading">
+                  <Heading id="login-heading" size="6">Admin login</Heading>
+                  <Text size="2" color="gray">
+                    Sign in to your Nuntivus dashboard.
+                  </Text>
+                </Flex>
+
+                {restoringSession ? (
+                  <Flex align="center" gap="2">
+                    <Spinner size="2" />
+                    <Text size="2" color="gray">
+                      Validating existing session...
+                    </Text>
+                  </Flex>
+                ) : null}
+
+                {error ? (
+                  <AlertDialog.Root open>
+                    <AlertDialog.Content maxWidth="520px">
+                      <AlertDialog.Title>Login failed</AlertDialog.Title>
+                      <AlertDialog.Description>{error}</AlertDialog.Description>
+                      <Flex justify="end" mt="4">
+                        <AlertDialog.Action>
+                          <Button variant="soft" onClick={() => dispatch(clearAuthError())}>
+                            Dismiss
+                          </Button>
+                        </AlertDialog.Action>
+                      </Flex>
+                    </AlertDialog.Content>
+                  </AlertDialog.Root>
+                ) : null}
+
+                <Flex direction="column" gap="2">
+                  <Text as="label" htmlFor="login-username" size="2" weight="medium">Username</Text>
+                  <TextField.Root
+                    id="login-username"
+                    name="username"
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    size="3"
+                    className="login-field"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    placeholder="Enter your username"
+                    disabled={restoringSession}
+                    aria-invalid={usernameError ? 'true' : 'false'}
+                    aria-describedby={usernameError ? 'login-username-error' : undefined}
+                  />
+                  <FieldErrorText id="login-username-error" message={usernameError} />
+                </Flex>
+
+                <Flex direction="column" gap="2">
+                  <Text as="label" htmlFor="login-password" size="2" weight="medium">Password</Text>
+                  <TextField.Root
+                    id="login-password"
+                    name="password"
+                    autoComplete="current-password"
+                    size="3"
+                    className="login-field"
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Enter your password"
+                    disabled={restoringSession}
+                    aria-invalid={passwordError ? 'true' : 'false'}
+                    aria-describedby={passwordError ? 'login-password-error' : undefined}
+                  />
+                  <FieldErrorText id="login-password-error" message={passwordError} />
+                </Flex>
+
+                <Button
+                  type="submit"
+                  size="3"
+                  className="login-submit"
+                  loading={status === 'loading'}
+                  disabled={!!usernameError || !!passwordError || status === 'loading' || restoringSession}
+                >
+                  {status === 'loading' ? 'Signing in...' : 'Sign in'}
+                </Button>
+              </Flex>
+            </form>
+          </Card>
+          <Text size="1" className="login-footer">
+            Administrator access only
+          </Text>
+        </Flex>
+      </main>
     </Flex>
   )
 }

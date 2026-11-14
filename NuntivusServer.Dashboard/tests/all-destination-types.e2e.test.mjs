@@ -15,7 +15,7 @@ function field(page, label) {
   return page.locator('.destination-form-field').filter({ has: page.getByText(label, { exact: true }) }).getByRole('textbox')
 }
 for (const [type, numericType, fields, expected] of cases) {
-  test(`${type} Destination creates a draft, saves configuration, hydrates and confirms test requests`, async () => {
+  test(`${type} Destination configures and tests before creation, then hydrates and updates on detail`, async () => {
     const browser = await chromium.launch({ headless: true })
     const page = await browser.newPage()
     const calls = []
@@ -33,7 +33,7 @@ for (const [type, numericType, fields, expected] of cases) {
         else if (path === '/v1/destinations' && method === 'POST') {
           const input = route.request().postDataJSON()
           calls.push({ path, input })
-          destination = { ...input, id: 'destination-1', configured: false, configuration: '{}', enabled: false,
+          destination = { ...input, type: numericType, id: 'destination-1', configured: true, configuration: JSON.stringify(input.configuration), enabled: true,
             createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' }
           body = destination
         } else if (path === '/v1/destinations/destination-1') {
@@ -43,28 +43,37 @@ for (const [type, numericType, fields, expected] of cases) {
         await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
       })
       await page.goto(`${appUrl}/destinations`)
-      await page.getByRole('button', { name: 'Add Destination', exact: true }).click()
-      await page.getByRole('textbox', { name: 'Destination name' }).fill(`${type} destination`)
-      await page.getByRole('combobox', { name: 'Destination type' }).click()
-      assert.deepEqual(await page.getByRole('option').allTextContents(), cases.map(entry => entry[0]))
-      await page.getByRole('option', { name: type, exact: true }).click()
-      await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click()
-      await page.waitForURL(/\/destinations\/destination-1\?edit=1$/)
-      assert.equal(await page.getByRole('alertdialog').count(), 0)
-      assert.equal(calls[0].input.type, numericType)
-      assert.equal(calls[0].input.configuration, undefined)
-      await page.getByText('Advanced Settings', { exact: true }).click()
+      await page.getByRole('link', { name: 'Add Destination', exact: true }).click()
+      await page.waitForURL(/\/destinations\/new$/)
+      await page.getByRole('textbox', { name: /Name/ }).fill(`${type} destination`)
+      const types = page.getByRole('radiogroup', { name: 'Destination type' })
+      assert.deepEqual(await types.getByRole('radio').evaluateAll(inputs => inputs.map(input => input.value)), cases.map(entry => entry[0]))
+      await types.locator(`input[value="${type}"]`).check()
       for (const [label, value] of Object.entries(fields)) await field(page, label).fill(value)
-      await page.getByRole('button', { name: 'Save configuration', exact: true }).click()
+      await page.getByRole('textbox', { name: 'JSON test payload' }).fill('{"probe":true}')
+      await page.getByRole('button', { name: 'Test connection', exact: true }).click()
+      const confirm = page.getByRole('alertdialog')
+      await confirm.getByRole('button', { name: 'Cancel', exact: true }).click()
+      assert.equal(calls.length, 0)
+      await page.getByRole('button', { name: 'Test connection', exact: true }).click()
+      await confirm.getByRole('button', { name: 'Send test request', exact: true }).click()
+      await page.getByRole('status').filter({ hasText: `${type} probe passed` }).waitFor()
+      assert.equal(calls[0].path, '/v1/destinations/test-connection')
+      assert.deepEqual(calls[0].input.payload, { probe: true })
+      for (const [key, value] of Object.entries(expected)) assert.equal(calls[0].input.configuration[key], value)
+      await page.getByRole('button', { name: 'Create destination', exact: true }).click()
       await page.waitForURL(/\/destinations\/destination-1$/)
+      assert.equal(await page.getByRole('alertdialog').count(), 0)
+      assert.equal(calls[1].path, '/v1/destinations')
+      assert.equal(calls[1].input.type, undefined)
       for (const [key, value] of Object.entries(expected)) assert.equal(calls[1].input.configuration[key], value)
       assert.equal(calls[1].input.configuration.type.toLowerCase(), type.toLowerCase())
+      assert.equal(destination.configured, true)
       await page.getByRole('button', { name: 'Save changes' }).waitFor()
       await page.getByText('Advanced Settings', { exact: true }).click()
       for (const [label, value] of Object.entries(fields)) assert.equal(await field(page, label).inputValue(), value)
       await page.getByRole('textbox', { name: 'JSON test payload' }).fill('{"probe":true}')
       await page.getByRole('button', { name: 'Test connection', exact: true }).click()
-      const confirm = page.getByRole('alertdialog')
       await confirm.getByRole('button', { name: 'Cancel', exact: true }).click()
       assert.equal(calls.length, 2)
       await page.getByRole('button', { name: 'Test connection', exact: true }).click()
@@ -73,6 +82,11 @@ for (const [type, numericType, fields, expected] of cases) {
       assert.equal(calls[2].path, '/v1/destinations/destination-1/test-connection')
       assert.deepEqual(calls[2].input.payload, { probe: true })
       for (const [key, value] of Object.entries(expected)) assert.equal(calls[2].input.configuration[key], value)
+      await page.getByRole('textbox', { name: /Name/ }).fill(`${type} updated`)
+      await page.getByRole('button', { name: 'Save changes', exact: true }).click()
+      await page.getByRole('heading', { name: `${type} updated`, exact: true }).waitFor()
+      assert.equal(calls[3].path, '/v1/destinations/destination-1')
+      for (const [key, value] of Object.entries(expected)) assert.equal(calls[3].input.configuration[key], value)
     } finally { await browser.close() }
   })
 }

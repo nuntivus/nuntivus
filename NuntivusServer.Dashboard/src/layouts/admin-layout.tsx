@@ -16,6 +16,7 @@ import {
   type To,
 } from 'react-router-dom'
 import { useState, type ComponentType, type SVGProps } from 'react'
+import logo from '../assets/nuntivus-logo.svg'
 import { useAppContext } from '../context/use-app-context'
 import { hasPermission } from '../auth/permissions'
 import { clearSensitiveClientState } from '../app/auth-security'
@@ -191,9 +192,7 @@ export function AdminLayout() {
       <aside className={`dashboard-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
         <div className="sidebar-inner">
           <div className="sidebar-brand">
-            <span className="sidebar-brand-mark" aria-hidden="true">
-              K
-            </span>
+            <img src={logo} alt="" width="32" height="32" className="sidebar-brand-mark" />
             <span className="sidebar-brand-text">Nuntivus Admin</span>
           </div>
 

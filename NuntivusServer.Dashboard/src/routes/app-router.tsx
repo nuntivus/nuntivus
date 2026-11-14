@@ -32,6 +32,7 @@ const SourcesPage = lazy(() => import('../pages/sources-page').then((module) => 
 const SourceCreatePage = lazy(() => import('../pages/source-create-page').then((module) => ({ default: module.SourceCreatePage })))
 const SourceDetailPage = lazy(() => import('../pages/source-detail-page').then((module) => ({ default: module.SourceDetailPage })))
 const DestinationsPage = lazy(() => import('../pages/destinations-page').then((module) => ({ default: module.DestinationsPage })))
+const DestinationCreatePage = lazy(() => import('../pages/destination-create-page').then((module) => ({ default: module.DestinationCreatePage })))
 const RoutingMapPage = lazy(() => import('../pages/routing-map-page').then((module) => ({ default: module.RoutingMapPage })))
 const DestinationDetailPage = lazy(() => import('../pages/destination-detail-page').then((module) => ({ default: module.DestinationDetailPage })))
 const UserDetailPage = lazy(() => import('../pages/user-detail-page').then((module) => ({ default: module.UserDetailPage })))
@@ -90,6 +91,7 @@ const router = createBrowserRouter(createRoutesFromElements(
                 <Route path="contracts/new" element={<ContractCreatePage />} />
                 <Route path="contracts/:id/edit" element={<ContractEditPage />} />
                 <Route path="sources/new" element={<SourceCreatePage />} />
+                <Route path="destinations/new" element={<DestinationCreatePage />} />
                 <Route path="secrets" element={<SecretsPage />} />
               </Route>
               <Route element={<RequirePermission permissions={['users.read']} />}>

@@ -32,6 +32,11 @@ test('workflow sidebar groups collapse accessibly and keep Settings visible', as
     await page.goto(`${appUrl}/deliveries/failures`)
     const nav = page.getByRole('navigation', { name: 'Primary navigation', exact: true })
     await nav.getByRole('link', { name: 'Failed Deliveries', exact: true }).waitFor()
+    const brand = page.locator('.sidebar-brand')
+    const logo = brand.locator('img')
+    assert.equal(await logo.evaluate(image => image.complete && image.naturalWidth > 0), true)
+    assert.match(await logo.getAttribute('src'), /nuntivus-logo/)
+    assert.equal(await brand.innerText(), 'Nuntivus Admin')
 
     const groups = {
       'Event flow': ['Sources', 'Event Definitions', 'Contracts', 'Destinations', 'Routing map'],

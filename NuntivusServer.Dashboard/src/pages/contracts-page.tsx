@@ -23,6 +23,7 @@ import {
   useDisableContractMutation,
   useEnableContractMutation,
 } from '../features/contracts/use-contracts'
+import { normalizeDestinationType } from '../features/contracts/destination-forms/types'
 import { useBulkSelection } from '../hooks/use-bulk-selection'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
@@ -46,6 +47,14 @@ const destinationValues: DestinationType[] = [
   'RabbitMq',
   'Sqs',
 ]
+
+const destinationLabels: Record<DestinationType, string> = {
+  Http: 'HTTP',
+  Kafka: 'Kafka',
+  Nats: 'NATS',
+  RabbitMq: 'RabbitMQ',
+  Sqs: 'SQS',
+}
 
 export function ContractsPage() {
   const { searchParams, setSearchParams, updateParams } = useUrlQueryParams()
@@ -360,7 +369,7 @@ export function ContractsPage() {
                   <Select.Item value="all">All destination types</Select.Item>
                   {destinationValues.map((value) => (
                     <Select.Item key={value} value={value}>
-                      {value}
+                      {destinationLabels[value]}
                     </Select.Item>
                   ))}
                 </Select.Content>
@@ -467,7 +476,7 @@ export function ContractsPage() {
                     <Table.ColumnHeaderCell>Event types</Table.ColumnHeaderCell>
                     <Table.ColumnHeaderCell>
                       <Button variant="ghost" onClick={() => handleSort('destinationType')}>
-                        Destination
+                        Destination type
                       </Button>
                     </Table.ColumnHeaderCell>
                     <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
@@ -482,6 +491,7 @@ export function ContractsPage() {
                 <Table.Body>
                   {contracts.map((contract) => {
                     const pending = rowActionId === contract.id
+                    const destinationType = normalizeDestinationType(contract.destinationType)
 
                     return (
                       <NavigableTableRow
@@ -499,8 +509,17 @@ export function ContractsPage() {
                         </Table.Cell>
                         <Table.RowHeaderCell>{contract.name ?? contract.id}</Table.RowHeaderCell>
                          <Table.Cell><EntityReference kind="customer" id={contract.customerId} /></Table.Cell>
-                        <Table.Cell>{contract.eventTypes.join(', ') || '-'}</Table.Cell>
-                        <Table.Cell>{contract.destinationType}</Table.Cell>
+                        <Table.Cell>
+                          {contract.eventTypes.length ? contract.eventTypes.map((eventType, index) => (
+                            <span key={eventType}>
+                              {index > 0 ? ', ' : null}
+                              <NavLink to={`/event-definitions/${encodeURIComponent(eventType)}`}>
+                                {eventType}
+                              </NavLink>
+                            </span>
+                          )) : '-'}
+                        </Table.Cell>
+                        <Table.Cell>{destinationType ? destinationLabels[destinationType] : 'Unknown'}</Table.Cell>
                         <Table.Cell>
                           <Badge color={contract.enabled ? 'green' : 'gray'}>
                             {contract.enabled ? 'Enabled' : 'Disabled'}

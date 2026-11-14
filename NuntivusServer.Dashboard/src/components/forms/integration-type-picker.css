@@ -1,0 +1,128 @@
+.integration-type-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.integration-type-legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--text-h);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.integration-type-help {
+  margin: 0;
+}
+
+.integration-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 10px;
+}
+
+.integration-type-card {
+  position: relative;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.integration-type-card > input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.integration-type-surface {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--panel-bg);
+}
+
+.integration-type-card:hover > input:not(:disabled) + .integration-type-surface {
+  border-color: var(--accent-8);
+  background: var(--surface-2);
+}
+
+.integration-type-card > input:checked + .integration-type-surface {
+  border-color: var(--accent-9);
+  background: var(--accent-2);
+  box-shadow: inset 0 0 0 1px var(--accent-9);
+}
+
+.integration-type-card > input:focus-visible + .integration-type-surface {
+  outline: 2px solid var(--accent-9);
+  outline-offset: 3px;
+}
+
+.integration-type-card > input:disabled + .integration-type-surface {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.integration-type-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.integration-type-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.integration-type-name {
+  color: var(--text-h);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.integration-type-description {
+  color: var(--gray-11);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.integration-type-check {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: transparent;
+}
+
+.integration-type-card > input:checked + .integration-type-surface .integration-type-check {
+  border-color: var(--accent-9);
+  background: var(--accent-9);
+  color: var(--accent-contrast);
+}

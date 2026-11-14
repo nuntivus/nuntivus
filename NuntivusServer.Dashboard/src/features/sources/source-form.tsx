@@ -6,6 +6,9 @@ import { useCreateSourceMutation, useUpdateSourceMutation } from './use-sources'
 import { sourceConfiguration, sourceConfigurationFields, sourceFields, sourceTypes, validatePollingJson } from './source-types'
 import { useNotifications } from '../../hooks/use-notifications'
 import { EventsIcon } from '../../components/icons/nav-icons'
+import { IntegrationTypePicker } from '../../components/forms/integration-type-picker'
+import { IntegrationCreationLayout } from '../../components/forms/integration-creation-layout'
+import { sourceTypeOptions } from '../shared/integration-types'
 import { useUnsavedChangesGuard } from '../../hooks/use-unsaved-changes-guard'
 import { ApiError, getApiErrorMessage } from '../../services/api/api-client'
 import { testSourceConnection, type Source, type SourceInput } from '../../services/api/sources-api'
@@ -108,46 +111,47 @@ export function SourceForm({ source, onSaved, onCancel }: SourceFormProps) {
     }
   }
 
-  return <Card id={source ? 'source-configuration' : undefined} className={`settings-editor-card${source ? ' source-configuration-card' : ''}`}><form onSubmit={(event) => void submit(event)} className="settings-editor-form">
+  return <Card id={source ? 'source-configuration' : undefined} className={`settings-editor-card${source ? ' source-configuration-card' : ' integration-creation-card'}`}><form onSubmit={(event) => void submit(event)} className="settings-editor-form">
     {source ? <div className="source-configuration-heading"><span className="source-configuration-icon"><EventsIcon /></span><div><Heading size="4">{source.type === 'HTTP_API' ? 'HTTP Source Configuration' : `${source.type} Source Configuration`}</Heading><Text size="2" color="gray">Configure how this Source receives events. Use managed secrets rather than entering sensitive values in plain text.</Text></div></div>
       : <Heading size="5">Register a new source</Heading>}
-    {!source && <>
-    <Text size="2" color="gray">Configure how this Source receives events. Use managed secrets rather than entering sensitive values in plain text.</Text>
-    <div className="settings-editor-divider">Source details</div>
-    </>}
-    <div className="settings-editor-fields">
-      <label className="settings-editor-field"><span>Name <span aria-hidden="true">*</span></span>
-        <TextField.Root value={draft.name} maxLength={200} required onChange={event => setDraft({ ...draft, name: event.target.value })} />
-        <Text size="1" color="gray">A recognizable name for this Source.</Text>
-      </label>
-      <label className="settings-editor-field">Type
-        <Select.Root value={draft.type} onValueChange={type => setDraft({ ...draft, type, fields: {} })} disabled={!!source}>
-          <Select.Trigger aria-label="Source type" /><Select.Content>{sourceTypes.map(type => <Select.Item key={type} value={type}>{type}</Select.Item>)}</Select.Content>
-        </Select.Root>
-      </label>
-      <label className="settings-editor-field source-description-field">Description
-        <TextArea value={draft.description} maxLength={1000} onChange={event => setDraft({ ...draft, description: event.target.value })} />
-        <Text size="1" color="gray">Optional context for operators.</Text>
-      </label>
-    </div>
-    {source ? <details className="source-advanced-settings"><summary>Advanced Settings</summary><div className="settings-editor-fields">
-      {draft.type === 'HTTP_API' && <Text size="2" color="gray">Authentication and ingestion settings</Text>}
-      {draft.type !== 'HTTP_API' && <Text size="2" color="gray">Connection settings</Text>}
-      {configurationFields()}
-    </div></details> : <>
-    <div className="settings-editor-divider">Connection settings</div>
-    <div className="settings-editor-fields">
-      {configurationFields()}
-    </div>
-    </>}
-    {error && <Text color="red" role="alert">{error}</Text>}
-    <Text size="1" color="gray">Tests use the current configuration and credentials without consuming source data. Broker tests inspect metadata only; HTTP polling uses HEAD, not the configured retrieval method. Inbound HTTP tests validate local configuration only. No messages are acknowledged, offsets advanced, or files/objects moved or deleted.</Text>
-    {testResult?.draft === JSON.stringify(draft) && <Text color={testResult.failed ? 'red' : 'green'} role="status">{testResult.message}</Text>}
-    <div className="settings-editor-actions">
-      <Button type="submit" disabled={pending}>{source ? 'Save changes' : 'Create source'}</Button>
-      <Button type="button" variant="soft" onClick={() => void testConnection()} disabled={testing || pending}>{testing ? 'Testing...' : 'Test connection'}</Button>
-      <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-    </div>
+    {!source && <Text size="2" color="gray">Configure how this Source receives events. Use managed secrets rather than entering sensitive values in plain text.</Text>}
+    <IntegrationCreationLayout picker={!source && <IntegrationTypePicker label="Source type" options={sourceTypeOptions}
+      value={draft.type} onChange={type => setDraft({ ...draft, type, fields: {} })} disabled={pending} />}>
+      {!source && <div className="settings-editor-divider">Source details</div>}
+      <div className="settings-editor-fields">
+        <label className="settings-editor-field"><span>Name <span aria-hidden="true">*</span></span>
+          <TextField.Root value={draft.name} maxLength={200} required onChange={event => setDraft({ ...draft, name: event.target.value })} />
+          <Text size="1" color="gray">A recognizable name for this Source.</Text>
+        </label>
+        {source && <label className="settings-editor-field">Type
+          <Select.Root value={draft.type} onValueChange={type => setDraft({ ...draft, type, fields: {} })} disabled={!!source}>
+            <Select.Trigger aria-label="Source type" /><Select.Content>{sourceTypes.map(type => <Select.Item key={type} value={type}>{type}</Select.Item>)}</Select.Content>
+          </Select.Root>
+        </label>}
+        <label className="settings-editor-field source-description-field">Description
+          <TextArea value={draft.description} maxLength={1000} onChange={event => setDraft({ ...draft, description: event.target.value })} />
+          <Text size="1" color="gray">Optional context for operators.</Text>
+        </label>
+      </div>
+      {source ? <details className="source-advanced-settings"><summary>Advanced Settings</summary><div className="settings-editor-fields">
+        {draft.type === 'HTTP_API' && <Text size="2" color="gray">Authentication and ingestion settings</Text>}
+        {draft.type !== 'HTTP_API' && <Text size="2" color="gray">Connection settings</Text>}
+        {configurationFields()}
+      </div></details> : <>
+      <div className="settings-editor-divider">Connection settings</div>
+      <div className="settings-editor-fields">
+        {configurationFields()}
+      </div>
+      </>}
+      {error && <Text color="red" role="alert">{error}</Text>}
+      <Text size="1" color="gray">Tests use the current configuration and credentials without consuming source data. Broker tests inspect metadata only; HTTP polling uses HEAD, not the configured retrieval method. Inbound HTTP tests validate local configuration only. No messages are acknowledged, offsets advanced, or files/objects moved or deleted.</Text>
+      {testResult?.draft === JSON.stringify(draft) && <Text color={testResult.failed ? 'red' : 'green'} role="status">{testResult.message}</Text>}
+      <div className="settings-editor-actions">
+        <Button type="submit" disabled={pending}>{source ? 'Save changes' : 'Create source'}</Button>
+        <Button type="button" variant="soft" onClick={() => void testConnection()} disabled={testing || pending}>{testing ? 'Testing...' : 'Test connection'}</Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+      </div>
+    </IntegrationCreationLayout>
   </form></Card>
 
   function configurationFields() {

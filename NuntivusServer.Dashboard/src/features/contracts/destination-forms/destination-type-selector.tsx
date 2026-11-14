@@ -1,7 +1,6 @@
-import { Select, Text } from '@radix-ui/themes'
+import { IntegrationTypePicker } from '../../../components/forms/integration-type-picker'
 import type { DestinationType } from '../../../services/api/contracts-api'
-
-const destinationOptions: DestinationType[] = ['Http', 'Kafka', 'Nats', 'RabbitMq', 'Sqs']
+import { destinationTypeOptions } from '../../shared/integration-types'
 
 type DestinationTypeSelectorProps = {
   value: DestinationType
@@ -13,23 +12,7 @@ export function DestinationTypeSelector({
   onChange,
 }: DestinationTypeSelectorProps) {
   return (
-    <div className="destination-form-field">
-      <Text id="destination-type-label" size="2" color="gray">
-        Destination type
-      </Text>
-      <Select.Root
-        value={value}
-        onValueChange={(next) => onChange(next as DestinationType)}
-      >
-        <Select.Trigger aria-labelledby="destination-type-label" />
-        <Select.Content>
-          {destinationOptions.map((option) => (
-            <Select.Item key={option} value={option}>
-              {option}
-            </Select.Item>
-          ))}
-        </Select.Content>
-      </Select.Root>
-    </div>
+    <IntegrationTypePicker label="Destination type" options={destinationTypeOptions}
+      value={value} onChange={onChange} />
   )
 }

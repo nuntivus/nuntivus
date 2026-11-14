@@ -1,0 +1,63 @@
+.settings-editor-card.integration-creation-card {
+  max-width: var(--content-max);
+}
+
+.integration-creation-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+  min-width: 0;
+}
+
+.integration-creation-types {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.integration-creation-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.integration-creation-types .integration-type-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.integration-creation-types .integration-type-surface {
+  flex-direction: row;
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+}
+
+.integration-creation-types .integration-type-icon {
+  width: 32px;
+  height: 32px;
+  flex: none;
+}
+
+.integration-creation-types .integration-type-copy {
+  flex: 1;
+  padding-right: 20px;
+}
+
+.integration-creation-types .integration-type-check {
+  top: 12px;
+  right: 12px;
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 1024px) {
+  .integration-creation-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+}
