@@ -27,6 +27,7 @@ import {
   CopyIcon,
   CustomersIcon,
   DeliveriesIcon,
+  DestinationsIcon,
   EventsIcon,
   FailedDeliveriesIcon,
   RetryIcon,
@@ -386,7 +387,11 @@ export function DeliveryDetailPage() {
             <DeliveryInfoRow icon={ContractsIcon} label="Contract" copyValue={delivery.contractId} onCopy={handleCopy}>
               <EntityReference kind="contract" id={delivery.contractId} />
             </DeliveryInfoRow>
-            <DeliveryInfoRow icon={DeliveriesIcon} label="Destination">{delivery.destinationType}</DeliveryInfoRow>
+            <DeliveryInfoRow icon={DestinationsIcon} label="Destination" copyValue={delivery.destinationId ?? undefined} onCopy={handleCopy}>
+              {delivery.destinationId
+                ? <EntityReference kind="destination" id={delivery.destinationId} />
+                : delivery.destinationType}
+            </DeliveryInfoRow>
           </div>
         </Card>
 

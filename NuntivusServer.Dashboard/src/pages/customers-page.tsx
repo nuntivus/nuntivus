@@ -19,7 +19,7 @@ import { getServerValidation } from '../components/forms/form-validation'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
 import { PowerIcon } from '../components/icons/nav-icons'
-import { DetailAction, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
+import { DetailIndicator, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
 import {
   useCreateCustomerMutation,
   useCustomersQuery,
@@ -576,7 +576,7 @@ export function CustomersPage() {
                               >
                                 <PowerIcon width={15} height={15} />
                               </TableIconButton>
-                              <DetailAction to={`/customers/${encodeURIComponent(customer.id)}`} label={`Open ${customer.name}`} />
+                              <DetailIndicator />
                             </div>
                           </Table.Cell>
                         </NavigableTableRow>

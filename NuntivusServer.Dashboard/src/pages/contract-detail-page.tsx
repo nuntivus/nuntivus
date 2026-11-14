@@ -12,6 +12,7 @@ import { useState, type ComponentType, type ReactNode, type SVGProps } from 'rea
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { ErrorPreview } from '../components/errors/error-preview'
+import { DetailIndicator, NavigableTableRow } from '../components/tables/table-actions'
 import { EntityReference } from '../components/links/entity-reference'
 import { DestinationHealthSummary } from '../components/observability/destination-health-summary'
 import {
@@ -367,16 +368,18 @@ export function ContractDetailPage() {
                   <Table.ColumnHeaderCell>Event type</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Attempts</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell aria-label="Details" />
                 </Table.Row>
               </Table.Header>
               <Table.Body>
                 {(deliveriesQuery.data?.items ?? []).map((delivery) => (
-                  <Table.Row key={delivery.id}>
+                  <NavigableTableRow key={delivery.id} to={`/deliveries/${encodeURIComponent(delivery.id)}`} label={`delivery ${delivery.id}`}>
                     <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
                     <Table.Cell>{delivery.eventType}</Table.Cell>
                     <Table.Cell>{formatDeliveryStatus(delivery.status)}</Table.Cell>
                     <Table.Cell>{delivery.attemptCount}</Table.Cell>
-                  </Table.Row>
+                    <Table.Cell><DetailIndicator /></Table.Cell>
+                  </NavigableTableRow>
                 ))}
               </Table.Body>
             </Table.Root>
@@ -406,15 +409,17 @@ export function ContractDetailPage() {
                   <Table.ColumnHeaderCell>Delivery</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Error</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Attempts</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell aria-label="Details" />
                 </Table.Row>
               </Table.Header>
               <Table.Body>
                 {(failuresQuery.data?.items ?? []).map((failure) => (
-                  <Table.Row key={failure.deliveryId}>
+                  <NavigableTableRow key={failure.deliveryId} to={`/deliveries/${encodeURIComponent(failure.deliveryId)}`} label={`delivery ${failure.deliveryId}`}>
                     <Table.RowHeaderCell>{failure.deliveryId}</Table.RowHeaderCell>
                     <Table.Cell><ErrorPreview error={failure.lastError} /></Table.Cell>
                     <Table.Cell>{failure.attemptCount}</Table.Cell>
-                  </Table.Row>
+                    <Table.Cell><DetailIndicator /></Table.Cell>
+                  </NavigableTableRow>
                 ))}
               </Table.Body>
             </Table.Root>

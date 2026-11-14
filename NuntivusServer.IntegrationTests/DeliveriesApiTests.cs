@@ -385,6 +385,62 @@ namespace NuntivusServer.IntegrationTests
             Assert.Equal("bad request", body.LatestFailure.Error);
         }
 
+        [Theory]
+        [InlineData("linked")]
+        [InlineData("detached")]
+        [InlineData("deleted")]
+        [InlineData("missing")]
+        [InlineData("unbound")]
+        public async Task Delivery_queries_resolve_only_the_recorded_destination_binding(string state)
+        {
+            var deliveryId = await SeedDeadDeliveryAsync();
+            var destinationId = Guid.NewGuid();
+            var otherDestinationId = Guid.NewGuid();
+            var bindingId = Guid.NewGuid();
+            var otherBindingId = Guid.NewGuid();
+            var now = DateTimeOffset.UtcNow;
+
+            await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
+            await conn.OpenAsync();
+            var contractId = await conn.ExecuteScalarAsync<Guid>(
+                "SELECT contract_id FROM deliveries WHERE id = @deliveryId;", new { deliveryId });
+            await conn.ExecuteAsync(
+                """
+                INSERT INTO destinations(id, name, type, configuration, enabled, created_at, updated_at)
+                VALUES (@otherDestinationId, 'Other destination', 'Http', '{}'::jsonb, TRUE, @now, @now),
+                       (@destinationId, 'Recorded destination', 'Http', '{}'::jsonb, TRUE, @now, @now);
+                INSERT INTO contract_destinations(id, contract_id, destination_id, destination_type, destination_config, created_at)
+                VALUES (@otherBindingId, @contractId, @otherDestinationId, 'Http', '{}'::jsonb, @now),
+                       (@bindingId, @contractId, @destinationId, 'Http', '{}'::jsonb, @now);
+                """,
+                new { destinationId, otherDestinationId, bindingId, otherBindingId, contractId, now });
+
+            if (state != "unbound")
+            {
+                await conn.ExecuteAsync(
+                    "UPDATE deliveries SET destination_binding_id = @bindingId WHERE id = @deliveryId;",
+                    new { bindingId, deliveryId });
+            }
+
+            if (state == "detached")
+                await conn.ExecuteAsync("UPDATE contract_destinations SET destination_id = NULL WHERE id = @bindingId;", new { bindingId });
+            else if (state == "deleted")
+                await conn.ExecuteAsync("DELETE FROM destinations WHERE id = @destinationId;", new { destinationId });
+            else if (state == "missing")
+                await conn.ExecuteAsync("DELETE FROM contract_destinations WHERE id = @bindingId;", new { bindingId });
+
+            Guid? expectedDestinationId = state == "linked" ? destinationId : null;
+            var detail = await _client.GetFromJsonAsync<DeliveryQueryDto>($"/v1/deliveries/{deliveryId}");
+            Assert.NotNull(detail);
+            Assert.Equal(expectedDestinationId, detail.DestinationId);
+
+            var list = await _client.GetFromJsonAsync<PagedResponse<DeliveryQueryDto>>($"/v1/deliveries?contractId={contractId}");
+            Assert.NotNull(list);
+            var listed = Assert.Single(list.Items);
+            Assert.Equal(deliveryId, listed.Id);
+            Assert.Equal(expectedDestinationId, listed.DestinationId);
+        }
+
         [Fact]
         public async Task List_deliveries_filters_by_event_customer_contract_status_and_time_range()
         {
@@ -758,7 +814,8 @@ namespace NuntivusServer.IntegrationTests
             DateTimeOffset CreatedAt,
             DateTimeOffset UpdatedAt,
             DeliveryAttemptSummaryDto AttemptSummary,
-            DeliveryLatestFailureDto? LatestFailure);
+            DeliveryLatestFailureDto? LatestFailure,
+            Guid? DestinationId);
         private sealed record DeliveryAttemptSummaryDto(
             int TotalAttempts,
             int SuccessfulAttempts,

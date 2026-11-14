@@ -25,7 +25,7 @@ redact passwords, tokens, signing/encryption keys, and customer payloads.
 
 See [production configuration](docs/self-hosting/production-configuration.md).
 
-## Before public publication
+## Repository and release scanning
 
 Scan the full available Git history, not only the latest files. From the repository root:
 
@@ -44,6 +44,11 @@ For real credentials, revoke/rotate them at their provider, update runtime secre
 configuration, and assess exposure. Deleting a file does not invalidate a credential.
 Do not paste findings into public issues or automatically rewrite shared Git history.
 History cleanup requires owner coordination and does not replace rotation.
+
+For a new repository without the old history, follow the
+[clean publication guide](docs/publication-readiness.md). Scan the exported
+directory before its initial commit and the new repository's history before
+pushing. An export is not a security review.
 
 ## Manual GitHub settings
 

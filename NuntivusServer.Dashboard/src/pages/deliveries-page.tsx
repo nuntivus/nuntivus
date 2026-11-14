@@ -16,7 +16,7 @@ import { EntitySelect } from '../components/forms/entity-select'
 import { EntityReference } from '../components/links/entity-reference'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
-import { DetailAction, NavigableTableRow } from '../components/tables/table-actions'
+import { DetailIndicator, NavigableTableRow } from '../components/tables/table-actions'
 import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
 import { deliveryIdError } from '../features/deliveries/delivery-filter-validation'
 import { useDeliveriesQuery } from '../features/deliveries/use-deliveries'
@@ -406,10 +406,7 @@ export function DeliveriesPage() {
                           <Table.Cell>{delivery.attemptCount}</Table.Cell>
                           <Table.Cell>
                             <div className="table-row-actions">
-                              <DetailAction
-                                to={`/deliveries/${encodeURIComponent(delivery.id)}`}
-                                label="Open delivery"
-                              />
+                              <DetailIndicator />
                             </div>
                           </Table.Cell>
                         </NavigableTableRow>

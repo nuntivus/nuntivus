@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { FormErrorText } from '../../components/forms/form-feedback'
+import { DetailIndicator, NavigableTableRow } from '../../components/tables/table-actions'
 import { getApiErrorMessage } from '../../services/api/api-client'
 import { getSchemaImpact, type ChangeImpactReport } from '../../services/api/change-impact-api'
 
@@ -11,13 +12,14 @@ export function ChangeImpactResults({ report }: { report: ChangeImpactReport }) 
     <Text size="2" color="gray">{report.evidenceNotice}</Text>
     <Text size="2">{report.totalContracts} potentially affected contracts</Text>
     <Table.Root>
-      <Table.Header><Table.Row><Table.ColumnHeaderCell>Contract / customer</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Assessment</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Bindings</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Samples</Table.ColumnHeaderCell></Table.Row></Table.Header>
-      <Table.Body>{report.contracts.map(contract => <Table.Row key={contract.contractId}>
-        <Table.RowHeaderCell><NavLink to={`/contracts/${contract.contractId}`}>{contract.name ?? contract.contractId}</NavLink><br /><Text size="1">{contract.customerId}{contract.enabled ? '' : ' · disabled'}</Text></Table.RowHeaderCell>
+      <Table.Header><Table.Row><Table.ColumnHeaderCell>Contract / customer</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Assessment</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Bindings</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Samples</Table.ColumnHeaderCell><Table.ColumnHeaderCell aria-label="Details" /></Table.Row></Table.Header>
+      <Table.Body>{report.contracts.map(contract => <NavigableTableRow key={contract.contractId} to={`/contracts/${encodeURIComponent(contract.contractId)}`} label={`contract ${contract.name ?? contract.contractId}`}>
+        <Table.RowHeaderCell>{contract.name ?? contract.contractId}<br /><Text size="1">{contract.customerId}{contract.enabled ? '' : ' · disabled'}</Text></Table.RowHeaderCell>
         <Table.Cell><Badge color={contract.status === 'Compatible' ? 'green' : contract.status === 'Breaking' ? 'red' : 'amber'}>{contract.status === 'ReviewRequired' ? 'Review required' : contract.status}</Badge><Text as="p" size="1">{contract.reason}</Text></Table.Cell>
         <Table.Cell>{contract.bindings.map(binding => <Text as="p" size="1" key={binding.id}>{binding.destinationType} · {binding.id}{binding.deliveryEnabled ? '' : ' · disabled'}</Text>)}</Table.Cell>
         <Table.Cell>{contract.samples.length ? contract.samples.map(sample => <Text as="p" size="1" key={sample.eventId}><NavLink to={`/events/${sample.eventId}`}>{sample.accepted ? 'Accepted sample' : 'Rejected sample'}</NavLink>{sample.findings.length ? ` · ${sample.findings.join(', ')}` : ''}</Text>) : <Text size="1">No applicable samples</Text>}</Table.Cell>
-      </Table.Row>)}</Table.Body>
+        <Table.Cell><DetailIndicator /></Table.Cell>
+      </NavigableTableRow>)}</Table.Body>
     </Table.Root>
   </Flex>
 }

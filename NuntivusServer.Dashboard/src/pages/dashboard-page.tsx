@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { ErrorPreview } from '../components/errors/error-preview'
 import { EntityReference } from '../components/links/entity-reference'
-import { DetailAction, NavigableTableRow } from '../components/tables/table-actions'
+import { DetailIndicator, NavigableTableRow } from '../components/tables/table-actions'
 import { DashboardTimeChart } from '../components/observability/dashboard-time-chart'
 import {
   useDashboardOverviewQuery,
@@ -212,7 +212,7 @@ export function DashboardPage() {
                         <Table.Cell className="table-nowrap">{formatTimestamp(item.receivedAt)}</Table.Cell>
                         <Table.Cell className="table-action-column">
                           <div className="table-row-actions">
-                            <DetailAction to={`/events/${encodeURIComponent(item.id)}`} label={`Open event ${item.type}`} />
+                            <DetailIndicator />
                           </div>
                         </Table.Cell>
                       </NavigableTableRow>
@@ -272,7 +272,7 @@ export function DashboardPage() {
                         <Table.Cell><ErrorPreview error={item.lastError} /></Table.Cell>
                         <Table.Cell className="table-action-column">
                           <div className="table-row-actions">
-                            <DetailAction to={`/deliveries/${encodeURIComponent(item.deliveryId)}`} label="Open delivery" />
+                            <DetailIndicator />
                           </div>
                         </Table.Cell>
                       </NavigableTableRow>

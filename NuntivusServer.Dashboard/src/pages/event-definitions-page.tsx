@@ -16,7 +16,7 @@ import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback
 import { FormDialog } from '../components/dialogs/form-dialog'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
-import { DetailAction, NavigableTableRow } from '../components/tables/table-actions'
+import { DetailIndicator, NavigableTableRow } from '../components/tables/table-actions'
 import {
   useCreateEventDefinitionMutation,
   useEventDefinitionsQuery,
@@ -251,10 +251,7 @@ export function EventDefinitionsPage() {
                       <Table.Cell>{new Date(definition.createdAt).toLocaleString()}</Table.Cell>
                       <Table.Cell>
                         <div className="table-row-actions">
-                          <DetailAction
-                            to={`/event-definitions/${encodeURIComponent(definition.eventType)}`}
-                            label={`Open ${definition.eventType}`}
-                          />
+                          <DetailIndicator />
                         </div>
                       </Table.Cell>
                     </NavigableTableRow>

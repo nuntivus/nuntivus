@@ -1,7 +1,8 @@
 <Solution>
   <Folder Name="/doc/">
-    <File Path="../../../Desktop/architecture .png" />
-    <File Path="../../../Desktop/technically flow.png" />
+    <File Path="docs/README.md" />
+    <File Path="docs/architecture.md" />
+    <File Path="docs/development.md" />
   </Folder>
   <Folder Name="/migration/">
     <File Path="migration/001_initial_schema.sql" />
@@ -23,8 +24,10 @@
     <File Path="migration/017_alert_operations.sql" />
   </Folder>
   <Folder Name="/Solution Items/">
-    <File Path="../../../Desktop/AI_CONTEXT.md" />
-    <File Path="../../README.md" />
+    <File Path="README.md" />
+    <File Path="CONTRIBUTING.md" />
+    <File Path="LICENSE" />
+    <File Path="SECURITY.md" />
   </Folder>
   <Project Path="NuntivusServer.Api/NuntivusServer.Api.csproj" />
   <Project Path="NuntivusServer.Application/NuntivusServer.Application.csproj" />

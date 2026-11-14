@@ -4,7 +4,7 @@ import { NavLink } from 'react-router-dom'
 import { FormDialog } from '../../components/dialogs/form-dialog'
 import { TrashIcon } from '../../components/icons/nav-icons'
 import { JsonViewer } from '../../components/json/json-viewer'
-import { TableIconButton } from '../../components/tables/table-actions'
+import { DetailIndicator, NavigableTableRow, TableIconButton } from '../../components/tables/table-actions'
 import { useDestinationsQuery } from '../destinations/use-destinations'
 
 export function ContractDestinationSelector({ value, onChange, disabled, refreshIds, onRefreshChange, detached, retainedDetachedIds, onRetainedDetachedChange, table = false }: {
@@ -38,13 +38,13 @@ export function ContractDestinationSelector({ value, onChange, disabled, refresh
       <thead><tr><th scope="col">Destination name</th><th scope="col">Use latest settings</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
       <tbody>{value.map(id => {
         const item = query.data?.find(destination => destination.id === id)
-        return <tr key={id}>
+        return <NavigableTableRow key={id} unstyled to={item ? `/destinations/${encodeURIComponent(id)}` : undefined} label={`Destination ${item?.name ?? id}`}>
           <td>{item?.name ?? id}</td>
           <td>{item && <label className="contract-selection-check"><Checkbox checked={refreshIds?.includes(id) ?? false} disabled={disabled || !item.enabled} onCheckedChange={checked => toggle(refreshIds, id, checked === true, onRefreshChange)} aria-label={`Use latest settings for ${item.name}`} /> Update on save</label>}</td>
           <td><span className={`contract-selection-status ${item?.enabled ? 'is-active' : ''}`}>{item ? item.enabled ? 'Active' : 'Inactive' : 'Unavailable'}</span></td>
-          <td><span className="contract-selection-actions">{item && <NavLink to={`/destinations/${encodeURIComponent(id)}`} aria-label={`View ${item.name}`}>View</NavLink>}
-            <TableIconButton label={`Remove ${item?.name ?? id} from contract`} disabled={disabled} onClick={() => onChange(value.filter(destinationId => destinationId !== id))} color="red"><TrashIcon /></TableIconButton></span></td>
-        </tr>
+          <td><span className="contract-selection-actions">
+            <TableIconButton label={`Remove ${item?.name ?? id} from contract`} disabled={disabled} onClick={() => onChange(value.filter(destinationId => destinationId !== id))} color="red"><TrashIcon /></TableIconButton>{item && <DetailIndicator />}</span></td>
+        </NavigableTableRow>
       })}{detached?.filter(item => retainedDetachedIds?.includes(item.id) ?? true).map(item => <tr key={item.id}>
         <td>{item.type} destination (no longer in Destinations)</td><td>—</td>
         <td><span className="contract-selection-status">Unlinked</span></td><td><span className="contract-selection-actions"><Button type="button" variant="ghost" size="2" onClick={() => setViewedDetachedId(item.id)} aria-label={`View saved ${item.type} destination settings`}>View</Button>

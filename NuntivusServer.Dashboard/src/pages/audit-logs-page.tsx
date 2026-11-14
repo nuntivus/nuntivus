@@ -18,7 +18,7 @@ import { EntitySelect } from '../components/forms/entity-select'
 import { EyeIcon } from '../components/icons/nav-icons'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
-import { TableIconButton } from '../components/tables/table-actions'
+import { DetailIndicator, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
 import { useAuditLogsQuery } from '../features/audit-logs/use-audit-logs'
 import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
@@ -373,7 +373,7 @@ export function AuditLogsPage() {
                       const expanded = expandedId === item.id
 
                       return (
-                        <Table.Row key={item.id}>
+                        <NavigableTableRow key={item.id} to={item.deliveryId ? `/deliveries/${encodeURIComponent(item.deliveryId)}` : undefined} label={`delivery ${item.deliveryId}`}>
                           <Table.Cell>{new Date(item.createdAt).toLocaleString()}</Table.Cell>
                           <Table.Cell>
                             <Badge color={rowColor(item.category)} variant="soft">
@@ -385,18 +385,19 @@ export function AuditLogsPage() {
                           <Table.Cell><EntityReference kind="customer" id={item.customerId} /></Table.Cell>
                           <Table.Cell><EntityReference kind="contract" id={item.contractId} /></Table.Cell>
                           <Table.Cell title={item.deliveryId ?? undefined}>
-                            {item.deliveryId ? <NavLink to={`/deliveries/${encodeURIComponent(item.deliveryId)}`}>{toShort(item.deliveryId)}</NavLink> : '-'}
+                            {item.deliveryId ? toShort(item.deliveryId) : '-'}
                           </Table.Cell>
                           <Table.Cell>{summarizeDetails(item)}</Table.Cell>
                           <Table.Cell>
-                            <TableIconButton
+                            <div className="table-row-actions"><TableIconButton
                               label={expanded ? 'Hide audit payload' : 'View audit payload'}
                               onClick={() => setExpandedId(expanded ? null : item.id)}
                             >
                               <EyeIcon width={15} height={15} />
                             </TableIconButton>
+                            {item.deliveryId && <DetailIndicator />}</div>
                           </Table.Cell>
-                        </Table.Row>
+                        </NavigableTableRow>
                       )
                     })}
                   </Table.Body>

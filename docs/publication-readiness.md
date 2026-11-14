@@ -1,62 +1,107 @@
-# Public-alpha publication readiness
+# Publishing a clean public repository
 
-## Scope
+Use a separate directory and a fresh initial commit on `master`. Do not delete
+the original `.git` directory, rewrite its history, or change its remote.
+Publishing the source publicly is separate from deploying it publicly: the
+development and quick-start stacks must remain local only.
 
-The approved Apache 2.0 publication remediation is implemented locally. This is
-an evidence-based public-alpha assessment, not a production-security certification
-or a legal clearance of contributor/asset ownership.
+## 1. Review what will be published
 
-## Verified results
+- Confirm ownership of contributed code/assets and keep the Apache 2.0 license
+  and required third-party notices. Starting fresh does not remove obligations.
+- Review configuration, HTTP examples, fixtures, documentation, and images for
+  credentials, private endpoints, personal data, and customer payloads.
+- Keep source, tests, SQL migrations, lockfiles, Docker configuration, and CI.
+  The existing project folders are application layers, not generated clutter.
+- Do not copy `.vs`, `bin`, `obj`, `node_modules`, `dist`, test results, logs,
+  `.env`, user settings, database dumps, or backups. Ignore rules cover these.
+- The committed development credentials and deterministic sample keys are
+  local-only examples. Never reuse them in production.
 
-- Workspace build, clean-snapshot locked NuGet restore, Release API/Worker builds,
-  and API/Worker publish succeed.
-- 295 unit tests and 337 integration tests pass, including real-NATS duplicate
-  subject binding/create/update and RabbitMQ exclusive-queue regressions.
-- Frontend clean `npm ci`, lint, build, 29 non-browser tests, and 57 browser
-  regressions pass. Browser regressions mock API boundaries.
-- All nine project transitive NuGet audits and both frontend production/full
-  audits report zero known vulnerabilities at validation time. This is not proof
-  of vulnerability absence; a transitive CryptoJS deprecation remains an upstream
-  maintenance consideration.
-- Workflows pass actionlint 1.7.12. Local Markdown target checks and whitespace
-  checks pass. Hosted GitHub workflows have not yet run.
-- Redacted Gitleaks 8.30.1 checks pass for 92 locally available history commits
-  and staged pending changes in a separate clean clone. Exceptions are limited
-  to the exact deterministic development sample and one historical test identifier.
-- Fresh disposable Compose startup applies migrations and reaches API/Worker
-  readiness. Restart with persisted events/deliveries remains healthy.
-- Real-container smoke verifies initial admin creation/audit, repeated-bootstrap
-  refusal, login, anonymous administration denial, Source-token enforcement,
-  idempotent ingestion, and Worker delivery to a controlled receiver.
-- Disposable production startup confirms PostgreSQL/NATS have no host bindings,
-  HTTP administration redirects to HTTPS, and explicitly trusted forwarded HTTPS
-  reaches authentication. Real external proxy certificates were not tested.
-- Windows PowerShell production backup/restore verifies file hashes, restores
-  changed database data from clean SQL and the offline JetStream archive, and
-  recovers readiness. This small synthetic check is not a large-data restore test.
-- The documented local-image `upgrade -Build` path rebuilds locked images,
-  updates the image tag, and recovers both services' readiness. Registry pulls
-  and rollback across incompatible database migrations were not certified.
-- Apache license files are present in both images and match both publish outputs.
+## 2. Export a clean working copy
 
-The repeatable development-container smoke uses
-`tests/deployment/compose.smoke.yml` to avoid host-port collisions and
-`node tests/deployment/smoke.mjs` for the authenticated flow. Run it only against
-an empty disposable database; it intentionally creates the initial administrator.
+From the original repository root, using PowerShell 5.1+ and Git:
 
-## Owner actions before publication
+```powershell
+.\scripts\export-public-repository.ps1 -Destination ..\nuntivus-public -AdditionalPaths scripts/export-public-repository.ps1,tests/deployment/export-public-repository.test.ps1
+```
 
-1. Confirm rights to all contributions/assets, the license change, and relevant
-   third-party attribution/distribution requirements.
-2. Enable hosted private vulnerability reporting, secret scanning/push protection,
-   dependency alerts/review, branch protections, and least-privilege release rules
-   where supported; repository files do not configure these settings.
-3. Review all intended release branches/tags and artifacts for secrets. The local
-   history scan covers available refs, not unknown/unfetched history.
-4. Use independent runtime keys/passwords and a real trusted HTTPS proxy. Preserve
-   the encryption key with backups; changing it alone cannot decrypt old secrets.
-5. Validate actual provider credentials, TLS/networking, external side effects,
-   operational capacity, and disaster recovery before a production deployment.
+The destination must not exist and must be outside the original repository.
+The helper copies **tracked files using their current working-tree contents**,
+including uncommitted edits. It copies no history, branches, tags, or remotes,
+and changes neither the original index nor its working files. Paths matching
+ignore rules and symbolic links/junctions are refused, not silently published.
+Stage intended file deletions before exporting.
 
-No changes were committed or pushed by the assistant. Publication and the manual
-owner actions remain the repository owner's responsibility.
+Untracked files are excluded unless named in `-AdditionalPaths`. The command
+above explicitly includes the new helper and its test even before they are
+tracked. Add any other intended new files explicitly after reviewing them.
+Once all intended files are tracked, `-AdditionalPaths` can be omitted.
+Do not copy the whole old directory over the export afterward.
+
+## 3. Scan and validate the clean copy
+
+```powershell
+Set-Location ..\nuntivus-public
+docker run --rm -v "${PWD}:/repo:ro" -w /repo ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f dir . --redact --no-banner
+node scripts/check-doc-links.mjs
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/deployment/export-public-repository.test.ps1
+```
+
+The helper's test uses a disposable Git fixture; it does not initialize the
+export itself. On other platforms, use `pwsh -File` for the PowerShell test.
+Run the backend, dashboard, and deployment checks in
+[development and validation](development.md) before publishing. Do not rely on
+old local test counts as evidence for a new release. Review all scanner findings;
+scanner success alone does not prove that the directory contains no secrets.
+
+The Docker quick-start still uses the image names and version declared in
+`docker-compose.quickstart.yml`. A new GitHub repository does not publish or
+transfer those images; verify availability and ownership before advertising them.
+
+## 4. Create the first commit on master
+
+Run these commands **only in the exported directory**, after review:
+
+```powershell
+git init -b master
+git add .
+git diff --cached --stat
+git diff --cached --check
+git diff --cached
+```
+
+Review the staged content locally; do not paste sensitive findings into issues.
+When satisfied:
+
+```powershell
+git commit -m "Initial public release"
+git log --oneline
+```
+
+The new history should contain exactly this initial commit. Run the full-history
+scanner from the [security policy](../SECURITY.md) in this new repository too.
+If real credentials are found, revoke/rotate them even though the old history
+is not being published. Remove them before creating the public commit.
+
+## 5. Publish to an empty GitHub repository
+
+Create a new repository under the intended GitHub account or organization.
+Select **Public**. Leave initialization with a README, license, or `.gitignore`
+unchecked because the clean copy already contains them.
+
+Replace the placeholder below with the new repository's HTTPS URL:
+
+```powershell
+git remote add origin https://github.com/YOUR-OWNER/YOUR-NEW-REPOSITORY.git
+git push -u origin master
+```
+
+Do not use a mirror push, `--all`, `--tags`, or a force push from the original
+repository. In GitHub settings, confirm that `master` is the default branch,
+check that CI and Security workflows pass, and enable the hosted protections
+listed in [SECURITY.md](../SECURITY.md), including private vulnerability reporting,
+secret scanning/push protection, and branch rules where available.
+
+No export or validation command publishes anything automatically. Repository
+creation, owner settings, final content approval, and pushing remain manual.

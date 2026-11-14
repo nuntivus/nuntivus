@@ -4,56 +4,54 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { ChevronRightIcon } from '../icons/nav-icons'
 
 interface NavigableTableRowProps {
-    to: string
+    to?: string
     label: string
     children: ReactNode
     className?: string
     style?: CSSProperties
+    unstyled?: boolean
 }
 
 function isInteractiveTarget(target: EventTarget | null) {
-    return target instanceof HTMLElement && !!target.closest('a, button, input, select, textarea, [role="button"], [role="checkbox"]')
+    return target instanceof Element && !!target.closest('a, button, input, select, textarea, label, [role="button"], [role="checkbox"], [role="combobox"], [contenteditable="true"]')
 }
 
-export function NavigableTableRow({ to, label, children, className, style }: NavigableTableRowProps) {
+export function NavigableTableRow({ to, label, children, className, style, unstyled = false }: NavigableTableRowProps) {
     const navigate = useNavigate()
+    const Row = unstyled ? 'tr' : Table.Row
 
     function handleClick(event: MouseEvent<HTMLTableRowElement>) {
-        if (!isInteractiveTarget(event.target)) {
+        if (to && !isInteractiveTarget(event.target)) {
             navigate(to)
         }
     }
 
     function handleKeyDown(event: KeyboardEvent<HTMLTableRowElement>) {
-        if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+        if (to && event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
             event.preventDefault()
             navigate(to)
         }
     }
 
     return (
-        <Table.Row
-            className={`navigable-table-row${className ? ` ${className}` : ''}`}
+        <Row
+            className={[to && 'navigable-table-row', className].filter(Boolean).join(' ')}
             style={style}
-            tabIndex={0}
-            aria-label={`Open ${label}`}
+            tabIndex={to ? 0 : undefined}
+            aria-label={to ? `Open ${label}` : undefined}
             onClick={handleClick}
             onKeyDown={handleKeyDown}
         >
             {children}
-        </Table.Row>
+        </Row>
     )
 }
 
-export function DetailAction({ to, label }: { to: string; label: string }) {
+export function DetailIndicator() {
     return (
-        <Tooltip content={label}>
-            <IconButton asChild size="1" variant="ghost" color="gray" aria-label={label}>
-                <NavLink to={to}>
-                    <ChevronRightIcon width={16} height={16} />
-                </NavLink>
-            </IconButton>
-        </Tooltip>
+        <span className="table-detail-indicator" aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--text-muted)' }}>
+            <ChevronRightIcon width={16} height={16} focusable="false" />
+        </span>
     )
 }
 

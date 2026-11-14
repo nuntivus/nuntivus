@@ -22,7 +22,7 @@ import { ListPagination } from '../components/lists/list-pagination'
 import { RetryIcon } from '../components/icons/nav-icons'
 import { deliveryIdError } from '../features/deliveries/delivery-filter-validation'
 import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
-import { DetailAction, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
+import { DetailIndicator, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
 import {
   useFailedDeliveriesQuery,
   useRetryDeliveryMutation,
@@ -340,7 +340,7 @@ export function FailedDeliveriesPage() {
                               >
                                 <RetryIcon width={15} height={15} />
                               </TableIconButton>
-                              <DetailAction to={`/deliveries/${encodeURIComponent(delivery.id)}`} label="Open delivery" />
+                              <DetailIndicator />
                             </div>
                           </Table.Cell>
                         </NavigableTableRow>

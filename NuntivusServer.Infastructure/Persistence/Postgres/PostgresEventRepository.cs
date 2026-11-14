@@ -508,6 +508,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         d.event_id               AS EventId,
                         d.customer_id            AS CustomerId,
                         d.contract_id            AS ContractId,
+                        cd.destination_id        AS DestinationId,
                         d.destination_type       AS DestinationType,
                         d.event_type             AS EventType,
                         d.status                 AS Status,
@@ -524,6 +525,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         COALESCE(lf.error, d.last_error) AS LatestFailureError,
                         lf.completed_at          AS LatestFailureAt
                     FROM deliveries d
+                    LEFT JOIN contract_destinations cd ON cd.id = d.destination_binding_id AND cd.contract_id = d.contract_id
                     LEFT JOIN LATERAL (
                         SELECT
                             COUNT(*)::int AS total_attempts,
@@ -603,6 +605,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
             public Guid EventId { get; set; }
             public string CustomerId { get; set; } = string.Empty;
             public Guid ContractId { get; set; }
+            public Guid? DestinationId { get; set; }
             public string DestinationType { get; set; } = string.Empty;
             public string EventType { get; set; } = string.Empty;
             public string Status { get; set; } = string.Empty;
@@ -644,7 +647,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                     row.SuccessfulAttempts,
                     row.FailedAttempts,
                     row.LastAttemptAt),
-                latestFailure);
+                latestFailure,
+                DestinationId: row.DestinationId);
         }
 
         private sealed class EventRow

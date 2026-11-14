@@ -1,7 +1,7 @@
 import { Checkbox, Flex, Link, Text } from '@radix-ui/themes'
 import { NavLink } from 'react-router-dom'
 import { TrashIcon } from '../../components/icons/nav-icons'
-import { TableIconButton } from '../../components/tables/table-actions'
+import { DetailIndicator, NavigableTableRow, TableIconButton } from '../../components/tables/table-actions'
 import { useSourcesQuery } from '../sources/use-sources'
 
 export function ContractSourceSelector({ value, onChange, disabled = false, table = false }: {
@@ -19,11 +19,11 @@ export function ContractSourceSelector({ value, onChange, disabled = false, tabl
       <thead><tr><th scope="col">Source name</th><th scope="col">Type</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
       <tbody>{value.map((id) => {
         const source = sources.data?.find((item) => item.id === id)
-        return <tr key={id}>
+        return <NavigableTableRow key={id} unstyled to={source ? `/sources/${encodeURIComponent(id)}` : undefined} label={`Source ${source?.name ?? id}`}>
           <td>{source?.name ?? id}</td><td>{source?.type ?? '—'}</td><td><span className={`contract-selection-status ${source?.enabled ? 'is-active' : ''}`}>{source ? source.enabled ? 'Active' : 'Inactive' : 'Unavailable'}</span></td>
-          <td><span className="contract-selection-actions">{source && <Link asChild size="2"><NavLink to={`/sources/${encodeURIComponent(id)}`} aria-label={`View ${source.name}`}>View</NavLink></Link>}
-            <TableIconButton label={`Remove ${source?.name ?? id} from contract`} disabled={disabled} onClick={() => toggle(id, false)} color="red"><TrashIcon /></TableIconButton></span></td>
-        </tr>
+          <td><span className="contract-selection-actions">
+            <TableIconButton label={`Remove ${source?.name ?? id} from contract`} disabled={disabled} onClick={() => toggle(id, false)} color="red"><TrashIcon /></TableIconButton>{source && <DetailIndicator />}</span></td>
+        </NavigableTableRow>
       })}{value.length === 0 && <tr><td colSpan={4} className="contract-selection-empty"><Text size="2" color="gray">No sources selected. Use Add source to choose one.</Text></td></tr>}</tbody>
     </table>
     {value.some((id) => !sources.data?.some((source) => source.id === id)) && !sources.isLoading && <Text size="2" color="red">One or more selected Sources are unavailable.</Text>}

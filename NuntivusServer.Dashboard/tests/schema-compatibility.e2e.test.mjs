@@ -68,7 +68,10 @@ test('schema impact is explicitly requested and labels sample evidence conservat
   try {
     assert.equal(await page.getByText('Affected orders', { exact: true }).count(), 0)
     await page.getByRole('button', { name: 'Analyze affected contracts', exact: true }).click()
-    await page.getByRole('link', { name: 'Affected orders', exact: true }).waitFor()
+    const row = page.getByRole('row', { name: 'Open contract Affected orders', exact: true })
+    await row.waitFor()
+    assert.equal(await row.locator('.table-detail-indicator').count(), 1)
+    assert.equal(await row.getByRole('link', { name: 'Affected orders', exact: true }).count(), 0)
     await page.getByText('Sample results are evidence, not proof of compatibility.', { exact: true }).waitFor()
     await page.getByText('Review required', { exact: true }).waitFor()
     assert.equal(requests.length, 0)

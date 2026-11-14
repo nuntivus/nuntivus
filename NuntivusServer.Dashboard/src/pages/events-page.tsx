@@ -16,7 +16,7 @@ import { EntitySelect } from '../components/forms/entity-select'
 import { hasPermission } from '../auth/permissions'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
-import { DetailAction, NavigableTableRow } from '../components/tables/table-actions'
+import { DetailIndicator, NavigableTableRow } from '../components/tables/table-actions'
 import { useEventsQuery } from '../features/events/use-events'
 import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
@@ -447,10 +447,7 @@ export function EventsPage() {
                           </Table.Cell>
                           <Table.Cell>
                             <div className="table-row-actions">
-                              <DetailAction
-                                to={`/events/${encodeURIComponent(item.id)}`}
-                                label={`Open event ${item.type}`}
-                              />
+                              <DetailIndicator />
                             </div>
                           </Table.Cell>
                         </NavigableTableRow>

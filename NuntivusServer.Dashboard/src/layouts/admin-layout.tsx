@@ -8,13 +8,14 @@ import {
   Text,
 } from '@radix-ui/themes'
 import {
+  matchPath,
   NavLink,
   Outlet,
   useLocation,
   useNavigate,
   type To,
 } from 'react-router-dom'
-import type { ComponentType, SVGProps } from 'react'
+import { useState, type ComponentType, type SVGProps } from 'react'
 import { useAppContext } from '../context/use-app-context'
 import { hasPermission } from '../auth/permissions'
 import { clearSensitiveClientState } from '../app/auth-security'
@@ -23,17 +24,23 @@ import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { signOut } from '../store/auth-slice'
 import { setSidebarOpen, toggleSidebar } from '../store/ui-slice'
 import {
+  AlertIcon,
   AuditLogsIcon,
   ChevronRightIcon,
   ContractsIcon,
   CustomersIcon,
   DeliveriesIcon,
+  DestinationsIcon,
   EventDefinitionsIcon,
   EventsIcon,
   FailedDeliveriesIcon,
   MenuIcon,
   OverviewIcon,
+  RoutingMapIcon,
+  SecretsIcon,
   SettingsIcon,
+  SourcesIcon,
+  TestEventIcon,
   UsersIcon,
 } from '../components/icons/nav-icons'
 
@@ -56,36 +63,44 @@ const navGroups: NavGroup[] = [
     items: [{ to: '/' as To, label: 'Overview', icon: OverviewIcon }],
   },
   {
-    heading: 'Manage',
+    heading: 'Event flow',
     items: [
-      { to: '/customers' as To, label: 'Customers', icon: CustomersIcon, permission: 'customers.read' },
-      { to: '/contracts' as To, label: 'Contracts', icon: ContractsIcon, permission: 'contracts.read' },
-      { to: '/routing-map' as To, label: 'Routing map', icon: ContractsIcon, permission: 'contracts.read' },
-      { to: '/sources' as To, label: 'Sources', icon: EventsIcon, permission: 'contracts.read' },
-      { to: '/destinations' as To, label: 'Destinations', icon: EventsIcon, permission: 'contracts.read' },
-      { to: '/secrets' as To, label: 'Secrets', icon: SettingsIcon, permission: 'contracts.write' },
-      { to: '/test-events' as To, label: 'Test events', icon: EventsIcon, permission: 'contracts.read' },
-      { to: '/events' as To, label: 'Events', icon: EventsIcon, permission: 'events.read' },
+      { to: '/sources' as To, label: 'Sources', icon: SourcesIcon, permission: 'contracts.read' },
       { to: '/event-definitions' as To, label: 'Event Definitions', icon: EventDefinitionsIcon, permission: 'event-definitions.read' },
+      { to: '/contracts' as To, label: 'Contracts', icon: ContractsIcon, permission: 'contracts.read' },
+      { to: '/destinations' as To, label: 'Destinations', icon: DestinationsIcon, permission: 'contracts.read' },
+      { to: '/routing-map' as To, label: 'Routing map', icon: RoutingMapIcon, permission: 'contracts.read' },
     ],
   },
   {
-    heading: 'Operations',
+    heading: 'Monitoring',
     items: [
+      { to: '/events' as To, label: 'Events', icon: EventsIcon, permission: 'events.read' },
       { to: '/deliveries' as To, label: 'Deliveries', icon: DeliveriesIcon },
-      { to: '/alerts' as To, label: 'Alerts', icon: FailedDeliveriesIcon, permission: 'contracts.read' },
       { to: '/deliveries/failures' as To, label: 'Failed Deliveries', icon: FailedDeliveriesIcon, permission: 'delivery-failures.read' },
-      { to: '/audit-logs' as To, label: 'Audit Logs', icon: AuditLogsIcon, permission: 'audit-logs.read' },
+      { to: '/alerts' as To, label: 'Alerts', icon: AlertIcon, permission: 'contracts.read' },
+    ],
+  },
+  {
+    heading: 'Tools',
+    items: [
+      { to: '/test-events' as To, label: 'Test events', icon: TestEventIcon, permission: 'contracts.read' },
+      { to: '/secrets' as To, label: 'Secrets', icon: SecretsIcon, permission: 'contracts.write' },
     ],
   },
   {
     heading: 'Administration',
     items: [
+      { to: '/customers' as To, label: 'Customers', icon: CustomersIcon, permission: 'customers.read' },
       { to: '/users' as To, label: 'Users', icon: UsersIcon, permission: 'users.read' },
-      { to: '/settings' as To, label: 'Settings', icon: SettingsIcon, permission: 'settings.write' },
+      { to: '/audit-logs' as To, label: 'Audit Logs', icon: AuditLogsIcon, permission: 'audit-logs.read' },
     ],
   },
 ]
+
+const settingsNavItem: NavItem = {
+  to: '/settings', label: 'Settings', icon: SettingsIcon, permission: 'settings.write',
+}
 
 const breadcrumbLabels: Record<string, string> = {
   customers: 'Customers',
@@ -110,11 +125,20 @@ export function AdminLayout() {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const location = useLocation()
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const sidebarOpen = useAppSelector((state) => state.ui.sidebarOpen)
   const { token, currentUser } = useAppSelector((state) => state.auth)
   const { currentWorkspace, setCurrentWorkspace } = useAppContext()
   const canAccessSettings = hasPermission(currentUser, 'settings.write')
   const pathSegments = location.pathname.split('/').filter(Boolean)
+  const activeNavItem = navGroups
+    .flatMap((group) => group.items)
+    .concat(settingsNavItem)
+    .sort((left, right) => right.to.toString().length - left.to.toString().length)
+    .find((item) => matchPath(
+      { path: item.to.toString(), end: item.to === '/' },
+      location.pathname,
+    ))
 
   const breadcrumbs = pathSegments.map((segment, index) => {
     const path = `/${pathSegments.slice(0, index + 1).join('/')}`
@@ -138,6 +162,29 @@ export function AdminLayout() {
     }
   }
 
+  function renderNavItem(item: NavItem) {
+    const Icon = item.icon
+    const disabled = item.permission && !hasPermission(currentUser, item.permission)
+
+    return disabled ? (
+      <span key={item.to.toString()} className="sidebar-link disabled" aria-disabled="true">
+        <Icon className="sidebar-link-icon" />
+        <span>{item.label}</span>
+      </span>
+    ) : (
+      <NavLink
+        key={item.to.toString()}
+        to={item.to}
+        end={item.to === '/' || item !== activeNavItem}
+        className={({ isActive }) => isActive ? 'sidebar-link active' : 'sidebar-link'}
+        onClick={handleNavigationClick}
+      >
+        <Icon className="sidebar-link-icon" />
+        <span>{item.label}</span>
+      </NavLink>
+    )
+  }
+
   return (
     <Flex className="dashboard-layout" minHeight="100dvh">
       <a href="#main-content" className="skip-link">Skip to main content</a>
@@ -154,40 +201,42 @@ export function AdminLayout() {
             {navGroups.map((group, groupIndex) => (
               <div className="sidebar-group" key={group.heading ?? `group-${groupIndex}`}>
                 {group.heading ? (
-                  <div className="sidebar-group-heading">{group.heading}</div>
+                  <button
+                    type="button"
+                    className="sidebar-group-heading"
+                    aria-expanded={!collapsedGroups[group.heading]}
+                    aria-controls={`sidebar-group-${groupIndex}`}
+                    onClick={() => {
+                      const heading = group.heading!
+                      setCollapsedGroups((previous) => ({
+                        ...previous,
+                        [heading]: !previous[heading],
+                      }))
+                    }}
+                  >
+                    <span>{group.heading}</span>
+                    <ChevronRightIcon className="sidebar-group-chevron" />
+                  </button>
                 ) : null}
-                {group.items.map((item) => {
-                  const Icon = item.icon
-                  const disabled =
-                    item.permission && !hasPermission(currentUser, item.permission)
-
-                  return disabled ? (
-                    <span key={item.to.toString()} className="sidebar-link disabled">
-                      <Icon className="sidebar-link-icon" />
-                      <span>{item.label}</span>
-                    </span>
-                  ) : (
-                    <NavLink
-                      key={item.to.toString()}
-                      to={item.to}
-                      end={item.to === '/'}
-                      className={({ isActive }) =>
-                        isActive ? 'sidebar-link active' : 'sidebar-link'
-                      }
-                      onClick={handleNavigationClick}
-                    >
-                      <Icon className="sidebar-link-icon" />
-                      <span>{item.label}</span>
-                    </NavLink>
-                  )
-                })}
+                <div
+                  id={`sidebar-group-${groupIndex}`}
+                  className="sidebar-group-items"
+                  hidden={Boolean(group.heading && collapsedGroups[group.heading])}
+                >
+                  {group.items.map(renderNavItem)}
+                </div>
               </div>
             ))}
           </nav>
 
-          <Text size="1" className="sidebar-footer-text">
-            Workspace: {currentWorkspace}
-          </Text>
+          <div className="sidebar-footer">
+            <nav aria-label="Settings navigation">
+              {renderNavItem(settingsNavItem)}
+            </nav>
+            <Text size="1" className="sidebar-footer-text">
+              Workspace: {currentWorkspace}
+            </Text>
+          </div>
         </div>
       </aside>
 

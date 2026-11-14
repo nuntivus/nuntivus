@@ -17,7 +17,7 @@ import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback
 import { FormDialog } from '../components/dialogs/form-dialog'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { TrashIcon } from '../components/icons/nav-icons'
-import { DetailAction, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
+import { DetailIndicator, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
 import {
   useAdminRolesQuery,
   useAdminUsersQuery,
@@ -499,7 +499,7 @@ export function UsersPage() {
                           >
                             <TrashIcon width={15} height={15} />
                           </TableIconButton>
-                          <DetailAction to={`/users/${encodeURIComponent(user.subject)}`} label={`Open ${user.displayName ?? user.subject}`} />
+                          <DetailIndicator />
                         </div>
                       </Table.Cell>
                     </NavigableTableRow>

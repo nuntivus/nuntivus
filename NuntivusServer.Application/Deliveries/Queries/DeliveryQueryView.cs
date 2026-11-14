@@ -18,5 +18,6 @@ namespace NuntivusServer.Application.Deliveries.Queries
         DateTimeOffset UpdatedAt,
         DeliveryAttemptSummaryView AttemptSummary,
         DeliveryLatestFailureView? LatestFailure,
-        string? TransformationIdentity = null);
+        string? TransformationIdentity = null,
+        Guid? DestinationId = null);
 }

@@ -16,6 +16,7 @@ import { JsonViewer } from '../components/json/json-viewer'
 import { EntityReference } from '../components/links/entity-reference'
 import { useEntityLabel } from '../components/links/use-entity-label'
 import { CalendarIcon, ChevronRightIcon, ClockIcon, CodeIcon, CopyIcon, DeliveriesIcon, EventsIcon, RetryIcon } from '../components/icons/nav-icons'
+import { DetailIndicator, NavigableTableRow } from '../components/tables/table-actions'
 import { DetailLoadingState } from '../components/states/detail-loading-state'
 import { DetailMetric } from '../components/states/detail-visuals'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
@@ -344,14 +345,14 @@ export function EventDetailPage() {
               </Table.Header>
               <Table.Body>
                 {detail.deliveries.map((delivery) => (
-                  <Table.Row key={delivery.id}>
+                  <NavigableTableRow key={delivery.id} to={`/deliveries/${encodeURIComponent(delivery.id)}`} label={`delivery ${delivery.id}`}>
                     <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
                      <Table.Cell><EntityReference kind="contract" id={delivery.contractId} /></Table.Cell>
                     <Table.Cell><Badge color={deliveryBadgeColor(delivery.status)} variant="soft">{formatDeliveryStatus(delivery.status)}</Badge></Table.Cell>
                     <Table.Cell>{delivery.attemptCount}</Table.Cell>
                     <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>
-                    <Table.Cell><Button asChild variant="ghost" size="1" aria-label={`Open delivery ${delivery.id}`}><NavLink to={`/deliveries/${delivery.id}`}><ChevronRightIcon /></NavLink></Button></Table.Cell>
-                  </Table.Row>
+                    <Table.Cell><DetailIndicator /></Table.Cell>
+                  </NavigableTableRow>
                 ))}
               </Table.Body>
             </Table.Root>
@@ -433,16 +434,18 @@ export function EventDetailPage() {
                           <Table.ColumnHeaderCell>Contract</Table.ColumnHeaderCell>
                           <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
                           <Table.ColumnHeaderCell>Attempts</Table.ColumnHeaderCell>
+                          <Table.ColumnHeaderCell aria-label="Details" />
                         </Table.Row>
                       </Table.Header>
                       <Table.Body>
                         {(replayedDeliveriesQuery.data ?? []).map((delivery) => (
-                          <Table.Row key={delivery.id}>
+                          <NavigableTableRow key={delivery.id} to={`/deliveries/${encodeURIComponent(delivery.id)}`} label={`delivery ${delivery.id}`}>
                             <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
                             <Table.Cell><EntityReference kind="contract" id={delivery.contractId} /></Table.Cell>
                             <Table.Cell>{formatDeliveryStatus(delivery.status)}</Table.Cell>
                             <Table.Cell>{delivery.attemptCount}</Table.Cell>
-                          </Table.Row>
+                            <Table.Cell><DetailIndicator /></Table.Cell>
+                          </NavigableTableRow>
                         ))}
                       </Table.Body>
                     </Table.Root>

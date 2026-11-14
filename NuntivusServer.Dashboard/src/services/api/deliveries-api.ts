@@ -31,6 +31,7 @@ export interface DeliveryListItem {
   eventId: string
   customerId: string
   contractId: string
+  destinationId: string | null
   destinationType: DestinationType | string
   eventType: string
   status: DeliveryStatus

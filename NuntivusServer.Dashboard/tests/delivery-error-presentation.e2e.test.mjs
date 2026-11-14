@@ -5,7 +5,7 @@ import { chromium } from 'playwright'
 const appUrl = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5173'
 const fullError = `HTTP 405: ${'Response body with detailed explanation. '.repeat(30)}`
 
-async function openPage() {
+async function openPage(destinationId = 'destination-1') {
   const browser = await chromium.launch({ headless: true })
   const page = await browser.newPage()
   await page.addInitScript(() => {
@@ -28,7 +28,7 @@ async function openPage() {
     } else if (path === '/v1/deliveries/delivery-1') {
       body = {
         id: 'delivery-1', eventId: 'event-1', customerId: 'customer-1', contractId: 'contract-1',
-        eventType: 'order.created', destinationType: 'Http', status: 3, attemptCount: 1,
+        eventType: 'order.created', destinationId, destinationType: 'Http', status: 3, attemptCount: 1,
         lastError: fullError, nextAttemptAt: null,
         createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:01:00Z',
       }
@@ -44,6 +44,12 @@ async function openPage() {
       body = { id: 'contract-1', name: 'Order notifications' }
     } else if (path === '/v1/sources/source-1') {
       body = { id: 'source-1', name: 'Order API' }
+    } else if (path === '/v1/destinations/destination-1') {
+      body = {
+        id: 'destination-1', name: 'Order webhook', type: 'Http', configured: true, enabled: true,
+        configuration: JSON.stringify({ url: 'https://example.com/hook', authentication: { type: 'none' } }),
+        createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+      }
     } else if (path === '/v1/events/event-1') {
       body = { id: 'event-1', type: 'order.created', source: 'source-1', deliveries: [], payload: {}, metadata: {} }
     } else if (path === '/v1/events') {
@@ -84,6 +90,36 @@ test('delivery attempt error opens complete response and related event uses its 
     assert.equal(await page.getByRole('dialog').locator('pre').textContent(), fullError)
     await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
     assert.equal(await page.locator('a[href="/events/event-1"]').count() > 0, true)
+  } finally {
+    await browser.close()
+  }
+})
+
+test('delivery destination shows its name and opens the destination detail page', async () => {
+  const { browser, page } = await openPage()
+  try {
+    await page.goto(`${appUrl}/deliveries/delivery-1`)
+    const destination = page.locator('.delivery-info-row').filter({ has: page.getByText('Destination', { exact: true }) })
+    const link = destination.getByRole('link', { name: 'Order webhook', exact: true })
+    await link.waitFor()
+    assert.equal(await link.getAttribute('href'), '/destinations/destination-1')
+    assert.equal(await destination.getByRole('button', { name: 'Copy Destination', exact: true }).count(), 1)
+    await link.click()
+    await page.waitForURL(`${appUrl}/destinations/destination-1`)
+    await page.getByRole('heading', { name: 'Order webhook', exact: true }).waitFor()
+  } finally {
+    await browser.close()
+  }
+})
+
+test('delivery with no destination reference retains the saved type without a broken link', async () => {
+  const { browser, page } = await openPage(null)
+  try {
+    await page.goto(`${appUrl}/deliveries/delivery-1`)
+    const destination = page.locator('.delivery-info-row').filter({ has: page.getByText('Destination', { exact: true }) })
+    await destination.getByText('Http', { exact: true }).waitFor()
+    assert.equal(await destination.getByRole('link').count(), 0)
+    assert.equal(await destination.getByRole('button').count(), 0)
   } finally {
     await browser.close()
   }

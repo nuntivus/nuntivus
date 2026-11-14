@@ -71,12 +71,16 @@ development workflow below and production deployment remain separate.
 
 Requires Docker Compose 2.24.4+ with Linux containers and PowerShell 5.1+.
 The default stack is for local experimentation only and uses development
-credentials on loopback-bound ports. Node.js and .NET run inside Docker.
+credentials on loopback-bound ports. Never reuse the checked-in development
+passwords or signing/encryption sample keys in a deployment. Node.js and .NET
+run inside Docker.
 
 ```sh
-git clone https://github.com/nuntivus/nuntivus-server.git
+git clone <repository-url> nuntivus-server
 cd nuntivus-server
 ```
+
+Replace `<repository-url>` with this repository's HTTPS or SSH clone URL.
 
 Start backend **and frontend** with one command:
 
@@ -160,6 +164,7 @@ tests, browser tests, dependency audits, and supported toolchains.
 - [Delivery ordering guarantees](docs/delivery-ordering-guarantees.md)
 - [Feature coverage and limitations](docs/features/product-verification.md)
 - [Self-hosting operations](docs/self-hosting/README.md)
+- [Publishing a clean public repository](docs/publication-readiness.md)
 
 ## Contributing
 

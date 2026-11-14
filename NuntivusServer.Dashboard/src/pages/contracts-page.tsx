@@ -17,7 +17,7 @@ import { EntitySelect } from '../components/forms/entity-select'
 import { PowerIcon, SearchIcon, TestEventIcon } from '../components/icons/nav-icons'
 import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
-import { DetailAction, NavigableTableRow, TableIconButton, TableIconLink } from '../components/tables/table-actions'
+import { DetailIndicator, NavigableTableRow, TableIconButton, TableIconLink } from '../components/tables/table-actions'
 import {
   useContractsQuery,
   useDisableContractMutation,
@@ -522,7 +522,7 @@ export function ContractsPage() {
                             >
                               <PowerIcon width={15} height={15} />
                             </TableIconButton>
-                            <DetailAction to={`/contracts/${encodeURIComponent(contract.id)}`} label={`Open ${contract.name ?? contract.id}`} />
+                            <DetailIndicator />
                           </div>
                         </Table.Cell>
                       </NavigableTableRow>

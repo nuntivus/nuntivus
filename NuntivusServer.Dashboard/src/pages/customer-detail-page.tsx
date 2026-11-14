@@ -13,7 +13,7 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { ErrorPreview } from '../components/errors/error-preview'
-import { EntityReference } from '../components/links/entity-reference'
+import { DetailIndicator, NavigableTableRow } from '../components/tables/table-actions'
 import { DestinationHealthSummary } from '../components/observability/destination-health-summary'
 import { CalendarIcon, CheckCircleIcon, ContractsIcon, CustomersIcon, DeliveriesIcon, FailedDeliveriesIcon } from '../components/icons/nav-icons'
 import { DetailPageHeader } from '../components/states/detail-page-header'
@@ -232,8 +232,8 @@ export function CustomerDetailPage() {
                 </Table.Header>
                 <Table.Body>
                   {(contractsQuery.data?.items ?? []).map((contract) => (
-                    <Table.Row key={contract.id}>
-                      <Table.RowHeaderCell><EntityReference kind="contract" id={contract.id} label={contract.name} /></Table.RowHeaderCell>
+                    <NavigableTableRow key={contract.id} to={`/contracts/${encodeURIComponent(contract.id)}`} label={`contract ${contract.name ?? contract.id}`}>
+                      <Table.RowHeaderCell>{contract.name ?? contract.id}</Table.RowHeaderCell>
                       <Table.Cell>{contract.id}</Table.Cell>
                       <Table.Cell>
                         <Badge color={contract.enabled ? 'green' : 'gray'}>
@@ -254,8 +254,9 @@ export function CustomerDetailPage() {
                         >
                           Deliveries
                         </Button>
+                        <DetailIndicator />
                       </Table.Cell>
-                    </Table.Row>
+                    </NavigableTableRow>
                   ))}
                 </Table.Body>
               </Table.Root>
@@ -300,17 +301,19 @@ export function CustomerDetailPage() {
                   <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Attempts</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Updated</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell aria-label="Details" />
                 </Table.Row>
               </Table.Header>
               <Table.Body>
                 {(deliveriesQuery.data?.items ?? []).map((delivery) => (
-                  <Table.Row key={delivery.id}>
+                  <NavigableTableRow key={delivery.id} to={`/deliveries/${encodeURIComponent(delivery.id)}`} label={`delivery ${delivery.id}`}>
                     <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
                     <Table.Cell>{delivery.eventType}</Table.Cell>
                     <Table.Cell>{formatDeliveryStatus(delivery.status)}</Table.Cell>
                     <Table.Cell>{delivery.attemptCount}</Table.Cell>
                     <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>
-                  </Table.Row>
+                    <Table.Cell><DetailIndicator /></Table.Cell>
+                  </NavigableTableRow>
                 ))}
               </Table.Body>
             </Table.Root>
@@ -342,11 +345,12 @@ export function CustomerDetailPage() {
                   <Table.ColumnHeaderCell>Error</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Attempts</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Next retry</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell aria-label="Details" />
                 </Table.Row>
               </Table.Header>
               <Table.Body>
                 {(failuresQuery.data?.items ?? []).map((failure) => (
-                  <Table.Row key={failure.deliveryId}>
+                  <NavigableTableRow key={failure.deliveryId} to={`/deliveries/${encodeURIComponent(failure.deliveryId)}`} label={`delivery ${failure.deliveryId}`}>
                     <Table.RowHeaderCell>{failure.deliveryId}</Table.RowHeaderCell>
                     <Table.Cell>{failure.eventType}</Table.Cell>
                     <Table.Cell><ErrorPreview error={failure.lastError} /></Table.Cell>
@@ -356,7 +360,8 @@ export function CustomerDetailPage() {
                         ? new Date(failure.nextAttemptAt).toLocaleString()
                         : '-'}
                     </Table.Cell>
-                  </Table.Row>
+                    <Table.Cell><DetailIndicator /></Table.Cell>
+                  </NavigableTableRow>
                 ))}
               </Table.Body>
             </Table.Root>

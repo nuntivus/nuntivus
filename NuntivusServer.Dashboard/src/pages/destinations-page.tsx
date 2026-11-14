@@ -4,6 +4,7 @@ import { flushSync } from 'react-dom'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FormDialog } from '../components/dialogs/form-dialog'
+import { DetailIndicator, NavigableTableRow } from '../components/tables/table-actions'
 import { DestinationTypeSelector } from '../features/contracts/destination-forms/destination-type-selector'
 import { normalizeDestinationType } from '../features/contracts/destination-forms/types'
 import { useCreateDestinationDraftMutation, useDeleteDestinationMutation, useDestinationsQuery, useToggleDestinationMutation } from '../features/destinations/use-destinations'
@@ -69,16 +70,16 @@ export function DestinationsPage() {
     {list.isError && <Text color="red">{getApiErrorMessage(list.error, 'Unable to load Destinations.')}</Text>}
     {list.data && <Card><Table.Root><Table.Header><Table.Row>
       <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Type</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
-    </Table.Row></Table.Header><Table.Body>{list.data.map(item => <Table.Row key={item.id}>
-      <Table.Cell><NavLink to={`/destinations/${encodeURIComponent(item.id)}`}>{item.name}</NavLink><Text as="p" size="1" color="gray">{item.description}</Text></Table.Cell>
+    </Table.Row></Table.Header><Table.Body>{list.data.map(item => <NavigableTableRow key={item.id} to={`/destinations/${encodeURIComponent(item.id)}`} label={`Destination ${item.name}`}>
+      <Table.Cell>{item.name}<Text as="p" size="1" color="gray">{item.description}</Text></Table.Cell>
       <Table.Cell>{normalizeDestinationType(item.type) ?? String(item.type)}</Table.Cell><Table.Cell><Badge color={item.configured ? item.enabled ? 'green' : 'gray' : 'amber'}>{item.configured ? item.enabled ? 'Enabled' : 'Disabled' : 'Needs configuration'}</Badge></Table.Cell>
-      <Table.Cell><Flex gap="2" wrap="wrap">{canWrite && <>
+      <Table.Cell><Flex gap="2" align="center" wrap="wrap">{canWrite && <>
         <Button asChild size="1" variant="soft"><NavLink to={`/destinations/${encodeURIComponent(item.id)}?edit=1`}>Edit</NavLink></Button>
         {item.enabled ? <Button size="1" variant="soft" onClick={() => setChoice({ kind: 'disable', item })}>Disable</Button>
           : item.configured && <Button size="1" variant="soft" onClick={() => void toggle.mutateAsync({ id: item.id, enabled: true, pauseExistingBindings: false })}>Enable</Button>}
         <Button size="1" color="red" variant="soft" onClick={() => setChoice({ kind: 'delete', item })}>Delete</Button>
-      </>}</Flex></Table.Cell>
-    </Table.Row>)}</Table.Body></Table.Root></Card>}
+      </>}<DetailIndicator /></Flex></Table.Cell>
+    </NavigableTableRow>)}</Table.Body></Table.Root></Card>}
     <FormDialog open={formOpen} onOpenChange={setFormOpen} title="Add Destination"
       footer={<><Button variant="soft" type="button" onClick={() => setFormOpen(false)}>Cancel</Button><Button type="submit" form="destination-form" disabled={create.isPending}>Save</Button></>}>
       <form id="destination-form" onSubmit={(event) => void submit(event)}><Flex direction="column" gap="3">

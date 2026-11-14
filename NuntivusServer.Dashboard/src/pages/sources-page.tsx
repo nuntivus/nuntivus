@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { frontendConfig } from '../app/frontend-config'
 import { CopyIcon } from '../components/icons/nav-icons'
+import { DetailIndicator, NavigableTableRow } from '../components/tables/table-actions'
 import {
   useDeleteSourceMutation, useSourcesQuery, useToggleSourceMutation,
 } from '../features/sources/use-sources'
@@ -53,13 +54,13 @@ export function SourcesPage() {
     {sources.isError && <Text color="red">{getApiErrorMessage(sources.error, 'Unable to load Sources.')}</Text>}
     {sources.data && <Card><Table.Root><Table.Header><Table.Row>
       <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Type</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Ingestion</Table.ColumnHeaderCell><Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
-    </Table.Row></Table.Header><Table.Body>{sources.data.map((source) => <Table.Row key={source.id}>
-      <Table.Cell><NavLink to={`/sources/${encodeURIComponent(source.id)}`}>{source.name}</NavLink><Text as="p" size="1" color="gray">{source.description}</Text></Table.Cell>
+    </Table.Row></Table.Header><Table.Body>{sources.data.map((source) => <NavigableTableRow key={source.id} to={`/sources/${encodeURIComponent(source.id)}`} label={`Source ${source.name}`}>
+      <Table.Cell>{source.name}<Text as="p" size="1" color="gray">{source.description}</Text></Table.Cell>
       <Table.Cell>{source.type}</Table.Cell><Table.Cell><Badge color={source.enabled ? 'green' : 'gray'}>{source.enabled ? 'Enabled' : 'Disabled'}</Badge></Table.Cell>
       <Table.Cell>{source.type === 'HTTP_API' ? <Flex align="center" gap="2" wrap="wrap"><Text size="1" style={{ overflowWrap: 'anywhere' }}>{frontendConfig.apiBaseUrl}/v1/sources/{source.id}/events</Text><Button size="1" variant="soft" aria-label={`Copy endpoint for ${source.name}`} onClick={() => void copyEndpoint(source)}><CopyIcon /> Copy</Button></Flex> : <Text size="2">Worker consumer</Text>}</Table.Cell>
-      <Table.Cell><Flex gap="2" wrap="wrap"><Button asChild size="1" variant="soft"><NavLink to={`/sources/${encodeURIComponent(source.id)}`}>Details</NavLink></Button>{canWrite && <><Button asChild size="1" variant="soft"><NavLink to={`/sources/${encodeURIComponent(source.id)}?edit=1`}>Edit</NavLink></Button>
+      <Table.Cell><Flex gap="2" align="center" wrap="wrap">{canWrite && <><Button asChild size="1" variant="soft"><NavLink to={`/sources/${encodeURIComponent(source.id)}?edit=1`}>Edit</NavLink></Button>
         <Button size="1" variant="soft" onClick={() => void changeState(source)} disabled={toggle.isPending}>{source.enabled ? 'Disable' : 'Enable'}</Button>
-        <Button size="1" variant="soft" color="red" onClick={() => void deleteItem(source)} disabled={remove.isPending}>Delete</Button></>}</Flex></Table.Cell>
-    </Table.Row>)}</Table.Body></Table.Root>{sources.data.length === 0 && <Text color="gray">No Sources yet.</Text>}</Card>}
+        <Button size="1" variant="soft" color="red" onClick={() => void deleteItem(source)} disabled={remove.isPending}>Delete</Button></>}<DetailIndicator /></Flex></Table.Cell>
+    </NavigableTableRow>)}</Table.Body></Table.Root>{sources.data.length === 0 && <Text color="gray">No Sources yet.</Text>}</Card>}
   </Flex>
 }

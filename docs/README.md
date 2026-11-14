@@ -31,5 +31,5 @@ they are not a production-readiness certification.
 
 - [Contribution guide](../CONTRIBUTING.md)
 - [Security policy](../SECURITY.md)
-- [Public-alpha validation and remaining owner actions](publication-readiness.md)
+- [Publishing a clean public repository](publication-readiness.md)
 - [License](../LICENSE)

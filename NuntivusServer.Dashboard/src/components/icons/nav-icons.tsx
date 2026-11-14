@@ -46,6 +46,44 @@ export function ContractsIcon(props: IconProps) {
   )
 }
 
+export function SourcesIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M14 4h6v16h-6M3 12h12M10 7l5 5-5 5" />
+    </svg>
+  )
+}
+
+export function DestinationsIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1" />
+    </svg>
+  )
+}
+
+export function RoutingMapIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="3" y="9" width="6" height="6" rx="1" />
+      <rect x="16" y="3" width="5" height="5" rx="1" />
+      <rect x="16" y="16" width="5" height="5" rx="1" />
+      <path d="M9 12h3M12 5.5v13M12 5.5h4M12 18.5h4" />
+    </svg>
+  )
+}
+
+export function SecretsIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <circle cx="8" cy="8" r="5" />
+      <path d="m11.5 11.5 9 9M16 16l3-3M18.5 18.5l3-3" />
+    </svg>
+  )
+}
+
 export function EventsIcon(props: IconProps) {
   return (
     <svg {...base} {...props}>
