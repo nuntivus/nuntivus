@@ -1,6 +1,7 @@
 import { Button, Flex, Popover, Text, TextField } from '@radix-ui/themes'
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { hasPermission } from '../../auth/permissions'
+import { ChevronRightIcon } from '../icons/nav-icons'
 import { getApiErrorMessage } from '../../services/api/api-client'
 import { useAppSelector } from '../../store/hooks'
 import { entityReadPermissions, useEntityOptions, type SelectableEntityKind } from './entity-select-options'
@@ -69,7 +70,7 @@ export function EntitySelect({ kind, value, onChange, id, 'aria-label': label, '
         aria-label={label} aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? listId : undefined}
         aria-invalid={invalid} aria-describedby={describedBy} disabled={disabled}>
         <span className={value ? 'entity-select-value' : 'entity-select-placeholder'}>{value ? query.selected?.label || value : placeholder ?? label}</span>
-        <span aria-hidden="true">⌄</span>
+        <ChevronRightIcon className="entity-select-chevron" />
       </Button>
     </Popover.Trigger>
     <Popover.Content className="entity-select-popover" onOpenAutoFocus={event => { event.preventDefault(); input.current?.focus() }}>

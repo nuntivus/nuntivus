@@ -12,9 +12,10 @@ import { useState } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { ConfigurationHeading } from '../components/forms/configuration-layout'
 import { CalendarIcon, CheckCircleIcon, SettingsIcon, UsersIcon } from '../components/icons/nav-icons'
 import { DetailPageHeader } from '../components/states/detail-page-header'
-import { DetailMetric, DetailSectionTitle } from '../components/states/detail-visuals'
+import { DetailMetric } from '../components/states/detail-visuals'
 import {
   useAdminRolesQuery,
   useAdminUserQuery,
@@ -218,9 +219,9 @@ function UserDetailEditor({
   }
 
   return (
-    <Card>
+    <Card className="configuration-editor">
       <Flex direction="column" gap="3">
-        <DetailSectionTitle icon={UsersIcon}>User information</DetailSectionTitle>
+        <ConfigurationHeading title="User information" description="Manage this user's display name and assigned roles." icon={<UsersIcon />} />
         <Text size="2" color="gray">
           Subject
         </Text>
@@ -271,7 +272,7 @@ function UserDetailEditor({
 
         <FormErrorText id="user-detail-submit-error" message={mutationError} />
 
-        <Flex gap="3">
+        <Flex gap="3" className="configuration-actions">
           <Button
             type="button"
             onClick={() => {

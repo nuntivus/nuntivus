@@ -6,6 +6,7 @@ import { useCreateSourceMutation, useUpdateSourceMutation } from './use-sources'
 import { sourceConfiguration, sourceConfigurationFields, sourceFields, sourceTypes, validatePollingJson } from './source-types'
 import { useNotifications } from '../../hooks/use-notifications'
 import { EventsIcon } from '../../components/icons/nav-icons'
+import { ConfigurationHeading } from '../../components/forms/configuration-layout'
 import { IntegrationTypePicker } from '../../components/forms/integration-type-picker'
 import { IntegrationCreationLayout } from '../../components/forms/integration-creation-layout'
 import { sourceTypeOptions } from '../shared/integration-types'
@@ -111,8 +112,8 @@ export function SourceForm({ source, onSaved, onCancel }: SourceFormProps) {
     }
   }
 
-  return <Card id={source ? 'source-configuration' : undefined} className={`settings-editor-card${source ? ' source-configuration-card' : ' integration-creation-card'}`}><form onSubmit={(event) => void submit(event)} className="settings-editor-form">
-    {source ? <div className="source-configuration-heading"><span className="source-configuration-icon"><EventsIcon /></span><div><Heading size="4">{source.type === 'HTTP_API' ? 'HTTP Source Configuration' : `${source.type} Source Configuration`}</Heading><Text size="2" color="gray">Configure how this Source receives events. Use managed secrets rather than entering sensitive values in plain text.</Text></div></div>
+  return <Card id={source ? 'source-configuration' : undefined} className={`settings-editor-card configuration-editor${source ? ' source-configuration-card' : ' integration-creation-card'}`}><form onSubmit={(event) => void submit(event)} className="settings-editor-form">
+    {source ? <ConfigurationHeading title={source.type === 'HTTP_API' ? 'HTTP Source Configuration' : `${source.type} Source Configuration`} description="Configure how this Source receives events. Use managed secrets rather than entering sensitive values in plain text." icon={<EventsIcon />} />
       : <Heading size="5">Register a new source</Heading>}
     {!source && <Text size="2" color="gray">Configure how this Source receives events. Use managed secrets rather than entering sensitive values in plain text.</Text>}
     <IntegrationCreationLayout picker={!source && <IntegrationTypePicker label="Source type" options={sourceTypeOptions}

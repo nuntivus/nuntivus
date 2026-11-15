@@ -52,6 +52,7 @@ export interface DeliveryListQuery {
   destinationType?: DestinationType
   failureCategory?: string
   status?: DeliveryStatusName
+  failuresOnly?: boolean
   createdFrom?: string
   createdTo?: string
   sortBy?: 'createdAt' | 'updatedAt'
@@ -105,6 +106,7 @@ export async function listDeliveries(query: DeliveryListQuery, options?: ApiRequ
     destinationType: query.destinationType ?? null,
     failureCategory: query.failureCategory?.trim() ? query.failureCategory.trim() : null,
     status: query.status ?? null,
+    failuresOnly: query.failuresOnly ?? null,
     createdFrom: query.createdFrom ?? null,
     createdTo: query.createdTo ?? null,
     sortBy: query.sortBy ?? null,

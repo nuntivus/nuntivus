@@ -16,5 +16,6 @@ namespace NuntivusServer.Application.Deliveries.Queries
         string? SortDirection,
         int Page,
         int PageSize,
-        string? Search = null);
+        string? Search = null,
+        bool FailuresOnly = false);
 }

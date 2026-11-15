@@ -20,6 +20,7 @@ import { DetailPageHeader } from '../components/states/detail-page-header'
 import { DetailLoadingState } from '../components/states/detail-loading-state'
 import { DetailMetric, DetailSectionTitle } from '../components/states/detail-visuals'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { ConfigurationHeading } from '../components/forms/configuration-layout'
 import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
 import { useCustomerDestinationHealthQuery } from '../features/destination-health/use-destination-health'
 import {
@@ -421,9 +422,9 @@ function CustomerInfoEditor({
 
   return (
     <Card>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="configuration-editor">
         <Flex direction="column" gap="3">
-          <DetailSectionTitle icon={CustomersIcon}>Customer information</DetailSectionTitle>
+          <ConfigurationHeading title="Customer information" description="Manage this customer's name and enabled status." icon={<CustomersIcon />} />
 
           <Text size="2" color="gray">
             Customer ID
@@ -452,7 +453,7 @@ function CustomerInfoEditor({
 
           <FormErrorText message={mutationError} id="customer-submit-error" />
 
-          <Flex gap="2" wrap="wrap">
+          <Flex gap="2" wrap="wrap" className="configuration-actions">
             <Button
               type="submit"
               disabled={!canWriteCustomers || pending}

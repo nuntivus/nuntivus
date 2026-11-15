@@ -1,6 +1,7 @@
-import { Badge, Button, Card, Flex, Heading, Switch, Text, TextArea } from '@radix-ui/themes'
+import { Badge, Button, Card, Flex, Switch, Text, TextArea } from '@radix-ui/themes'
 import { useId, useState, type ReactNode } from 'react'
 import { FieldErrorText } from '../../components/forms/form-feedback'
+import { ConfigurationHeading } from '../../components/forms/configuration-layout'
 import { CodeIcon, ContractsIcon, EventsIcon, SettingsIcon } from '../../components/icons/nav-icons'
 import { formStateToBackendConfig, parseRawSection, type AdvancedOptionsDraft, type OptionKey, type ValidationErrors } from './contract-options'
 
@@ -50,10 +51,7 @@ export function ConfigSection({ title, summary, enabled, onToggle, sectionKey, v
     <Card className={`contract-config-section contract-config-${sectionKey}`}>
       <Flex direction="column" gap="3">
         <Flex align="center" justify="between" gap="2" wrap="wrap">
-          <Flex align="center" gap="2" className="contract-config-heading">
-            <span><SectionIcon /></span>
-            <div><Heading size="3">{title}</Heading><Text size="1" color="gray">{sectionMeta.description}</Text></div>
-          </Flex>
+          <ConfigurationHeading title={title} description={sectionMeta.description} icon={<SectionIcon />} />
           <Flex align="center" gap="3">
             <Badge color={showValidation && sectionErrors ? 'red' : 'gray'}>{showValidation && sectionErrors ? 'Needs attention' : summary}</Badge>
             <Switch id={`${id}-enabled`} checked={enabled} disabled={disabled || raw !== null} onCheckedChange={(checked) => { onToggle(checked); if (checked) setOpen(true) }} aria-label={`Enable ${title}`} />

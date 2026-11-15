@@ -1,0 +1,211 @@
+.configuration-editor {
+  min-width: 0;
+}
+
+.form-dialog-body > form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.configuration-editor .field,
+.form-dialog:has(form) .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.form-dialog:has(form) .rt-TextFieldRoot,
+.form-dialog:has(form) .rt-TextAreaRoot,
+.form-dialog:has(form) .rt-SelectTrigger {
+  width: 100%;
+  min-width: 0;
+  border-radius: 7px;
+}
+
+.form-dialog:has(form) .form-dialog-footer,
+.configuration-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-top: 1px solid var(--gray-a4);
+  padding-top: 16px;
+}
+
+.configuration-editor .field-label,
+.configuration-editor .field > label,
+.configuration-editor .field > .rt-Text:first-child,
+.form-dialog:has(form) .field-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gray-12);
+}
+
+.configuration-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.configuration-heading p {
+  margin: 3px 0 0;
+}
+
+.configuration-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  color: var(--accent-9);
+  background: var(--accent-a3);
+}
+
+.configuration-icon svg {
+  width: 23px;
+  height: 23px;
+}
+
+.configuration-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.configuration-section-panel,
+.configuration-editor .contract-config-section {
+  padding: 14px 16px;
+  border: 1px solid var(--gray-a5);
+  border-radius: 12px;
+  background: var(--gray-a2);
+  box-shadow: none;
+}
+
+.configuration-section-divider {
+  border-top: 1px solid var(--gray-a4);
+  padding-top: 18px;
+}
+
+.configuration-grid {
+  display: grid;
+  gap: 14px 24px;
+  min-width: 0;
+}
+
+.configuration-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.configuration-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.configuration-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.configuration-grid > *,
+.configuration-editor label {
+  min-width: 0;
+}
+
+.configuration-grid > .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: auto;
+}
+
+.configuration-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-12);
+}
+
+.configuration-help {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--gray-9);
+  cursor: help;
+}
+
+.configuration-help:focus-visible {
+  outline: 2px solid var(--accent-9);
+  outline-offset: 3px;
+  border-radius: 50%;
+}
+
+.configuration-checkboxes {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--accent-a2);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.configuration-checkboxes > label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.configuration-checkboxes input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent-9);
+}
+
+.configuration-editor .rt-TextFieldRoot,
+.configuration-editor .rt-SelectTrigger,
+.configuration-editor .rt-TextAreaRoot {
+  width: 100%;
+  min-width: 0;
+  border-radius: 7px;
+}
+
+.configuration-editor .settings-editor-fields,
+.configuration-editor .rt-Flex.configuration-form-grid,
+.rt-Flex.configuration-form-grid.configuration-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+  max-width: none;
+}
+
+.configuration-editor .source-advanced-settings {
+  border: 1px solid var(--gray-a5);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--gray-a2);
+}
+
+.configuration-editor .source-advanced-settings > summary {
+  margin-bottom: 14px;
+}
+
+.configuration-editor .source-description-field {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1000px) {
+  .configuration-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .configuration-grid,
+  .configuration-editor .settings-editor-fields,
+  .configuration-editor .rt-Flex.configuration-form-grid,
+  .rt-Flex.configuration-form-grid.configuration-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .configuration-section-panel { padding: 12px; }
+}

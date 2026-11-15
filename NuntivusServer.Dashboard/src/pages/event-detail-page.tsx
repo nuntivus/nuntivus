@@ -363,7 +363,7 @@ export function EventDetailPage() {
         </Flex>
       </Card>
 
-      <Card className="detail-panel detail-panel-wide event-detail-card event-replay-card">
+      <Card className="detail-panel detail-panel-wide event-detail-card event-replay-card configuration-editor">
         <Flex direction="column" gap="3">
           <div className="event-section-header"><Flex align="center" gap="2"><span className="event-section-icon"><RetryIcon /></span><div><Heading size="4">Replay event</Heading><Text size="1" color="gray">Create a new event from this event and re-run contract matching. This can produce new deliveries even if previous deliveries already exist.</Text></div></Flex></div>
           {!canReplayEvents ? (
@@ -372,18 +372,19 @@ export function EventDetailPage() {
             </Text>
           ) : (
             <>
-              <div className="event-replay-controls">
-                <TextField.Root placeholder="Replay key" value={replayKey} onChange={(event) => setReplayKey(event.target.value)} disabled={replayMutation.isPending} aria-invalid={replayKeyError ? 'true' : 'false'} aria-describedby={replayKeyError ? 'event-replay-key-error' : undefined} />
-                <Button type="button" onClick={() => void handleReplay()} disabled={replayMutation.isPending}><RetryIcon />{replayMutation.isPending ? 'Submitting...' : 'Replay event'}</Button>
-              </div>
+              <Text as="label" htmlFor="event-replay-key" size="2">Replay key</Text>
+              <TextField.Root id="event-replay-key" placeholder="Replay key" value={replayKey} onChange={(event) => setReplayKey(event.target.value)} disabled={replayMutation.isPending} aria-invalid={replayKeyError ? 'true' : 'false'} aria-describedby={replayKeyError ? 'event-replay-key-error' : undefined} />
               <FieldErrorText id="event-replay-key-error" message={replayKeyError} />
+              <Text as="label" htmlFor="event-replay-reason" size="2">Reason (optional)</Text>
               <TextArea
+                id="event-replay-reason"
                 placeholder="Reason (optional)"
                 value={replayReason}
                 onChange={(event) => setReplayReason(event.target.value)}
                 rows={3}
                 disabled={replayMutation.isPending}
               />
+              <div className="configuration-actions"><Button type="button" onClick={() => void handleReplay()} disabled={replayMutation.isPending}><RetryIcon />{replayMutation.isPending ? 'Submitting...' : 'Replay event'}</Button></div>
 
               <FormErrorText
                 id="event-replay-submit-error"

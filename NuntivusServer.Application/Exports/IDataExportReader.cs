@@ -14,6 +14,7 @@ namespace NuntivusServer.Application.Exports
         public string? Source { get; set; }
         public string? EventType { get; set; }
         public string? Status { get; set; }
+        public bool FailuresOnly { get; set; }
         public string? DestinationType { get; set; }
         public string? FailureCategory { get; set; }
         public string? Search { get; set; }

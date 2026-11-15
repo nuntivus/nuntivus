@@ -45,7 +45,7 @@ for (const role of ['Operator', 'Viewer']) {
       await dialog.getByRole('button', { name: 'Close dialog' }).click()
       await page.getByRole('button', { name: 'Archive', exact: true }).click()
       await page.getByRole('alertdialog').getByRole('button', { name: 'Archive rule', exact: true }).click()
-      await page.getByText('Old obligation · DeadLetters · Archived', { exact: false }).waitFor()
+      await page.getByRole('row').filter({ hasText: 'Old obligation' }).getByText('Archived', { exact: true }).waitFor()
       assert.equal(archived, true)
       assert.equal(await page.getByRole('button', { name: 'Archive', exact: true }).count(), 0)
     } finally { await browser.close() }

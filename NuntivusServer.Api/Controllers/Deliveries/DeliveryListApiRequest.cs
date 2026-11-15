@@ -19,6 +19,8 @@ namespace NuntivusServer.Api.Controllers.Deliveries
 
         public string? Status { get; set; }
 
+        public bool FailuresOnly { get; set; }
+
         public DateTimeOffset? CreatedFrom { get; set; }
 
         public DateTimeOffset? CreatedTo { get; set; }

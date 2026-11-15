@@ -32,7 +32,7 @@ for (const role of ['Operator', 'Viewer']) {
       await page.getByRole('button', { name: 'Export CSV', exact: true }).click()
       assert.equal((await download).suggestedFilename(), 'deliveries.csv')
       assert.equal(exports.length, 1)
-      for (const [key, value] of Object.entries({ customerId: 'customer-1', contractId: contract, failureCategory: 'Timeout', status: 'Dead', format: 'csv' })) assert.equal(exports[0].searchParams.get(key), value)
+      for (const [key, value] of Object.entries({ customerId: 'customer-1', contractId: contract, failureCategory: 'Timeout', status: 'Dead', failuresOnly: 'true', format: 'csv' })) assert.equal(exports[0].searchParams.get(key), value)
       for (const key of ['page', 'pageSize', 'sortDirection']) assert.equal(exports[0].searchParams.has(key), false)
     } finally { await browser.close() }
   })

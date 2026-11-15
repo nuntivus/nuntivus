@@ -398,6 +398,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                             )
                         )
                         AND (@Status IS NULL OR d.status = @Status)
+                        AND (NOT @FailuresOnly OR d.status IN ('Failed', 'Dead'))
                         AND (@CreatedFrom IS NULL OR d.created_at >= @CreatedFrom)
                         AND (@CreatedTo IS NULL OR d.created_at <= @CreatedTo)
                     ORDER BY {orderByColumn} {sortDirection}, d.id DESC
@@ -421,6 +422,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                             )
                         )
                         AND (@Status IS NULL OR d.status = @Status)
+                        AND (NOT @FailuresOnly OR d.status IN ('Failed', 'Dead'))
                         AND (@CreatedFrom IS NULL OR d.created_at >= @CreatedFrom)
                         AND (@CreatedTo IS NULL OR d.created_at <= @CreatedTo);
                     """;
@@ -439,6 +441,7 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         DestinationType = string.IsNullOrWhiteSpace(query.DestinationType) ? null : query.DestinationType,
                         FailureCategory = string.IsNullOrWhiteSpace(query.FailureCategory) ? null : query.FailureCategory,
                         Status = query.Status?.ToString(),
+                        query.FailuresOnly,
                         query.CreatedFrom,
                         query.CreatedTo,
                         Offset = (query.Page - 1) * query.PageSize,

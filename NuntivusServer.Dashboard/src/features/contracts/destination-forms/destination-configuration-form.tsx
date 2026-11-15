@@ -1,4 +1,5 @@
 import { Flex } from '@radix-ui/themes'
+import '../../../components/forms/configuration-layout.css'
 import { DestinationTypeSelector } from './destination-type-selector'
 import { HttpDestinationForm } from './http-destination-form'
 import { KafkaDestinationForm } from './kafka-destination-form'
@@ -19,7 +20,7 @@ export function DestinationConfigurationForm({
   fixedType = false,
 }: DestinationConfigurationFormProps) {
   return (
-    <Flex direction="column" gap="3" className="configuration-form-grid">
+    <Flex direction="column" gap="3" className="configuration-form-grid configuration-editor">
       {!fixedType && <DestinationTypeSelector
         value={value.type}
         onChange={(type) => onChange({ ...value, type })}

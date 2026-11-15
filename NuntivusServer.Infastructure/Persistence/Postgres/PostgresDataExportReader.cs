@@ -57,6 +57,8 @@ namespace NuntivusServer.Infastructure.Persistence.Postgres
                         select = "d.id AS id, d.event_id AS eventId, d.contract_id AS contractId, d.customer_id AS customerId, d.event_type AS eventType, d.destination_type AS destinationType, d.status AS status, d.attempt_count AS attemptCount, d.created_at AS createdAt, d.updated_at AS updatedAt";
                         Filter("d.event_id", "EventId", request.EventId); Filter("d.contract_id", "ContractId", request.ContractId);
                         Filter("d.status", "Status", request.Status); Filter("d.destination_type", "DestinationType", request.DestinationType); Filter("d.event_type", "EventType", request.EventType);
+                        if (request.FailuresOnly)
+                            where.Append(" AND d.status IN ('Failed', 'Dead')");
                         if (!string.IsNullOrWhiteSpace(request.FailureCategory))
                         {
                             where.Append(" AND EXISTS(SELECT 1 FROM delivery_attempts a WHERE a.delivery_id = d.id AND NOT a.succeeded AND a.failure_category = @FailureCategory)");

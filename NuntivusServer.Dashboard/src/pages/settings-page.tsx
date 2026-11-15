@@ -18,6 +18,8 @@ import {
 import { useNotifications } from '../hooks/use-notifications'
 import { useAppSelector } from '../store/hooks'
 import { frontendConfig } from '../app/frontend-config'
+import { ConfigurationGrid, ConfigurationHeading, ConfigurationLabel, ConfigurationSection } from '../components/forms/configuration-layout'
+import { AuditLogsIcon, DeliveriesIcon, FailedDeliveriesIcon, SettingsIcon, SecretsIcon, ContractsIcon } from '../components/icons/nav-icons'
 
 function toRequest(settings: InstanceSettings): UpdateInstanceSettingsRequest {
   return {
@@ -96,7 +98,7 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <Card>
+      <Card className="configuration-editor">
         <Flex direction="column" gap="2">
           <Heading size="4">Frontend runtime</Heading>
           <Text size="2" color="gray">Version: {frontendConfig.version}</Text>
@@ -105,12 +107,9 @@ export function SettingsPage() {
         </Flex>
       </Card>
 
-      <Card>
+      <Card className="configuration-editor">
         <Flex direction="column" gap="3">
-          <Heading size="4">User preferences</Heading>
-          <Text size="2" color="gray">
-            Preferences are private to your account and stored locally in this browser.
-          </Text>
+          <ConfigurationHeading title="User preferences" description="Preferences are private to your account and stored locally in this browser." icon={<SettingsIcon />} />
 
           <Text id="settings-theme-label" size="2" color="gray">Theme</Text>
           <Select.Root
@@ -152,7 +151,7 @@ export function SettingsPage() {
         </Flex>
       </Card>
 
-      <Card>
+      <Card className="configuration-editor">
         <Flex direction="column" gap="3">
           <Heading size="4">Instance settings</Heading>
           {!canWriteSettings ? (
@@ -167,15 +166,15 @@ export function SettingsPage() {
             </Text>
           ) : instanceDraft ? (
             <>
-              <Heading size="3">General settings</Heading>
-
-              <Heading size="2">Delivery defaults</Heading>
-              <Flex wrap="wrap" gap="2">
+              <ConfigurationHeading title="General settings" description="Default values for event delivery, retries, and data retention." icon={<SettingsIcon />} />
+              <ConfigurationSection title="Delivery defaults" description="Configure the default behavior for event delivery." icon={<DeliveriesIcon />}>
+              <ConfigurationGrid>
                 <label className="field">
-                  <Text size="2" color="gray">Request timeout (seconds)</Text>
+                  <ConfigurationLabel help="Maximum time to wait for a destination response, in seconds.">Request timeout (seconds)</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.deliveryDefaults.requestTimeoutSeconds)}
+                    aria-label="Request timeout (seconds)"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -195,10 +194,11 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="field">
-                  <Text size="2" color="gray">Maximum attempts</Text>
+                  <ConfigurationLabel help="Maximum number of delivery attempts before a delivery becomes dead.">Maximum attempts</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.deliveryDefaults.maxAttempts)}
+                    aria-label="Maximum attempts"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -218,10 +218,11 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="field">
-                  <Text size="2" color="gray">Batch limit</Text>
+                  <ConfigurationLabel help="Default maximum number of events in a delivery batch.">Batch limit</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.deliveryDefaults.batchLimit)}
+                    aria-label="Batch limit"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -240,15 +241,16 @@ export function SettingsPage() {
                     }
                   />
                 </label>
-              </Flex>
-
-              <Heading size="2">Retry defaults</Heading>
-              <Flex wrap="wrap" gap="2">
+              </ConfigurationGrid>
+              </ConfigurationSection>
+              <ConfigurationSection title="Retry defaults" description="Control the retry backoff behavior when delivery fails." icon={<FailedDeliveriesIcon />}>
+              <ConfigurationGrid>
                 <label className="field">
-                  <Text size="2" color="gray">Initial delay (seconds)</Text>
+                  <ConfigurationLabel help="Delay before the first retry, in seconds.">Initial delay (seconds)</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.retryDefaults.initialDelaySeconds)}
+                    aria-label="Initial delay (seconds)"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -268,10 +270,11 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="field">
-                  <Text size="2" color="gray">Maximum delay (seconds)</Text>
+                  <ConfigurationLabel help="Upper limit on the delay between retry attempts, in seconds.">Maximum delay (seconds)</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.retryDefaults.maxDelaySeconds)}
+                    aria-label="Maximum delay (seconds)"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -291,10 +294,11 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="field">
-                  <Text size="2" color="gray">Backoff multiplier</Text>
+                  <ConfigurationLabel help="Factor used to increase the delay after each failed attempt.">Backoff multiplier</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.retryDefaults.backoffMultiplier)}
+                    aria-label="Backoff multiplier"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -310,15 +314,16 @@ export function SettingsPage() {
                     }
                   />
                 </label>
-              </Flex>
-
-              <Heading size="2">Retention settings</Heading>
-              <Flex wrap="wrap" gap="2">
+              </ConfigurationGrid>
+              </ConfigurationSection>
+              <ConfigurationSection title="Retention settings" description="Define how long to keep events and audit data." icon={<AuditLogsIcon />}>
+              <ConfigurationGrid>
                 <label className="field">
-                  <Text size="2" color="gray">Event retention (days)</Text>
+                  <ConfigurationLabel help="Number of days to retain stored events.">Event retention (days)</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.retention.eventRetentionDays)}
+                    aria-label="Event retention (days)"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -338,10 +343,11 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="field">
-                  <Text size="2" color="gray">Delivery audit retention (days)</Text>
+                  <ConfigurationLabel help="Number of days to retain delivery audit records.">Delivery audit retention (days)</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.retention.deliveryAuditRetentionDays)}
+                    aria-label="Delivery audit retention (days)"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -361,10 +367,11 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="field">
-                  <Text size="2" color="gray">Operation audit retention (days)</Text>
+                  <ConfigurationLabel help="Number of days to retain operational audit records.">Operation audit retention (days)</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.retention.operationAuditRetentionDays)}
+                    aria-label="Operation audit retention (days)"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -383,10 +390,10 @@ export function SettingsPage() {
                     }
                   />
                 </label>
-              </Flex>
-
-              <Heading size="2">Security settings</Heading>
-              <Flex direction="column" gap="2">
+              </ConfigurationGrid>
+              </ConfigurationSection>
+              <ConfigurationSection variant="divider" title="Security settings" description="Security requirements for event destinations." icon={<SecretsIcon />}>
+              <ConfigurationGrid checkboxes>
                 <label>
                   <input
                     type="checkbox"
@@ -447,15 +454,16 @@ export function SettingsPage() {
                   />{' '}
                   Require destination credential encryption
                 </label>
-              </Flex>
-
-              <Heading size="2">HTTP delivery defaults and limits</Heading>
-              <Flex wrap="wrap" gap="2">
+              </ConfigurationGrid>
+              </ConfigurationSection>
+              <ConfigurationSection variant="divider" title="HTTP delivery defaults and limits" description="Limits and constraints for event delivery." icon={<ContractsIcon />}>
+              <ConfigurationGrid columns={4}>
                 <label className="field">
-                  <Text size="2" color="gray">Maximum event payload (bytes)</Text>
+                  <ConfigurationLabel help="Largest accepted event payload, in bytes.">Maximum event payload (bytes)</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.limits.maxEventPayloadBytes)}
+                    aria-label="Maximum event payload (bytes)"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -475,10 +483,11 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="field">
-                  <Text size="2" color="gray">Maximum event metadata (bytes)</Text>
+                  <ConfigurationLabel help="Largest accepted event metadata, in bytes.">Maximum event metadata (bytes)</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.limits.maxEventMetadataBytes)}
+                    aria-label="Maximum event metadata (bytes)"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -498,10 +507,11 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="field">
-                  <Text size="2" color="gray">Maximum contracts per customer</Text>
+                  <ConfigurationLabel help="Maximum number of contracts allowed for each customer.">Maximum contracts per customer</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.limits.maxContractsPerCustomer)}
+                    aria-label="Maximum contracts per customer"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -521,10 +531,11 @@ export function SettingsPage() {
                   />
                 </label>
                 <label className="field">
-                  <Text size="2" color="gray">Maximum concurrent replay jobs</Text>
+                  <ConfigurationLabel help="Maximum number of event replay jobs allowed to run concurrently.">Maximum concurrent replay jobs</ConfigurationLabel>
                   <TextField.Root
                     type="number"
                     value={String(instanceDraft.limits.maxConcurrentReplayJobs)}
+                    aria-label="Maximum concurrent replay jobs"
                     onChange={(event) =>
                       setInstanceDraft((current) =>
                         current
@@ -543,8 +554,8 @@ export function SettingsPage() {
                     }
                   />
                 </label>
-              </Flex>
-
+              </ConfigurationGrid>
+              </ConfigurationSection>
               <Heading size="3">Instance information</Heading>
               <Text size="2" color="gray">
                 Last updated: {new Date(instanceDraft.updatedAt).toLocaleString()}

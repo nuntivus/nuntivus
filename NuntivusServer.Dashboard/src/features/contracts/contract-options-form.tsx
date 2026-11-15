@@ -1,4 +1,6 @@
-import { Card, Flex, Heading, Text } from '@radix-ui/themes'
+import { Card, Flex } from '@radix-ui/themes'
+import { ConfigurationHeading } from '../../components/forms/configuration-layout'
+import { SettingsIcon } from '../../components/icons/nav-icons'
 import { ConfigSection } from './config-section'
 import { FiltersEditor } from './filters-editor'
 import { OrderingEditor } from './ordering-editor'
@@ -38,13 +40,12 @@ export function ContractOptionsForm({ value, onChange, eventTypes, disabled = fa
   </>
 
   if (standalone) {
-    return <div className="contract-options-standalone">{sections}</div>
+    return <div className="contract-options-standalone configuration-editor">{sections}</div>
   }
 
-  return <Card>
+  return <Card className="configuration-editor">
     <Flex direction="column" gap="3">
-      <Heading size="4">Advanced contract options</Heading>
-      <Text size="2" color="gray">Optional settings. Expand and enable only the sections you need. Each section also offers expert JSON editing.</Text>
+      <ConfigurationHeading title="Advanced contract options" description="Optional settings. Expand and enable only the sections you need. Each section also offers expert JSON editing." icon={<SettingsIcon />} />
       {sections}
     </Flex>
   </Card>

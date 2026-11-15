@@ -1,5 +1,6 @@
 import { Dialog, Flex, IconButton, Text } from '@radix-ui/themes'
 import type { CSSProperties, ReactNode } from 'react'
+import '../forms/configuration-layout.css'
 
 interface FormDialogProps {
   open: boolean
@@ -14,6 +15,7 @@ interface FormDialogProps {
   maxWidth?: string
   /** Optional id used to associate the description for accessibility. */
   descriptionId?: string
+  onCloseAutoFocus?: (event: Event) => void
 }
 
 /**
@@ -33,6 +35,7 @@ export function FormDialog({
   footer,
   maxWidth = '600px',
   descriptionId,
+  onCloseAutoFocus,
 }: FormDialogProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -41,6 +44,7 @@ export function FormDialog({
         maxWidth={maxWidth}
         style={{ '--form-dialog-max-width': maxWidth } as CSSProperties}
         aria-describedby={description ? descriptionId : undefined}
+        onCloseAutoFocus={onCloseAutoFocus}
       >
         <Flex justify="between" align="start" gap="3" mb={description ? '1' : '4'}>
           <Dialog.Title className="form-dialog-title">{title}</Dialog.Title>

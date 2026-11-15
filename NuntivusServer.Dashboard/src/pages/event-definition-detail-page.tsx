@@ -15,6 +15,7 @@ import { useState, type FormEvent } from 'react'
 import { NavLink, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
+import { ConfigurationGrid, ConfigurationSection } from '../components/forms/configuration-layout'
 import { EntityReference } from '../components/links/entity-reference'
 import { CalendarIcon, CheckCircleIcon, ClockIcon, CodeIcon, ContractsIcon, CopyIcon, EventDefinitionsIcon, EventsIcon, PencilIcon } from '../components/icons/nav-icons'
 import { DetailPageHeader } from '../components/states/detail-page-header'
@@ -359,7 +360,7 @@ export function EventDefinitionDetailPage() {
             <EventDefinitionsIcon />
             <Text weight="medium">Display name</Text>
             {editingDefinitionField === 'displayName' ? (
-              <form className="definition-inline-form" onSubmit={handleUpdateDefinition}>
+              <form className="definition-inline-form configuration-editor" onSubmit={handleUpdateDefinition}>
                 <TextField.Root value={displayNameInput} onChange={(entry) => setDisplayNameInput(entry.target.value)} placeholder="Display name" disabled={updateMutation.isPending} autoFocus aria-invalid={!displayNameInput.trim() || displayNameInput.trim().length > 200 ? 'true' : 'false'} />
                 <FieldErrorText id="event-definition-display-name-error" message={!displayNameInput.trim() ? 'Display name is required.' : displayNameInput.trim().length > 200 ? 'Display name must be at most 200 characters.' : null} />
                 <FormErrorText message={updateMutation.isError ? getApiErrorMessage(updateMutation.error, 'Unable to update event definition.') : null} />
@@ -373,7 +374,7 @@ export function EventDefinitionDetailPage() {
             <CodeIcon />
             <Text weight="medium">Description</Text>
             {editingDefinitionField === 'description' ? (
-              <form className="definition-inline-form" onSubmit={handleUpdateDefinition}>
+              <form className="definition-inline-form configuration-editor" onSubmit={handleUpdateDefinition}>
                 <TextArea
                   value={descriptionInput}
                   onChange={(entry) => setDescriptionInput(entry.target.value)}
@@ -404,7 +405,7 @@ export function EventDefinitionDetailPage() {
       </Card>
 
       <Card className="detail-panel detail-panel-wide">
-        <form onSubmit={handleCreateSchemaDraft}>
+        <form onSubmit={handleCreateSchemaDraft} className="configuration-editor">
           <Flex direction="column" gap="3">
             <DetailSectionTitle icon={CodeIcon}>Schema versions</DetailSectionTitle>
 
@@ -501,8 +502,12 @@ export function EventDefinitionDetailPage() {
               </Card>
             ) : null}
 
-            <Heading size="3">Create schema draft</Heading>
+            <ConfigurationSection title="Create schema draft" description="Define a versioned JSON schema and its compatibility rules." icon={<CodeIcon />}>
+            <ConfigurationGrid columns={2}>
+            <div className="settings-editor-field">
+            <Text as="label" htmlFor="schema-draft-version">Version</Text>
             <TextField.Root
+              id="schema-draft-version"
               placeholder="Version (number)"
               value={schemaVersionInput}
               onChange={(entry) => setSchemaVersionInput(entry.target.value)}
@@ -511,17 +516,25 @@ export function EventDefinitionDetailPage() {
               aria-describedby={schemaVersionError ? 'event-definition-schema-version-error' : undefined}
             />
             <FieldErrorText id="event-definition-schema-version-error" message={schemaVersionError} />
+            </div>
+            <div className="settings-editor-field">
+            <Text id="schema-draft-compatibility-label">Compatibility mode</Text>
             <Select.Root
               value={compatibilityMode}
               onValueChange={(value) => setCompatibilityMode(value as 'Backward' | 'Forward')}
             >
-              <Select.Trigger />
+              <Select.Trigger aria-labelledby="schema-draft-compatibility-label" />
               <Select.Content>
                 <Select.Item value="Backward">Backward</Select.Item>
                 <Select.Item value="Forward">Forward</Select.Item>
               </Select.Content>
             </Select.Root>
+            </div>
+            </ConfigurationGrid>
+            <div className="settings-editor-field">
+            <Text as="label" htmlFor="schema-draft-json">JSON schema</Text>
             <TextArea
+              id="schema-draft-json"
               placeholder="JSON schema"
               value={schemaJsonInput}
               onChange={(entry) => setSchemaJsonInput(entry.target.value)}
@@ -531,6 +544,8 @@ export function EventDefinitionDetailPage() {
               aria-describedby={schemaJsonError ? 'event-definition-schema-json-error' : undefined}
             />
             <FieldErrorText id="event-definition-schema-json-error" message={schemaJsonError} />
+            </div>
+            </ConfigurationSection>
 
             <FormErrorText
               id="event-definition-schema-submit-error"

@@ -27,7 +27,7 @@ export function useFailedDeliveriesQuery(query: DeliveryListQuery, enabled = tru
     queryFn: ({ signal }) =>
       listDeliveries({
         ...query,
-        status: query.status ?? 'Failed',
+        failuresOnly: true,
       }, { signal }),
     enabled,
   })

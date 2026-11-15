@@ -14,6 +14,7 @@ import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
 import { FormDialog } from '../components/dialogs/form-dialog'
 import { getServerValidation } from '../components/forms/form-validation'
+import { ConfigurationHeading } from '../components/forms/configuration-layout'
 import { ContractsIcon, DeliveriesIcon, EventsIcon } from '../components/icons/nav-icons'
 import { ContractOptionsForm } from '../features/contracts/contract-options-form'
 import { TransformationImpactPanel } from '../features/contracts/transformation-impact-panel'
@@ -542,12 +543,9 @@ function ContractEditorForm({
   }
 
   return (
-    <form id="contract-edit-form" onSubmit={handleSubmit} className="contract-edit-form">
+    <form id="contract-edit-form" onSubmit={handleSubmit} className="contract-edit-form configuration-editor">
       <Card className="contract-edit-details-card">
-        <Flex align="center" gap="2" className="contract-edit-card-title">
-          <span><ContractsIcon /></span>
-          <div><Heading size="4">Contract details</Heading><Text size="1" color="gray">Basic information about this contract.</Text></div>
-        </Flex>
+        <ConfigurationHeading title="Contract details" description="Basic information about this contract." icon={<ContractsIcon />} />
         <div className="contract-edit-details-grid">
           <label className="contract-edit-field">
             <Text size="2" weight="medium">Contract name <span aria-hidden="true">*</span></Text>

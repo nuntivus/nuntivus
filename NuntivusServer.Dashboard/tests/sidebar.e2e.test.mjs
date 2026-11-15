@@ -87,6 +87,30 @@ test('workflow sidebar groups collapse accessibly and keep Settings visible', as
   }
 })
 
+test('desktop hamburger hides and restores sidebar and expands content', async () => {
+  const browser = await chromium.launch({ headless: true })
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+    await mockSession(page, [])
+    await page.goto(`${appUrl}/deliveries`)
+    const sidebar = page.locator('#dashboard-sidebar')
+    await page.getByRole('navigation', { name: 'Primary navigation', exact: true }).waitFor()
+    const before = await page.locator('.dashboard-main').boundingBox()
+    const hide = page.getByRole('button', { name: 'Hide menu', exact: true })
+    assert.equal(await hide.getAttribute('aria-expanded'), 'true')
+    await hide.click()
+    assert.equal(await sidebar.isVisible(), false)
+    const after = await page.locator('.dashboard-main').boundingBox()
+    assert.ok(after.width > before.width + 200)
+    const show = page.getByRole('button', { name: 'Show menu', exact: true })
+    assert.equal(await show.getAttribute('aria-expanded'), 'false')
+    await show.focus()
+    await page.keyboard.press('Enter')
+    assert.equal(await sidebar.isVisible(), true)
+    assert.equal(await page.getByRole('button', { name: 'Hide menu', exact: true }).getAttribute('aria-expanded'), 'true')
+  } finally { await browser.close() }
+})
+
 test('sidebar preserves permission-disabled links', async () => {
   const browser = await chromium.launch({ headless: true })
   try {

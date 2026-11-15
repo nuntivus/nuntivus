@@ -1,4 +1,6 @@
-import { Button, Card, Flex, Heading, Link, Select, Text, TextArea } from '@radix-ui/themes'
+import { Button, Card, Flex, Link, Select, Text, TextArea } from '@radix-ui/themes'
+import { ConfigurationHeading } from '../../components/forms/configuration-layout'
+import { EventsIcon } from '../../components/icons/nav-icons'
 import { useRef, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -128,12 +130,9 @@ export function ContractTestEventForm({ contract }: { contract: ContractDetail }
   }
 
   return (
-    <Card>
+    <Card className="configuration-editor">
       <Flex direction="column" gap="3">
-        <Heading size="4">Test {contract.name ?? contract.id}</Heading>
-        <Text size="2" color="gray">
-          Preview checks this contract only. Sending creates a real delivery to its configured destination; it will not match other contracts.
-        </Text>
+        <ConfigurationHeading title={`Test ${contract.name ?? contract.id}`} description="Preview checks this contract only. Sending creates a real delivery to its configured destination; it will not match other contracts." icon={<EventsIcon />} />
         <Text size="2" as="label" htmlFor="test-event-type">Event type</Text>
         <Select.Root value={eventType} onValueChange={(value) => { setEventType(value); invalidatePreview() }}>
           <Select.Trigger id="test-event-type" placeholder="Select an event type" />
@@ -145,7 +144,7 @@ export function ContractTestEventForm({ contract }: { contract: ContractDetail }
         <TextArea id="test-event-payload" value={payload} rows={8} onChange={(event) => { setPayload(event.target.value); invalidatePreview() }} />
         <Text size="2" as="label" htmlFor="test-event-metadata">Metadata (JSON object of strings)</Text>
         <TextArea id="test-event-metadata" value={metadata} rows={3} onChange={(event) => { setMetadata(event.target.value); invalidatePreview() }} />
-        <Flex gap="2" wrap="wrap">
+        <Flex gap="2" wrap="wrap" className="configuration-actions">
           <Button type="button" variant="soft" disabled={pending} onClick={() => { void handlePreview() }}>
             Preview match
           </Button>

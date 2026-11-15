@@ -1,4 +1,6 @@
-import { Badge, Button, Flex, Heading, Select, Text, TextArea } from '@radix-ui/themes'
+import { Badge, Button, Flex, Select, Text, TextArea } from '@radix-ui/themes'
+import { ConfigurationGrid, ConfigurationSection } from '../../components/forms/configuration-layout'
+import { EventsIcon } from '../../components/icons/nav-icons'
 import { useState } from 'react'
 import { FormErrorText } from '../../components/forms/form-feedback'
 import { getApiErrorMessage } from '../../services/api/api-client'
@@ -27,14 +29,14 @@ export function ContractDryRunPanel({ contractId, eventTypes, sourceIds, draft, 
     finally { setPending(false) }
   }
   const report = result?.fingerprint === fingerprint ? result.report : null
-  return <Flex direction="column" gap="2">
-    <Heading size="3">Full dry run</Heading>
-    <Text size="2" color="gray">Simulate input validation, routing, filters, transformation, output validation and destination configuration. Nothing is saved or sent.</Text>
-    <Select.Root value={eventType} onValueChange={setEventType}><Select.Trigger aria-label="Dry-run event type" /><Select.Content>{eventTypes.map(type => <Select.Item key={type} value={type}>{type}</Select.Item>)}</Select.Content></Select.Root>
-    <Select.Root value={sourceId} onValueChange={setSourceId}><Select.Trigger aria-label="Dry-run source" /><Select.Content>{sourceIds.map(id => <Select.Item key={id} value={id}>{id}</Select.Item>)}</Select.Content></Select.Root>
+  return <div className="configuration-editor"><ConfigurationSection title="Full dry run" description="Simulate input validation, routing, filters, transformation, output validation and destination configuration. Nothing is saved or sent." icon={<EventsIcon />}>
+    <ConfigurationGrid columns={2}>
+      <div className="field"><Text id="dry-run-type-label">Event type</Text><Select.Root value={eventType} onValueChange={setEventType}><Select.Trigger aria-label="Dry-run event type" /><Select.Content>{eventTypes.map(type => <Select.Item key={type} value={type}>{type}</Select.Item>)}</Select.Content></Select.Root></div>
+      <div className="field"><Text id="dry-run-source-label">Source</Text><Select.Root value={sourceId} onValueChange={setSourceId}><Select.Trigger aria-label="Dry-run source" /><Select.Content>{sourceIds.map(id => <Select.Item key={id} value={id}>{id}</Select.Item>)}</Select.Content></Select.Root></div>
+    </ConfigurationGrid>
     <Text as="label" htmlFor="dry-run-payload" size="2">Dry-run payload</Text>
     <TextArea id="dry-run-payload" rows={6} value={payload} onChange={event => setPayload(event.target.value)} />
-    <Button type="button" variant="soft" disabled={disabled || pending || !eventTypes.includes(eventType) || !sourceIds.includes(sourceId)} onClick={() => void run()} style={{ alignSelf: 'flex-start' }}>{pending ? 'Simulating...' : 'Run without sending'}</Button>
+    <div className="configuration-actions"><Button type="button" variant="soft" disabled={disabled || pending || !eventTypes.includes(eventType) || !sourceIds.includes(sourceId)} onClick={() => void run()}>{pending ? 'Simulating...' : 'Run without sending'}</Button></div>
     {error ? <FormErrorText message={error} /> : null}
     {report ? <Flex direction="column" gap="2">
       <Badge color={report.wouldDeliver ? 'green' : 'amber'}>{report.wouldDeliver ? 'Checks passed' : 'Would not deliver'}</Badge>
@@ -44,5 +46,5 @@ export function ContractDryRunPanel({ contractId, eventTypes, sourceIds, draft, 
       {report.destinations.map((destination, index) => <Text size="1" key={destination.bindingId ?? destination.destinationId ?? index}>{destination.type}: {destination.status} — {destination.message}</Text>)}
       <pre style={{ margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 320, overflow: 'auto' }}>{JSON.stringify(report.transformedPayload, null, 2)}</pre>
     </Flex> : null}
-  </Flex>
+  </ConfigurationSection></div>
 }

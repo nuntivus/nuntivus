@@ -56,7 +56,8 @@ export function FailedDeliveriesPage() {
   const customerIdParam = searchParams.get('customerId') ?? ''
   const contractIdParam = searchParams.get('contractId') ?? ''
   const failureCategoryParam = searchParams.get('failureCategory') ?? ''
-  const statusParam = searchParams.get('status') ?? 'Failed'
+  const requestedStatus = searchParams.get('status')
+  const statusParam = requestedStatus === 'Failed' || requestedStatus === 'Dead' ? requestedStatus : 'all'
   const sortByParam =
     (searchParams.get('sortBy') as SortBy | null) ?? ('updatedAt' as SortBy)
   const sortDirectionParam =
@@ -76,7 +77,8 @@ export function FailedDeliveriesPage() {
       customerId: customerIdParam,
       contractId: contractIdParam,
       failureCategory: failureCategoryParam,
-      status: statusParam === 'Dead' ? 'Dead' : 'Failed',
+      status: statusParam === 'all' ? undefined : statusParam,
+      failuresOnly: true,
       sortBy: sortByParam,
       sortDirection: sortDirectionParam,
       page: pageParam,
@@ -218,11 +220,12 @@ export function FailedDeliveriesPage() {
               <Select.Root
                 value={statusParam}
                 onValueChange={(value) =>
-                  updateParams({ status: value, page: '1' })
+                  updateParams({ status: value === 'all' ? null : value, page: '1' })
                 }
               >
                 <Select.Trigger aria-label="Failure status" />
                 <Select.Content>
+                  <Select.Item value="all">Failed &amp; dead</Select.Item>
                   <Select.Item value="Failed">Failed only</Select.Item>
                   <Select.Item value="Dead">Dead only</Select.Item>
                 </Select.Content>
@@ -286,8 +289,8 @@ export function FailedDeliveriesPage() {
             emptyMessage="No failed/dead deliveries found for current filters."
           >
             <>
-              <div className="responsive-table">
-                <Table.Root aria-label="Failed deliveries table">
+              <div className="responsive-table failures-table">
+                <Table.Root size="1" aria-label="Failed deliveries table">
                   <Table.Header>
                     <Table.Row>
                       <Table.ColumnHeaderCell>ID</Table.ColumnHeaderCell>
@@ -314,17 +317,14 @@ export function FailedDeliveriesPage() {
                           to={`/deliveries/${encodeURIComponent(delivery.id)}`}
                           label={`delivery ${delivery.id}`}
                         >
-                          <Table.RowHeaderCell>{delivery.id}</Table.RowHeaderCell>
+                          <Table.RowHeaderCell><span className="failure-cell-text" title={delivery.id}>{delivery.id}</span></Table.RowHeaderCell>
                           <Table.Cell>
-                            <Badge color={status === 'Dead' ? 'red' : 'amber'} variant="soft">
+                            <Badge color={status === 'Dead' ? 'red' : 'amber'} variant="soft" title={status === 'Dead' ? 'No automatic retry' : 'Retry may be scheduled'}>
                               {status}
                             </Badge>
-                            <Text as="div" size="1" color="gray">
-                              {status === 'Dead' ? 'No automatic retry' : 'Retry may be scheduled'}
-                            </Text>
                           </Table.Cell>
-                          <Table.Cell><EntityReference kind="customer" id={delivery.customerId} /></Table.Cell>
-                          <Table.Cell><EntityReference kind="contract" id={delivery.contractId} /></Table.Cell>
+                          <Table.Cell><span className="failure-cell-text"><EntityReference kind="customer" id={delivery.customerId} /></span></Table.Cell>
+                          <Table.Cell><span className="failure-cell-text"><EntityReference kind="contract" id={delivery.contractId} /></span></Table.Cell>
                           <Table.Cell>{formatFailureCategory(delivery)}</Table.Cell>
                           <Table.Cell><ErrorPreview error={delivery.latestFailure?.error ?? delivery.lastError} /></Table.Cell>
                           <Table.Cell>{new Date(delivery.updatedAt).toLocaleString()}</Table.Cell>

@@ -16,6 +16,7 @@ import { NavLink, useParams } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { ErrorPreview } from '../components/errors/error-preview'
 import { JsonViewer } from '../components/json/json-viewer'
+import { ConfigurationHeading } from '../components/forms/configuration-layout'
 import { EntityReference } from '../components/links/entity-reference'
 import {
   AlertIcon,
@@ -557,16 +558,17 @@ export function DeliveryDetailPage() {
         </Flex>
       </Card>
 
-      <Card className="delivery-lower-card">
+      <Card className="delivery-lower-card configuration-editor">
         <Flex direction="column" gap="3">
-          <DeliverySectionTitle icon={RetryIcon}>Operations</DeliverySectionTitle>
+          <ConfigurationHeading title="Operations" description="Retry or requeue this delivery with an audited operation ID and reason." icon={<RetryIcon />} />
 
           {!canOperateDeliveries ? (
             <Text size="2" color="gray">Delivery operations are not available for your role.</Text>
           ) : (
             <>
-              <Text size="2" color="gray">Operation ID</Text>
+              <Text as="label" htmlFor="delivery-operation-id" size="2" color="gray">Operation ID</Text>
               <TextField.Root
+                id="delivery-operation-id"
                 placeholder="GUID"
                 value={operationKey}
                 onChange={(event) => setOperationKey(event.target.value)}
@@ -576,16 +578,18 @@ export function DeliveryDetailPage() {
               />
               {operationKeyError ? <Text id="operation-id-error" size="2" color="red">{operationKeyError}</Text> : null}
 
-              <Text size="2" color="gray">Retry reason</Text>
+              <Text as="label" htmlFor="delivery-retry-reason" size="2" color="gray">Retry reason</Text>
               <TextArea
+                id="delivery-retry-reason"
                 value={retryReason}
                 onChange={(event) => setRetryReason(event.target.value)}
                 rows={2}
                 disabled={retryMutation.isPending || requeueMutation.isPending}
               />
 
-              <Text size="2" color="gray">Redelivery (requeue) reason</Text>
+              <Text as="label" htmlFor="delivery-requeue-reason" size="2" color="gray">Redelivery (requeue) reason</Text>
               <TextArea
+                id="delivery-requeue-reason"
                 value={requeueReason}
                 onChange={(event) => setRequeueReason(event.target.value)}
                 rows={2}
@@ -598,7 +602,7 @@ export function DeliveryDetailPage() {
                 </Text>
               ) : null}
 
-              <Flex gap="2" wrap="wrap">
+              <Flex gap="2" wrap="wrap" className="configuration-actions">
                 <Button
                   type="button"
                   disabled={retryMutation.isPending || requeueMutation.isPending}

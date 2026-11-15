@@ -5,6 +5,7 @@ import { hasPermission } from '../auth/permissions'
 import { DetailPageHeader } from '../components/states/detail-page-header'
 import { DetailLoadingState } from '../components/states/detail-loading-state'
 import { EventsIcon } from '../components/icons/nav-icons'
+import { ConfigurationHeading } from '../components/forms/configuration-layout'
 import { DestinationConfigurationForm } from '../features/contracts/destination-forms/destination-configuration-form'
 import { normalizeConfiguration } from '../features/contracts/destination-forms/normalize-configuration'
 import { hydrateDestinationForm, mergeDestinationConfiguration } from '../features/contracts/destination-forms/stored-configuration'
@@ -129,11 +130,8 @@ function DestinationEditor({ item, onCancel }: { item: DestinationResource; onCa
     } catch (cause) { setError(getApiErrorMessage(cause, 'Unable to save Destination.')) }
   }
 
-  return <Card className="settings-editor-card source-configuration-card"><form onSubmit={(event) => void submit(event)} className="settings-editor-form">
-    <div className="source-configuration-heading"><span className="source-configuration-icon"><EventsIcon /></span><div>
-      <Heading size="4">{type} Destination Configuration</Heading>
-      <Text size="2" color="gray">Changes here affect new links or contracts that explicitly adopt the latest settings. Stored credentials stay protected.</Text>
-    </div></div>
+  return <Card className="settings-editor-card source-configuration-card configuration-editor"><form onSubmit={(event) => void submit(event)} className="settings-editor-form">
+    <ConfigurationHeading title={`${type} Destination Configuration`} description="Changes here affect new links or contracts that explicitly adopt the latest settings. Stored credentials stay protected." icon={<EventsIcon />} />
     <div className="settings-editor-fields">
       <label className="settings-editor-field"><span>Name <span aria-hidden="true">*</span></span><TextField.Root value={name} onChange={event => setName(event.target.value)} required />
         <Text size="1" color="gray">A recognizable name for this Destination.</Text></label>

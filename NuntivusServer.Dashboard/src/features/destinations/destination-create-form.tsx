@@ -75,7 +75,7 @@ export function DestinationCreateForm({ onSaved, onCancel }: DestinationCreateFo
     } finally { setTesting(false) }
   }
 
-  return <Card className="settings-editor-card integration-creation-card"><form onSubmit={event => void submit(event)} className="settings-editor-form">
+  return <Card className="settings-editor-card integration-creation-card configuration-editor"><form onSubmit={event => void submit(event)} className="settings-editor-form">
     <Heading size="5">Register a new destination</Heading>
     <Text size="2" color="gray">Configure where this Destination delivers events. Use managed secrets rather than entering sensitive values in plain text.</Text>
     <IntegrationCreationLayout picker={<DestinationTypeSelector value={form.type} onChange={type => setForm(createDefaultDestinationFormState(type))} />}>
@@ -85,7 +85,7 @@ export function DestinationCreateForm({ onSaved, onCancel }: DestinationCreateFo
           <TextField.Root value={name} maxLength={200} required onChange={event => setName(event.target.value)} />
           <Text size="1" color="gray">A recognizable name for this Destination.</Text>
         </label>
-        <label className="settings-editor-field">Description
+        <label className="settings-editor-field source-description-field">Description
           <TextArea value={description} maxLength={1000} onChange={event => setDescription(event.target.value)} />
           <Text size="1" color="gray">Optional context for operators.</Text>
         </label>

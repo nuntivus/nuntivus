@@ -1,4 +1,6 @@
-import { Badge, Button, Card, Flex, Heading, Text, TextArea } from '@radix-ui/themes'
+import { Badge, Button, Card, Flex, Text, TextArea } from '@radix-ui/themes'
+import { ConfigurationHeading } from '../../components/forms/configuration-layout'
+import { CodeIcon } from '../../components/icons/nav-icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import { FieldErrorText, FormErrorText } from '../../components/forms/form-feedback'
@@ -51,9 +53,9 @@ export function SchemaCompatibilityPanel({ eventType, schema, canOverride }: Pro
 
   const blocked = report.data?.status !== 'Compatible'
   return (
-    <Card className="detail-panel detail-panel-wide">
+    <Card className="detail-panel detail-panel-wide configuration-editor">
       <Flex direction="column" gap="3">
-        <Heading size="4">Schema compatibility · v{schema.version}</Heading>
+        <ConfigurationHeading title={`Schema compatibility · v${schema.version}`} description="Review compatibility findings before activating this schema." icon={<CodeIcon />} />
         {report.isPending ? <Text color="gray">Checking compatibility...</Text> : report.isError ? (
           <FormErrorText message={getApiErrorMessage(report.error, 'Unable to compare schemas.')} />
         ) : report.data ? (

@@ -541,6 +541,49 @@ namespace NuntivusServer.IntegrationTests
         }
 
         [Fact]
+        public async Task List_failures_includes_failed_and_dead_with_matching_pagination_counts()
+        {
+            var now = DateTimeOffset.UtcNow.AddMinutes(-10);
+            var (eventId, contractId, customerId) = await SeedGraphAsync(now);
+            var ids = new Dictionary<string, Guid>();
+            var statuses = new[] { "Pending", "InFlight", "Delivered", "Failed", "Dead" };
+            for (var index = 0; index < statuses.Length; index++)
+            {
+                var status = statuses[index];
+                var id = Guid.NewGuid();
+                ids[status] = id;
+                var currentEventId = index == 0 ? eventId : await SeedEventAsync(now);
+                await InsertDeliveryAsync(id, currentEventId, contractId, customerId, status, 0,
+                    now.AddMinutes(index), now.AddMinutes(index));
+            }
+
+            var filter = $"/v1/deliveries?failuresOnly=true&contractId={contractId}&sortBy=createdAt&sortDirection=asc&pageSize=1";
+            var first = await _client.GetFromJsonAsync<PagedResponse<DeliveryQueryDto>>($"{filter}&page=1");
+            var second = await _client.GetFromJsonAsync<PagedResponse<DeliveryQueryDto>>($"{filter}&page=2");
+            Assert.NotNull(first);
+            Assert.NotNull(second);
+            Assert.Equal(2L, first.TotalCount);
+            Assert.Equal(2L, second.TotalCount);
+            Assert.Equal(ids["Failed"], Assert.Single(first.Items).Id);
+            Assert.Equal(ids["Dead"], Assert.Single(second.Items).Id);
+            Assert.True(first.HasNext);
+            Assert.False(second.HasNext);
+
+            foreach (var status in new[] { "Failed", "Dead" })
+            {
+                var narrowed = await _client.GetFromJsonAsync<PagedResponse<DeliveryQueryDto>>($"{filter}&status={status}");
+                Assert.NotNull(narrowed);
+                Assert.Equal(1L, narrowed.TotalCount);
+                Assert.Equal(ids[status], Assert.Single(narrowed.Items).Id);
+            }
+
+            var excluded = await _client.GetFromJsonAsync<PagedResponse<DeliveryQueryDto>>($"{filter}&status=Delivered");
+            Assert.NotNull(excluded);
+            Assert.Equal(0L, excluded.TotalCount);
+            Assert.Empty(excluded.Items);
+        }
+
+        [Fact]
         public async Task List_deliveries_searches_ids_and_event_types_with_matching_counts()
         {
             var now = DateTimeOffset.UtcNow;

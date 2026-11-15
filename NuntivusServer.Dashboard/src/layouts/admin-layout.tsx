@@ -189,7 +189,7 @@ export function AdminLayout() {
   return (
     <Flex className="dashboard-layout" minHeight="100dvh">
       <a href="#main-content" className="skip-link">Skip to main content</a>
-      <aside className={`dashboard-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+      <aside id="dashboard-sidebar" className={`dashboard-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
         <div className="sidebar-inner">
           <div className="sidebar-brand">
             <img src={logo} alt="" width="32" height="32" className="sidebar-brand-mark" />
@@ -249,6 +249,8 @@ export function AdminLayout() {
               className="header-menu-toggle"
               aria-label={sidebarOpen ? 'Hide menu' : 'Show menu'}
               aria-pressed={sidebarOpen}
+              aria-expanded={sidebarOpen}
+              aria-controls="dashboard-sidebar"
               onClick={() => dispatch(toggleSidebar())}
             >
               <MenuIcon />

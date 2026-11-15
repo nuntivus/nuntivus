@@ -157,8 +157,11 @@ test('audit rows navigate only when a delivery target exists and payload actions
     assert.equal(await informational.getAttribute('tabindex'), null)
     assert.equal(await informational.locator('.table-detail-indicator').count(), 0)
     await row.getByRole('button', { name: 'View audit payload', exact: true }).locator('svg').click()
-    await page.getByText('Audit payload', { exact: true }).waitFor()
+    const dialog = page.getByRole('dialog', { name: 'Audit log details', exact: true })
+    await dialog.waitFor()
     assert.equal(new URL(page.url()).pathname, '/audit-logs')
+    await dialog.getByRole('button', { name: 'Close dialog', exact: true }).click()
+    await dialog.waitFor({ state: 'hidden' })
     await row.getByRole('cell').first().click()
     await page.waitForURL(`${appUrl}/deliveries/delivery-1`)
   } finally { await browser.close() }

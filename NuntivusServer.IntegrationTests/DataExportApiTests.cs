@@ -61,6 +61,34 @@ namespace NuntivusServer.IntegrationTests
             var empty = await _client.GetStringAsync("/v1/exports/events?format=csv&type=missing");
             Assert.Single(empty.Split('\n', StringSplitOptions.RemoveEmptyEntries));
         }
+
+        [Theory]
+        [InlineData("", 2)]
+        [InlineData("&status=Failed", 1)]
+        [InlineData("&status=Dead", 1)]
+        [InlineData("&status=Delivered", 0)]
+        public async Task Failure_exports_include_both_failure_states_and_respect_status_filters(string statusFilter, int expectedCount)
+        {
+            await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+            foreach (var status in new[] { "Dead", "Pending", "InFlight", "Delivered" })
+            {
+                await connection.ExecuteAsync("""
+                    INSERT INTO events (id, type, idempotency_key, source_id, occurred_at, received_at, payload)
+                    VALUES (@Id, 'orders.created', @Key, @Source, now(), now(), '{}');
+                    INSERT INTO deliveries (id, event_id, contract_id, customer_id, event_type, payload, destination_type, destination_config,
+                        status, attempt_count, created_at, updated_at)
+                    VALUES (@Id, @Id, @Contract, '=FORMULA()', 'orders.created', '{}', 'Http', '{}', @Status, 0, now(), now());
+                    """, new { Id = Guid.NewGuid(), Key = Guid.NewGuid().ToString("N"), Source = ContractsApiFixture.SourceId, Contract, Status = status });
+            }
+
+            var response = await _client.GetAsync($"/v1/exports/deliveries?format=json&failuresOnly=true&contractId={Contract}{statusFilter}");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal(expectedCount, json.RootElement.GetProperty("count").GetInt32());
+            var items = json.RootElement.GetProperty("items").EnumerateArray().ToArray();
+            Assert.Equal(expectedCount, items.Length);
+            Assert.All(items, item => Assert.Contains(item.GetProperty("status").GetString(), new[] { "Failed", "Dead" }));
+        }
         [Fact]
         public async Task Viewer_and_anonymous_cannot_export_and_invalid_options_are_rejected()
         {

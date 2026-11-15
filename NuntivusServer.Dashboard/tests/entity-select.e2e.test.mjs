@@ -79,6 +79,31 @@ for (const [path, labels] of [
   })
 }
 
+test('entity select chevron stays vertically centered on desktop and mobile', async () => {
+  const { browser, page } = await openApp()
+  try {
+    await page.goto(`${appUrl}/deliveries`)
+    const select = page.getByRole('combobox', { name: 'Contract ID', exact: true })
+    await select.waitFor()
+    for (const width of [1440, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 })
+      const alignment = await select.evaluate(trigger => {
+        const icon = trigger.querySelector('.entity-select-chevron')
+        const buttonBounds = trigger.getBoundingClientRect()
+        const iconBounds = icon.getBoundingClientRect()
+        return {
+          offset: Math.abs(buttonBounds.y + buttonBounds.height / 2 - iconBounds.y - iconBounds.height / 2),
+          width: iconBounds.width,
+          hidden: icon.getAttribute('aria-hidden'),
+        }
+      })
+      assert.ok(alignment.offset < 1, `Chevron must be centered at ${width}px`)
+      assert.equal(alignment.width, 16)
+      assert.equal(alignment.hidden, 'true')
+    }
+  } finally { await browser.close() }
+})
+
 test('contract select searches across pages, selects by keyboard, and clears the applied filter', async () => {
   const { browser, page, requests } = await openApp()
   try {

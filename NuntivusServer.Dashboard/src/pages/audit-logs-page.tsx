@@ -9,10 +9,11 @@ import {
   Text,
   TextField,
 } from '@radix-ui/themes'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent } from 'react'
 import { NavLink } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { JsonViewer } from '../components/json/json-viewer'
+import { FormDialog } from '../components/dialogs/form-dialog'
 import { EntityReference } from '../components/links/entity-reference'
 import { EntitySelect } from '../components/forms/entity-select'
 import { EyeIcon } from '../components/icons/nav-icons'
@@ -20,6 +21,7 @@ import { ListFeedback } from '../components/lists/list-feedback'
 import { ListPagination } from '../components/lists/list-pagination'
 import { DetailIndicator, NavigableTableRow, TableIconButton } from '../components/tables/table-actions'
 import { useAuditLogsQuery } from '../features/audit-logs/use-audit-logs'
+import { auditPreviewFields, parseAuditDetails } from '../features/audit-logs/audit-details'
 import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type {
@@ -37,14 +39,6 @@ function formatTitleCase(value: string) {
     .filter((part) => part.length > 0)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
     .join(' ')
-}
-
-function safeParseJson(value: string): unknown {
-  try {
-    return JSON.parse(value)
-  } catch {
-    return { raw: value }
-  }
 }
 
 function rowColor(category: string) {
@@ -72,30 +66,6 @@ function toShort(value: string | null) {
   }
 
   return value.length > 12 ? `${value.slice(0, 12)}…` : value
-}
-
-function summarizeDetails(item: AuditLogListItem) {
-  const payload = safeParseJson(item.details)
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return item.details.length > 80 ? `${item.details.slice(0, 80)}…` : item.details
-  }
-
-  const objectPayload = payload as Record<string, unknown>
-
-  if (typeof objectPayload.reason === 'string' && objectPayload.reason.trim()) {
-    return objectPayload.reason
-  }
-
-  if (typeof objectPayload.operation === 'string' && objectPayload.operation.trim()) {
-    return objectPayload.operation
-  }
-
-  if (typeof objectPayload.message === 'string' && objectPayload.message.trim()) {
-    return objectPayload.message
-  }
-
-  const compact = JSON.stringify(objectPayload)
-  return compact.length > 80 ? `${compact.slice(0, 80)}…` : compact
 }
 
 export function AuditLogsPage() {
@@ -126,7 +96,9 @@ export function AuditLogsPage() {
   const [deliveryIdInput, setDeliveryIdInput] = useState(deliveryIdParam)
   const [eventIdInput, setEventIdInput] = useState(eventIdParam)
   const [operationIdInput, setOperationIdInput] = useState(operationIdParam)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [selectedAudit, setSelectedAudit] = useState<AuditLogListItem | null>(null)
+  const auditTrigger = useRef<HTMLElement | null>(null)
+  const selectedPayload = useMemo(() => selectedAudit ? parseAuditDetails(selectedAudit.details) : null, [selectedAudit])
 
   const query = useMemo<AuditLogListQuery>(
     () => ({
@@ -162,6 +134,11 @@ export function AuditLogsPage() {
   )
 
   const auditLogsQuery = useAuditLogsQuery(query)
+
+  function openAudit(item: AuditLogListItem) {
+    auditTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setSelectedAudit(item)
+  }
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -324,7 +301,7 @@ export function AuditLogsPage() {
                   setDeliveryIdInput('')
                   setEventIdInput('')
                   setOperationIdInput('')
-                  setExpandedId(null)
+                  setSelectedAudit(null)
                   setSearchParams(new URLSearchParams())
                 }}
               >
@@ -353,8 +330,8 @@ export function AuditLogsPage() {
             emptyMessage="No audit logs found for current filters."
           >
             <>
-              <div className="responsive-table">
-                <Table.Root aria-label="Audit logs table">
+              <div className="responsive-table audit-table">
+                <Table.Root aria-label="Audit logs table" size="1">
                   <Table.Header>
                     <Table.Row>
                       <Table.ColumnHeaderCell>Time</Table.ColumnHeaderCell>
@@ -364,34 +341,40 @@ export function AuditLogsPage() {
                       <Table.ColumnHeaderCell>Customer</Table.ColumnHeaderCell>
                       <Table.ColumnHeaderCell>Contract</Table.ColumnHeaderCell>
                       <Table.ColumnHeaderCell>Delivery</Table.ColumnHeaderCell>
-                      <Table.ColumnHeaderCell>Summary</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Data preview</Table.ColumnHeaderCell>
                       <Table.ColumnHeaderCell>Details</Table.ColumnHeaderCell>
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
                     {rows.map((item) => {
-                      const expanded = expandedId === item.id
+                      const preview = auditPreviewFields(parseAuditDetails(item.details))
 
                       return (
                         <NavigableTableRow key={item.id} to={item.deliveryId ? `/deliveries/${encodeURIComponent(item.deliveryId)}` : undefined} label={`delivery ${item.deliveryId}`}>
-                          <Table.Cell>{new Date(item.createdAt).toLocaleString()}</Table.Cell>
+                          <Table.Cell><span className="audit-cell-text" title={new Date(item.createdAt).toLocaleString()}>{new Date(item.createdAt).toLocaleString()}</span></Table.Cell>
                           <Table.Cell>
                             <Badge color={rowColor(item.category)} variant="soft">
                               {item.category}
                             </Badge>
                           </Table.Cell>
-                          <Table.Cell>{formatTitleCase(item.action)}</Table.Cell>
-                          <Table.Cell>{item.actorId ?? '-'}</Table.Cell>
-                          <Table.Cell><EntityReference kind="customer" id={item.customerId} /></Table.Cell>
-                          <Table.Cell><EntityReference kind="contract" id={item.contractId} /></Table.Cell>
+                          <Table.Cell><span className="audit-cell-text" title={formatTitleCase(item.action)}>{formatTitleCase(item.action)}</span></Table.Cell>
+                          <Table.Cell><span className="audit-cell-text" title={item.actorId ?? undefined}>{item.actorId ?? '-'}</span></Table.Cell>
+                          <Table.Cell><span className="audit-cell-text"><EntityReference kind="customer" id={item.customerId} /></span></Table.Cell>
+                          <Table.Cell><span className="audit-cell-text"><EntityReference kind="contract" id={item.contractId} /></span></Table.Cell>
                           <Table.Cell title={item.deliveryId ?? undefined}>
                             {item.deliveryId ? toShort(item.deliveryId) : '-'}
                           </Table.Cell>
-                          <Table.Cell>{summarizeDetails(item)}</Table.Cell>
+                          <Table.Cell>
+                            <button type="button" className="audit-data-preview" aria-label="Preview audit data" onClick={() => openAudit(item)}>
+                              {preview.length ? preview.map((field, index) => <span key={`${index}-${field.label}`}>
+                                {index > 0 ? ' · ' : null}<strong>{field.label}:</strong> {field.value}
+                              </span>) : 'No payload fields'}
+                            </button>
+                          </Table.Cell>
                           <Table.Cell>
                             <div className="table-row-actions"><TableIconButton
-                              label={expanded ? 'Hide audit payload' : 'View audit payload'}
-                              onClick={() => setExpandedId(expanded ? null : item.id)}
+                              label="View audit payload"
+                              onClick={() => openAudit(item)}
                             >
                               <EyeIcon width={15} height={15} />
                             </TableIconButton>
@@ -404,20 +387,6 @@ export function AuditLogsPage() {
                 </Table.Root>
               </div>
 
-              {expandedId ? (
-                <Card>
-                  <Flex direction="column" gap="2">
-                    <Text size="2" weight="medium">Audit payload</Text>
-                    <JsonViewer
-                      value={safeParseJson(rows.find((item) => item.id === expandedId)?.details ?? '{}')}
-                      defaultCollapsed={false}
-                      copyLabel="Copy details"
-                      searchPlaceholder="Search audit payload"
-                    />
-                  </Flex>
-                </Card>
-              ) : null}
-
               <ListPagination
                 paging={paging}
                 onPrevious={() => updateParams({ page: String(Math.max(1, pageParam - 1)) })}
@@ -427,6 +396,35 @@ export function AuditLogsPage() {
           </ListFeedback>
         </Flex>
       </Card>
+      <FormDialog
+        open={selectedAudit !== null}
+        onOpenChange={(open) => { if (!open) setSelectedAudit(null) }}
+        title="Audit log details"
+        description="Record information and structured operation data."
+        descriptionId="audit-details-description"
+        maxWidth="960px"
+        onCloseAutoFocus={(event) => { event.preventDefault(); auditTrigger.current?.focus() }}
+        footer={<Button type="button" variant="soft" onClick={() => setSelectedAudit(null)}>Close</Button>}
+      >
+        {selectedAudit ? <Flex direction="column" gap="4" className="audit-details-content">
+          <dl className="audit-details-metadata">
+            <div><dt>Audit ID</dt><dd>{selectedAudit.id}</dd></div>
+            <div><dt>Time</dt><dd>{new Date(selectedAudit.createdAt).toLocaleString()}</dd></div>
+            <div><dt>Category</dt><dd>{selectedAudit.category}</dd></div>
+            <div><dt>Action</dt><dd>{formatTitleCase(selectedAudit.action)}</dd></div>
+            <div><dt>Actor</dt><dd>{selectedAudit.actorId ?? '-'}</dd></div>
+            <div><dt>Operation ID</dt><dd>{selectedAudit.operationId ?? '-'}</dd></div>
+            <div><dt>Customer</dt><dd><EntityReference kind="customer" id={selectedAudit.customerId} /></dd></div>
+            <div><dt>Contract</dt><dd><EntityReference kind="contract" id={selectedAudit.contractId} /></dd></div>
+            <div><dt>Delivery ID</dt><dd>{selectedAudit.deliveryId ? <NavLink to={`/deliveries/${encodeURIComponent(selectedAudit.deliveryId)}`}>{selectedAudit.deliveryId}</NavLink> : '-'}</dd></div>
+            <div><dt>Event ID</dt><dd>{selectedAudit.eventId ? <NavLink to={`/events/${encodeURIComponent(selectedAudit.eventId)}`}>{selectedAudit.eventId}</NavLink> : '-'}</dd></div>
+            <div><dt>Expires</dt><dd>{selectedAudit.expiresAt ? new Date(selectedAudit.expiresAt).toLocaleString() : '-'}</dd></div>
+          </dl>
+          <Heading size="3">Audit payload</Heading>
+          <JsonViewer value={selectedPayload} defaultCollapsed={false} maxHeight={420}
+            copyLabel="Copy details" searchPlaceholder="Search audit payload" />
+        </Flex> : null}
+      </FormDialog>
     </Flex>
   )
 }

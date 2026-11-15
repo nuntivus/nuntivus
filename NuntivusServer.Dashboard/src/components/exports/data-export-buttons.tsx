@@ -5,7 +5,7 @@ import { useAppSelector } from '../../store/hooks'
 import { apiDownload, getApiErrorMessage } from '../../services/api/api-client'
 
 type Filters = Record<string, string | number | boolean | undefined>
-const filterNames = new Set(['id', 'eventId', 'contractId', 'customerId', 'type', 'source', 'eventType', 'status', 'destinationType', 'failureCategory', 'search', 'enabled', 'createdFrom', 'createdTo', 'occurredFrom', 'occurredTo', 'receivedFrom', 'receivedTo'])
+const filterNames = new Set(['id', 'eventId', 'contractId', 'customerId', 'type', 'source', 'eventType', 'status', 'failuresOnly', 'destinationType', 'failureCategory', 'search', 'enabled', 'createdFrom', 'createdTo', 'occurredFrom', 'occurredTo', 'receivedFrom', 'receivedTo'])
 export function DataExportButtons({ entity, filters, disabled = false }: { entity: 'events' | 'deliveries' | 'contracts'; filters: Filters; disabled?: boolean }) {
   const user = useAppSelector(state => state.auth.currentUser)
   const [pending, setPending] = useState(false)

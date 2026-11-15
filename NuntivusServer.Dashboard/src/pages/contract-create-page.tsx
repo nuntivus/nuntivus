@@ -12,6 +12,8 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { hasPermission } from '../auth/permissions'
 import { FieldErrorText, FormErrorText } from '../components/forms/form-feedback'
 import { getServerValidation } from '../components/forms/form-validation'
+import { ConfigurationHeading } from '../components/forms/configuration-layout'
+import { ContractsIcon } from '../components/icons/nav-icons'
 import { ContractOptionsForm } from '../features/contracts/contract-options-form'
 import { ContractSourceSelector } from '../features/contracts/contract-source-selector'
 import { ContractDestinationSelector } from '../features/contracts/contract-destination-selector'
@@ -144,9 +146,10 @@ export function ContractCreatePage() {
     <Flex direction="column" gap="4">
       <Heading size="6">Create contract</Heading>
 
-      <Card style={{ width: '100%', maxWidth: 760 }}>
+      <Card className="configuration-editor settings-editor-card">
         <form onSubmit={handleSubmit}>
           <Flex direction="column" gap="3">
+            <ConfigurationHeading title="Contract configuration" description="Choose the customer, sources, event types and destinations for this contract." icon={<ContractsIcon />} />
             <Text size="2" color="gray" role="status">
               {['Basics', 'Destination', 'Review'][step]} · Step {step + 1} of 3
             </Text>
@@ -248,7 +251,7 @@ export function ContractCreatePage() {
               </>
             ) : null}
 
-            <Flex gap="2" justify="end" mt="3">
+            <Flex gap="2" justify="end" mt="3" className="configuration-actions">
               <Button asChild variant="soft" color="gray" type="button">
                 <NavLink to="/contracts">Cancel</NavLink>
               </Button>
