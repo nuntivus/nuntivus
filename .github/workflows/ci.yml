@@ -130,3 +130,73 @@ jobs:
           "${compose[@]}" exec -T worker wget -qO- http://localhost:8081/health/ready
       - name: Published-image local quick start
         run: node tests/deployment/quickstart.smoke.mjs
+
+  website-deploy:
+    needs: [backend, dashboard, documentation, deployment]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_ROLE_ARN: ${{ vars.WEBSITE_AWS_ROLE_ARN }}
+      AWS_REGION: ${{ vars.WEBSITE_AWS_REGION }}
+      CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.WEBSITE_CLOUDFRONT_DISTRIBUTION_ID }}
+      WEBSITE_BUCKET: nuntivus-website
+      AWS_PAGER: ''
+    defaults:
+      run:
+        working-directory: NuntivusServer.Website
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variable in AWS_ROLE_ARN AWS_REGION CLOUDFRONT_DISTRIBUTION_ID; do
+            if [ -z "${!variable}" ]; then
+              echo "::error::Missing website deployment configuration: $variable. See NuntivusServer.Website/README.md."
+              exit 1
+            fi
+          done
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: NuntivusServer.Website/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run sync-docs
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Authenticate to AWS using OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: nuntivus-website-${{ github.run_id }}
+      - name: Upload fingerprinted assets before HTML
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f build/index.html
+          aws s3 sync build/assets/ "s3://$WEBSITE_BUCKET/assets/" \
+            --cache-control 'public,max-age=31536000,immutable' --no-progress
+      - name: Upload pages and unversioned files
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3 sync build/ "s3://$WEBSITE_BUCKET/" --exclude 'assets/*' \
+            --cache-control 'public,max-age=300' --no-progress
+      - name: Invalidate CloudFront cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          invalidation=$(aws cloudfront create-invalidation \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths '/*' \
+            --query 'Invalidation.Id' --output text)
+          aws cloudfront wait invalidation-completed \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --id "$invalidation"
