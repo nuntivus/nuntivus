@@ -5,6 +5,39 @@
 <h1 align="center">Nuntivus Server</h1>
 
 <p align="center">
+  <a href="https://github.com/nuntivus/nuntivus/actions/workflows/ci.yml?query=branch%3Amain">
+	<img src="https://github.com/nuntivus/nuntivus/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI build and tests on main" />
+  </a>
+  <a href="LICENSE">
+	<img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat" alt="License: Apache 2.0" />
+  </a>
+  <a href="NuntivusServer.Api/NuntivusServer.Api.csproj">
+	<img src="https://img.shields.io/badge/.NET%20target-8.0-512BD4?style=flat&amp;logo=dotnet&amp;logoColor=white" alt="Application target: .NET 8.0" />
+  </a>
+  <a href="NuntivusServer.Dashboard/package.json">
+	<img src="https://img.shields.io/badge/Node.js-24-5FA04E?style=flat&amp;logo=nodedotjs&amp;logoColor=white" alt="Frontend toolchain: Node.js 24" />
+  </a>
+  <a href="docs/publication-readiness.md">
+	<img src="https://img.shields.io/badge/status-early%20development-orange?style=flat" alt="Status: early development, not production ready" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/nuntivus/nuntivus/releases">
+	<img src="https://img.shields.io/github/v/release/nuntivus/nuntivus?include_prereleases&amp;style=flat" alt="Latest GitHub release, including prereleases" />
+  </a>
+  <a href="https://github.com/nuntivus/nuntivus/commits/main/">
+	<img src="https://img.shields.io/github/last-commit/nuntivus/nuntivus/main?style=flat" alt="Last commit on main" />
+  </a>
+  <a href="https://github.com/nuntivus/nuntivus/issues">
+	<img src="https://img.shields.io/github/issues/nuntivus/nuntivus?style=flat" alt="Open GitHub issues" />
+  </a>
+  <a href="https://github.com/nuntivus/nuntivus/stargazers">
+	<img src="https://img.shields.io/github/stars/nuntivus/nuntivus?style=flat" alt="GitHub stars" />
+  </a>
+</p>
+
+<p align="center">
   <strong>Self-hosted customer event infrastructure for SaaS and platform teams.</strong><br />
   Publish business events once; define how each customer receives them.
 </p>
