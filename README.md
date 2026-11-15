@@ -2,7 +2,7 @@
   <img src="NuntivusServer.Dashboard/src/assets/nuntivus-logo.svg" alt="Nuntivus logo" width="88" height="72" />
 </p>
 
-<h1 align="center">Nuntivus Server</h1>
+<h1 align="center">Nuntivus</h1>
 
 <p align="center">
 	<a href="https://github.com/nuntivus/nuntivus/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/nuntivus/nuntivus/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI build and tests on main" /></a>
