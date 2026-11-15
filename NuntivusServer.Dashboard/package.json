@@ -24,7 +24,7 @@
   "dependencies": {
     "@clerk/clerk-js": "^6.42.3",
     "@radix-ui/themes": "^3.2.1",
-    "@reduxjs/toolkit": "^2.9.0",
+    "@reduxjs/toolkit": "^2.14.0",
     "@tanstack/react-query": "^5.90.2",
     "@xyflow/react": "^12.12.0",
     "react": "^19.2.8",
