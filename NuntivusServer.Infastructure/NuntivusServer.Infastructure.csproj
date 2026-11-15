@@ -9,7 +9,7 @@
   <ItemGroup>
     <PackageReference Include="AWSSDK.SQS" Version="3.7.300.18" />
     <PackageReference Include="AWSSDK.S3" Version="3.7.301" />
-    <PackageReference Include="Confluent.Kafka" Version="2.5.3" />
+    <PackageReference Include="Confluent.Kafka" Version="2.16.0" />
     <PackageReference Include="Dapper" Version="2.1.79" />
     <PackageReference Include="JsonSchema.Net" Version="7.4.0" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions" Version="8.0.11" />
