@@ -12,13 +12,14 @@ namespace NuntivusServer.UnitTests.Architecture
         {
             var solutionRoot = FindSolutionRoot();
             var files = Directory.EnumerateFiles(solutionRoot, "*.cs", SearchOption.AllDirectories)
-                .Where(path => !path.Contains("\\bin\\", StringComparison.OrdinalIgnoreCase))
-                .Where(path => !path.Contains("\\obj\\", StringComparison.OrdinalIgnoreCase))
-                .Where(path => !path.Contains("\\.git\\", StringComparison.OrdinalIgnoreCase))
-                .Where(path => !path.Contains("\\.vs\\", StringComparison.OrdinalIgnoreCase))
-                .Where(path => !path.EndsWith("NuntivusServer.Domain\\Deliveries\\Delivery.cs", StringComparison.OrdinalIgnoreCase))
-                .Where(path => !path.EndsWith("NuntivusServer.Domain\\Deliveries\\DeliveryFactory.cs", StringComparison.OrdinalIgnoreCase))
-                .Where(path => !path.EndsWith("NuntivusServer.UnitTests\\Architecture\\DeliveryFactoryUsageArchitectureTests.cs", StringComparison.OrdinalIgnoreCase));
+                .Select(path => path.Replace('\\', '/'))
+                .Where(path => !path.Contains("/bin/", StringComparison.OrdinalIgnoreCase))
+                .Where(path => !path.Contains("/obj/", StringComparison.OrdinalIgnoreCase))
+                .Where(path => !path.Contains("/.git/", StringComparison.OrdinalIgnoreCase))
+                .Where(path => !path.Contains("/.vs/", StringComparison.OrdinalIgnoreCase))
+                .Where(path => !path.EndsWith("NuntivusServer.Domain/Deliveries/Delivery.cs", StringComparison.OrdinalIgnoreCase))
+                .Where(path => !path.EndsWith("NuntivusServer.Domain/Deliveries/DeliveryFactory.cs", StringComparison.OrdinalIgnoreCase))
+                .Where(path => !path.EndsWith("NuntivusServer.UnitTests/Architecture/DeliveryFactoryUsageArchitectureTests.cs", StringComparison.OrdinalIgnoreCase));
 
             var violations = new List<string>();
             foreach (var file in files)
