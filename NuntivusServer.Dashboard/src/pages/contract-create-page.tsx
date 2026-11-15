@@ -20,6 +20,7 @@ import { useCreateContractMutation } from '../features/contracts/use-contracts'
 import { useCustomersQuery } from '../features/customers/use-customers'
 import { useEventDefinitionsQuery } from '../features/event-definitions/use-event-definitions'
 import { useNotifications } from '../hooks/use-notifications'
+import { useFormValidation } from '../hooks/use-form-validation'
 import { getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
 
@@ -66,6 +67,7 @@ export function ContractCreatePage() {
   const eventTypeError = !eventType ? 'Event type is required.' : null
   const destinationError = destinationIds.length === 0 ? 'Select at least one Destination.' : null
   const optionErrors = validateAdvancedContractOptions(optionsDraft, eventType ? [eventType] : [])
+  const optionsValidation = useFormValidation(optionErrors)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -74,9 +76,12 @@ export function ContractCreatePage() {
       return
     }
 
-    if (step === 2 && (rawEditing.length || Object.keys(optionErrors).length)) {
-      setSubmitError('Correct the advanced contract options before creating the contract.')
-      return
+    if (step === 2) {
+      const optionsValid = optionsValidation.validate()
+      if (rawEditing.length || !optionsValid) {
+        setSubmitError('Correct the advanced contract options before creating the contract.')
+        return
+      }
     }
 
     if (step === 0 || customerError || sourceError || eventTypeError) {
@@ -223,7 +228,7 @@ export function ContractCreatePage() {
             {step === 2 ? (
               <>
                 <Heading size="4">Review contract</Heading>
-                <ContractOptionsForm value={optionsDraft} onChange={setOptionsDraft} eventTypes={eventType ? [eventType] : []} disabled={createMutation.isPending} onRawEditingChange={(key, editing) => setRawEditing((current) => editing ? [...current.filter((item) => item !== key), key] : current.filter((item) => item !== key))} />
+                <ContractOptionsForm value={optionsDraft} onChange={setOptionsDraft} eventTypes={eventType ? [eventType] : []} showValidation={optionsValidation.attempted} disabled={createMutation.isPending} onRawEditingChange={(key, editing) => setRawEditing((current) => editing ? [...current.filter((item) => item !== key), key] : current.filter((item) => item !== key))} />
                 <Text size="2" color="gray">Confirm the details before creating the contract. Credentials are not shown.</Text>
                 <Card>
                   <Flex direction="column" gap="2">
@@ -255,7 +260,7 @@ export function ContractCreatePage() {
                   Back
                 </Button>
               ) : null}
-              <Button type="submit" disabled={createMutation.isPending || (step === 2 && (rawEditing.length > 0 || Object.keys(optionErrors).length > 0))}>
+              <Button type="submit" disabled={createMutation.isPending || (step === 2 && rawEditing.length > 0)}>
                 {createMutation.isPending ? 'Creating…' : step === 2 ? 'Create contract' : 'Next'}
               </Button>
             </Flex>

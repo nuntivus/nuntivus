@@ -11,6 +11,11 @@
 - `docker-compose.prod.yml`: production stack
 - `.env`: runtime variables (copy from `.env.example`)
 
+Application images are built from this checkout, never pulled from a registry.
+PostgreSQL, NATS and Docker build dependencies can still be downloaded.
+For independent API/worker deployments and external infrastructure, see
+[Compose deployment modes](compose-deployments.md).
+
 ```bash
 cp .env.example .env
 ```
@@ -40,9 +45,10 @@ Optional:
 - `NUNTIVUS_HTTPS_PORT` (external HTTPS port, default 443)
 
 The stock Compose stack sets `Database__PostgresConnectionString` consistently for
-migrations, API, and Worker. For an external database, change that canonical setting
-in an overlay for all three services; setting only `ConnectionStrings__Postgres`
-does not override an already populated `Database` setting.
+migrations, API, and Worker. For an external database, use
+`docker-compose.external.yml` and set `NUNTIVUS_DATABASE_CONNECTION_STRING` for all
+three services; setting only `ConnectionStrings__Postgres` does not override an
+already populated `Database` setting.
 
 ## 4. Standardized runtime configuration
 

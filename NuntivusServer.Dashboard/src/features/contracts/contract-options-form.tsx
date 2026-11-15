@@ -7,16 +7,18 @@ import { SchemaTargetsEditor } from './schema-targets-editor'
 import { PayloadTransformationEditor } from './transformation-editor'
 import { validateAdvancedContractOptions, type AdvancedOptionsDraft } from './contract-options'
 
-export function ContractOptionsForm({ value, onChange, eventTypes, disabled = false, standalone = false, onRawEditingChange }: {
+export function ContractOptionsForm({ value, onChange, eventTypes, disabled = false, standalone = false, showValidation = false, onRawEditingChange }: {
   value: AdvancedOptionsDraft
   onChange: (next: AdvancedOptionsDraft) => void
   eventTypes: string[]
   disabled?: boolean
   standalone?: boolean
+  showValidation?: boolean
   onRawEditingChange?: (key: keyof AdvancedOptionsDraft, editing: boolean) => void
 }) {
-  const errors = validateAdvancedContractOptions(value, eventTypes)
-  const common = { value, onChange, eventTypes, errors, disabled, onRawEditingChange }
+  const validationErrors = validateAdvancedContractOptions(value, eventTypes)
+  const errors = showValidation ? validationErrors : {}
+  const common = { value, onChange, eventTypes, errors: validationErrors, showValidation, disabled, onRawEditingChange }
   const sections = <>
     <ConfigSection {...common} title="Schema targets" sectionKey="schemaTargets" summary={`${value.schemaTargets.length} configured`} enabled={value.schemaTargets.length > 0} onToggle={(enabled) => onChange({ ...value, schemaTargets: enabled ? [{ eventType: eventTypes.length === 1 ? eventTypes[0] : '', version: '1' }] : [] })}>
       <SchemaTargetsEditor value={value.schemaTargets} onChange={(schemaTargets) => onChange({ ...value, schemaTargets })} eventTypes={eventTypes} errors={errors} disabled={disabled} />

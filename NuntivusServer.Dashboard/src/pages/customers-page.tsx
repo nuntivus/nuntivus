@@ -29,6 +29,7 @@ import {
 import { useBulkSelection } from '../hooks/use-bulk-selection'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
+import { useFormValidation } from '../hooks/use-form-validation'
 import {
   parseBooleanParam,
   parsePositiveInt,
@@ -80,8 +81,6 @@ export function CustomersPage() {
   const [searchInput, setSearchInput] = useState(searchParam)
   const [newCustomerId, setNewCustomerId] = useState('')
   const [newCustomerName, setNewCustomerName] = useState('')
-  const [customerIdTouched, setCustomerIdTouched] = useState(false)
-  const [customerNameTouched, setCustomerNameTouched] = useState(false)
   const [isCreateCustomerOpen, setIsCreateCustomerOpen] = useState(false)
   const createCustomerButtonRef = useRef<HTMLButtonElement>(null)
   const [rowActionId, setRowActionId] = useState<string | null>(null)
@@ -89,8 +88,11 @@ export function CustomersPage() {
   const [bulkActionError, setBulkActionError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
 
-  const customerIdError = !newCustomerId.trim() ? 'Customer id is required.' : null
-  const customerNameError = !newCustomerName.trim() ? 'Customer name is required.' : null
+  const validation = useFormValidation({
+    customerIdError: !newCustomerId.trim() ? 'Customer id is required.' : null,
+    customerNameError: !newCustomerName.trim() ? 'Customer name is required.' : null,
+  })
+  const { customerIdError, customerNameError } = validation.fieldErrors
 
   function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -116,9 +118,7 @@ export function CustomersPage() {
   async function handleCreateCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteCustomers || customerIdError || customerNameError) {
-      setCustomerIdTouched(true)
-      setCustomerNameTouched(true)
+    if (!canWriteCustomers || createCustomerMutation.isPending || !validation.validate()) {
       return
     }
 
@@ -132,8 +132,7 @@ export function CustomersPage() {
 
       setNewCustomerId('')
       setNewCustomerName('')
-      setCustomerIdTouched(false)
-      setCustomerNameTouched(false)
+      validation.reset()
       setIsCreateCustomerOpen(false)
       notifications.success('Customer created successfully.', 'Create customer')
     } catch (error) {
@@ -144,11 +143,11 @@ export function CustomersPage() {
 
   function handleCreateCustomerOpenChange(open: boolean) {
     setIsCreateCustomerOpen(open)
+    validation.reset()
+    if (!createCustomerMutation.isPending) createCustomerMutation.reset()
 
     if (!open) {
       setCreateError(null)
-      setCustomerIdTouched(false)
-      setCustomerNameTouched(false)
       window.setTimeout(() => createCustomerButtonRef.current?.focus(), 0)
     }
   }
@@ -275,7 +274,7 @@ export function CustomersPage() {
           <Button
             ref={createCustomerButtonRef}
             size="2"
-            onClick={() => setIsCreateCustomerOpen(true)}
+            onClick={() => handleCreateCustomerOpenChange(true)}
           >
             New customer
           </Button>
@@ -299,11 +298,7 @@ export function CustomersPage() {
               <Button
                 type="submit"
                 form="customers-create-form"
-                disabled={
-                  createCustomerMutation.isPending ||
-                  !!customerIdError ||
-                  !!customerNameError
-                }
+                disabled={createCustomerMutation.isPending}
               >
                 {createCustomerMutation.isPending ? 'Creating…' : 'Create customer'}
               </Button>
@@ -321,13 +316,10 @@ export function CustomersPage() {
                 placeholder="e.g. acme"
                 value={newCustomerId}
                 onChange={(event) => setNewCustomerId(event.target.value)}
-                aria-invalid={customerIdTouched && customerIdError ? 'true' : 'false'}
-                aria-describedby="customers-create-id-error"
-                onBlur={() => setCustomerIdTouched(true)}
+                aria-invalid={customerIdError ? 'true' : 'false'}
+                aria-describedby={customerIdError ? 'customers-create-id-error' : undefined}
               />
-              {customerIdTouched ? (
-                <FieldErrorText id="customers-create-id-error" message={customerIdError} />
-              ) : null}
+              <FieldErrorText id="customers-create-id-error" message={customerIdError} />
             </div>
 
             <div className="field">
@@ -340,13 +332,10 @@ export function CustomersPage() {
                 placeholder="Acme Inc."
                 value={newCustomerName}
                 onChange={(event) => setNewCustomerName(event.target.value)}
-                aria-invalid={customerNameTouched && customerNameError ? 'true' : 'false'}
-                aria-describedby="customers-create-name-error"
-                onBlur={() => setCustomerNameTouched(true)}
+                aria-invalid={customerNameError ? 'true' : 'false'}
+                aria-describedby={customerNameError ? 'customers-create-name-error' : undefined}
               />
-              {customerNameTouched ? (
-                <FieldErrorText id="customers-create-name-error" message={customerNameError} />
-              ) : null}
+              <FieldErrorText id="customers-create-name-error" message={customerNameError} />
             </div>
 
             <FormErrorText

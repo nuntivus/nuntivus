@@ -27,6 +27,7 @@ import {
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useBulkSelection } from '../hooks/use-bulk-selection'
 import { useNotifications } from '../hooks/use-notifications'
+import { useFormValidation } from '../hooks/use-form-validation'
 import { useUrlQueryParams } from '../hooks/use-url-query-params'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
@@ -103,11 +104,13 @@ export function UsersPage() {
     () => getApiErrorMessage(createUserMutation.error, 'Unable to create user'),
     [createUserMutation.error],
   )
-  const subjectError = !subject.trim() ? 'Subject is required.' : null
-  const passwordError = password.trim().length > 0 && password.trim().length < 12
-    ? 'Password must be at least 12 characters.'
-    : null
-  const roleSelectionError = selectedRoles.length === 0 ? 'At least one role is required.' : null
+  const validation = useFormValidation({
+    subjectError: !subject.trim() ? 'Subject is required.' : null,
+    passwordError: password.trim().length > 0 && password.trim().length < 12
+      ? 'Password must be at least 12 characters.' : null,
+    roleSelectionError: selectedRoles.length === 0 ? 'At least one role is required.' : null,
+  })
+  const { subjectError, passwordError, roleSelectionError } = validation.fieldErrors
 
   async function handleDelete(subjectToDelete: string) {
     if (!canManageRoles) {
@@ -189,7 +192,7 @@ export function UsersPage() {
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canManageRoles || !!subjectError || !!passwordError || !!roleSelectionError) {
+    if (!canManageRoles || createUserMutation.isPending || !validation.validate()) {
       return
     }
 
@@ -214,6 +217,8 @@ export function UsersPage() {
 
   function handleCreateUserOpenChange(open: boolean) {
     setIsCreateUserOpen(open)
+    validation.reset()
+    if (!createUserMutation.isPending) createUserMutation.reset()
 
     if (!open) {
       window.setTimeout(() => createUserButtonRef.current?.focus(), 0)
@@ -251,7 +256,7 @@ export function UsersPage() {
           <Button
             ref={createUserButtonRef}
             size="2"
-            onClick={() => setIsCreateUserOpen(true)}
+            onClick={() => handleCreateUserOpenChange(true)}
           >
             New user
           </Button>
@@ -275,12 +280,7 @@ export function UsersPage() {
               <Button
                 type="submit"
                 form="users-create-form"
-                disabled={
-                  createUserMutation.isPending ||
-                  !!subjectError ||
-                  !!passwordError ||
-                  !!roleSelectionError
-                }
+                disabled={createUserMutation.isPending}
               >
                 {createUserMutation.isPending ? 'Creating…' : 'Create user'}
               </Button>

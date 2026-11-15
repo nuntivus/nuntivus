@@ -31,6 +31,7 @@ services:
       retries: 10
 
   migrate:
+    pull_policy: never
     build:
       context: .
       dockerfile: NuntivusServer.Api/Dockerfile
@@ -44,6 +45,7 @@ services:
     restart: "no"
 
   api:
+    pull_policy: never
     build:
       context: .
       dockerfile: NuntivusServer.Api/Dockerfile
@@ -61,6 +63,7 @@ services:
       - "127.0.0.1:8080:8080"
 
   worker:
+    pull_policy: never
     build:
       context: .
       dockerfile: NuntivusServer.Worker/Dockerfile

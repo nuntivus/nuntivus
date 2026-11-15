@@ -22,6 +22,7 @@ import {
   useEventDefinitionsQuery,
 } from '../features/event-definitions/use-event-definitions'
 import { useNotifications } from '../hooks/use-notifications'
+import { useFormValidation } from '../hooks/use-form-validation'
 import { parsePositiveInt, useUrlQueryParams } from '../hooks/use-url-query-params'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
@@ -54,13 +55,16 @@ export function EventDefinitionsPage() {
   const [description, setDescription] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const createButtonRef = useRef<HTMLButtonElement>(null)
-  const eventTypeError = !eventType.trim() ? 'Event type is required.' : null
-  const displayNameError = !displayName.trim() ? 'Display name is required.' : null
+  const validation = useFormValidation({
+    eventTypeError: !eventType.trim() ? 'Event type is required.' : null,
+    displayNameError: !displayName.trim() ? 'Display name is required.' : null,
+  })
+  const { eventTypeError, displayNameError } = validation.fieldErrors
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteDefinitions || !!eventTypeError || !!displayNameError) {
+    if (!canWriteDefinitions || createMutation.isPending || !validation.validate()) {
       return
     }
 
@@ -85,6 +89,8 @@ export function EventDefinitionsPage() {
 
   function handleCreateOpenChange(open: boolean) {
     setIsCreateOpen(open)
+    validation.reset()
+    if (!createMutation.isPending) createMutation.reset()
 
     if (!open) {
       window.setTimeout(() => createButtonRef.current?.focus(), 0)
@@ -121,7 +127,7 @@ export function EventDefinitionsPage() {
           <Button
             ref={createButtonRef}
             size="2"
-            onClick={() => setIsCreateOpen(true)}
+            onClick={() => handleCreateOpenChange(true)}
           >
             New definition
           </Button>
@@ -145,7 +151,7 @@ export function EventDefinitionsPage() {
               <Button
                 type="submit"
                 form="event-definitions-create-form"
-                disabled={createMutation.isPending || !!eventTypeError || !!displayNameError}
+                disabled={createMutation.isPending}
               >
                 {createMutation.isPending ? 'Creating…' : 'Create definition'}
               </Button>

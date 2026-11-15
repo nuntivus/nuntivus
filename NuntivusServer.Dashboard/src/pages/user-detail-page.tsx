@@ -23,6 +23,7 @@ import {
 } from '../features/admin-users/use-admin-users'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
+import { useFormValidation } from '../hooks/use-form-validation'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
 
@@ -203,7 +204,8 @@ function UserDetailEditor({
 }: UserDetailEditorProps) {
   const [editorDisplayName, setEditorDisplayName] = useState(displayName ?? '')
   const [selectedRoles, setSelectedRoles] = useState<string[]>(roles)
-  const rolesError = selectedRoles.length === 0 ? 'At least one role is required.' : null
+  const validation = useFormValidation({ rolesError: selectedRoles.length === 0 ? 'At least one role is required.' : null })
+  const { rolesError } = validation.fieldErrors
 
   function toggleRole(roleName: string) {
     setSelectedRoles((current) => {
@@ -272,13 +274,14 @@ function UserDetailEditor({
         <Flex gap="3">
           <Button
             type="button"
-            onClick={() =>
-              onSave({
+            onClick={() => {
+              if (!canManageRoles || savePending || !validation.validate()) return
+              void onSave({
                 displayName: editorDisplayName.trim() || null,
                 roles: selectedRoles,
               })
-            }
-            disabled={!canManageRoles || savePending || !!rolesError}
+            }}
+            disabled={!canManageRoles || savePending || loadingRoles}
           >
             {savePending ? 'Saving...' : 'Save roles'}
           </Button>

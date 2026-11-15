@@ -44,6 +44,7 @@ import { formatDeliveryStatus } from '../features/deliveries/delivery-status'
 import { useEventDetailQuery } from '../features/events/use-events'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
+import { useFormValidation } from '../hooks/use-form-validation'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { DeliveryStatus } from '../services/api/deliveries-api'
 import { useAppSelector } from '../store/hooks'
@@ -182,10 +183,11 @@ export function DeliveryDetailPage() {
   const [requeueReason, setRequeueReason] = useState('')
   const [operationKey, setOperationKey] = useState<string>(() => crypto.randomUUID())
   const [copiedField, setCopiedField] = useState<string | null>(null)
-  const operationKeyError = operationKey.trim() && !guidPattern.test(operationKey.trim())
-    ? 'Operation ID must be a valid GUID.'
-    : null
-  const canSubmitOperation = guidPattern.test(operationKey.trim())
+  const operationValidation = useFormValidation({
+    operationKeyError: !operationKey.trim() ? 'Operation ID is required.'
+      : !guidPattern.test(operationKey.trim()) ? 'Operation ID must be a valid GUID.' : null,
+  })
+  const { operationKeyError } = operationValidation.fieldErrors
 
   const operationError = useMemo(
     () =>
@@ -195,7 +197,7 @@ export function DeliveryDetailPage() {
   )
 
   async function handleRetry() {
-    if (!id || !canOperateDeliveries || retryMutation.isPending || !canSubmitOperation) {
+    if (!id || !canOperateDeliveries || retryMutation.isPending || requeueMutation.isPending || !operationValidation.validate()) {
       return
     }
 
@@ -220,6 +222,7 @@ export function DeliveryDetailPage() {
 
       setRetryReason('')
       setOperationKey(crypto.randomUUID())
+      operationValidation.reset()
       notifications.success('Delivery retry requested.', 'Delivery operation')
     } catch (error) {
       notifications.error(getApiErrorMessage(error, 'Unable to retry delivery.'), 'Delivery operation')
@@ -227,7 +230,7 @@ export function DeliveryDetailPage() {
   }
 
   async function handleRequeue() {
-    if (!id || !canOperateDeliveries || requeueMutation.isPending || !canSubmitOperation) {
+    if (!id || !canOperateDeliveries || retryMutation.isPending || requeueMutation.isPending || !operationValidation.validate()) {
       return
     }
 
@@ -252,6 +255,7 @@ export function DeliveryDetailPage() {
 
       setRequeueReason('')
       setOperationKey(crypto.randomUUID())
+      operationValidation.reset()
       notifications.success('Delivery requeue requested.', 'Delivery operation')
     } catch (error) {
       notifications.error(getApiErrorMessage(error, 'Unable to requeue delivery.'), 'Delivery operation')
@@ -597,7 +601,7 @@ export function DeliveryDetailPage() {
               <Flex gap="2" wrap="wrap">
                 <Button
                   type="button"
-                  disabled={!canSubmitOperation || retryMutation.isPending || requeueMutation.isPending}
+                  disabled={retryMutation.isPending || requeueMutation.isPending}
                   onClick={() => void handleRetry()}
                 >
                   {retryMutation.isPending ? 'Retrying...' : 'Retry'}
@@ -605,7 +609,7 @@ export function DeliveryDetailPage() {
                 <Button
                   type="button"
                   variant="soft"
-                  disabled={!canSubmitOperation || retryMutation.isPending || requeueMutation.isPending}
+                  disabled={retryMutation.isPending || requeueMutation.isPending}
                   onClick={() => void handleRequeue()}
                 >
                   {requeueMutation.isPending ? 'Submitting...' : 'Redelivery (requeue)'}

@@ -10,7 +10,7 @@ Use immutable image tags and upgrade in controlled steps:
 
 1. backup Postgres + JetStream
 2. update `NUNTIVUS_IMAGE_TAG` in `.env`
-3. pull/build new images
+3. build new application images from the desired source revision
 4. restart stack
 5. validate readiness and worker processing
 
@@ -19,28 +19,26 @@ Use immutable image tags and upgrade in controlled steps:
 From repository root:
 
 ```powershell
-./scripts/ops.ps1 upgrade -Tag <image-tag>
+./scripts/ops.ps1 upgrade -Tag <image-tag> -Build
 ```
 
 Script behavior:
 
 - runs pre-upgrade backup by default
 - updates `NUNTIVUS_IMAGE_TAG` in `.env`
-- pulls + deploys compose services
+- builds local application images and deploys compose services
 - validates API readiness
 - rolls back to previous tag if health validation fails
 
 Use `-SkipBackup` only when you have a verified recent backup.
-Use `-Build` for local source builds instead of pulling images. Registry releases
-must actually exist at your configured image names; this repository does not
-promise a published image for every arbitrary tag.
+Check out the desired source revision first and use `-Build`. Application tags
+identify local builds, not published registry releases. Keep previous tagged local
+images available for rollback.
 
 ## 2. Upgrade command
 
 ```bash
-docker compose --env-file .env -f docker-compose.prod.yml pull
-# or build locally
-# docker compose --env-file .env -f docker-compose.prod.yml build
+docker compose --env-file .env -f docker-compose.prod.yml build
 
 docker compose --env-file .env -f docker-compose.prod.yml up -d
 ```

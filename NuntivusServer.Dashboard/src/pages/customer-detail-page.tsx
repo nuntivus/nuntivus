@@ -33,6 +33,7 @@ import {
 } from '../features/customers/use-customers'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
+import { useFormValidation } from '../hooks/use-form-validation'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
 import { PortalAccessPanel } from '../features/customers/portal-access-panel'
@@ -405,12 +406,13 @@ function CustomerInfoEditor({
   onDisable,
 }: CustomerInfoEditorProps) {
   const [draftName, setDraftName] = useState(name)
-  const nameError = !draftName.trim() ? 'Name is required.' : null
+  const validation = useFormValidation({ nameError: !draftName.trim() ? 'Name is required.' : null })
+  const { nameError } = validation.fieldErrors
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteCustomers || !!nameError) {
+    if (!canWriteCustomers || pending || !validation.validate()) {
       return
     }
 
@@ -453,7 +455,7 @@ function CustomerInfoEditor({
           <Flex gap="2" wrap="wrap">
             <Button
               type="submit"
-              disabled={!canWriteCustomers || pending || !!nameError}
+              disabled={!canWriteCustomers || pending}
             >
               {pending ? 'Saving...' : 'Save customer'}
             </Button>

@@ -610,7 +610,7 @@ function ContractEditorForm({
         <FieldErrorText id="contract-edit-destination-error" message={saveAttempted ? fieldErrors.destination : undefined} />
       </Card>
 
-      <ContractOptionsForm standalone value={optionsDraft} onChange={setOptionsDraft} eventTypes={eventTypes} disabled={!canWriteContracts || replaceMutation.isPending} onRawEditingChange={(key, editing) => setRawEditing((current) => editing ? [...current.filter((item) => item !== key), key] : current.filter((item) => item !== key))} />
+      <ContractOptionsForm standalone value={optionsDraft} onChange={setOptionsDraft} eventTypes={eventTypes} showValidation={saveAttempted} disabled={!canWriteContracts || replaceMutation.isPending} onRawEditingChange={(key, editing) => setRawEditing((current) => editing ? [...current.filter((item) => item !== key), key] : current.filter((item) => item !== key))} />
       <TransformationImpactPanel contractId={id} eventTypes={eventTypes} transformation={formStateToBackendConfig(optionsDraft).transformation ?? null} disabled={Object.keys(optionErrors).length > 0 || rawEditing.length > 0 || replaceMutation.isPending} />
       <ContractDryRunPanel contractId={id} eventTypes={eventTypes} sourceIds={sourceIds} enabled={enabled}
         draft={{ customerId, sourceIds, eventTypes, destinationIds, name, ...formStateToBackendConfig(optionsDraft), url: '', authenticationType: 'none' }}

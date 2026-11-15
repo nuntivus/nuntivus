@@ -3,9 +3,17 @@ import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import logo from '../assets/nuntivus-logo.svg'
 import { FieldErrorText } from '../components/forms/form-feedback'
+import { useFormValidation } from '../hooks/use-form-validation'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { clearAuthError, loginWithCredentials } from '../store/auth-slice'
 import './login-page.css'
+
+function credentialErrors(username: string, password: string) {
+  return {
+    usernameError: !username.trim() ? 'Username is required.' : null,
+    passwordError: !password.trim() ? 'Password is required.' : null,
+  }
+}
 
 export function LoginPage() {
   const [username, setUsername] = useState('')
@@ -17,8 +25,8 @@ export function LoginPage() {
 
   const redirectTo = (location.state as { from?: { pathname?: string } } | null)
     ?.from?.pathname
-  const usernameError = !username.trim() ? 'Username is required.' : null
-  const passwordError = !password.trim() ? 'Password is required.' : null
+  const validation = useFormValidation(credentialErrors(username, password))
+  const { usernameError, passwordError } = validation.fieldErrors
 
   if (status === 'authenticated' && token) {
     return <Navigate to={redirectTo || '/'} replace />
@@ -29,11 +37,21 @@ export function LoginPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (usernameError || passwordError) {
+    if (status === 'loading') {
       return
     }
 
-    const result = await dispatch(loginWithCredentials({ username, password }))
+    const formData = new FormData(event.currentTarget)
+    const submittedUsername = String(formData.get('username') ?? '')
+    const submittedPassword = String(formData.get('password') ?? '')
+    setUsername(submittedUsername)
+    setPassword(submittedPassword)
+
+    if (!validation.validate(credentialErrors(submittedUsername, submittedPassword))) {
+      return
+    }
+
+    const result = await dispatch(loginWithCredentials({ username: submittedUsername, password: submittedPassword }))
 
     if (loginWithCredentials.fulfilled.match(result)) {
       navigate(redirectTo || '/', { replace: true })
@@ -128,7 +146,7 @@ export function LoginPage() {
                   size="3"
                   className="login-submit"
                   loading={status === 'loading'}
-                  disabled={!!usernameError || !!passwordError || status === 'loading' || restoringSession}
+                  disabled={status === 'loading' || restoringSession}
                 >
                   {status === 'loading' ? 'Signing in...' : 'Sign in'}
                 </Button>

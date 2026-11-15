@@ -13,13 +13,21 @@ assert.equal(result.status, 0, 'Quick-start Compose configuration must validate.
 const config = JSON.parse(result.stdout)
 const services = config.services
 
-test('quick start uses versioned public images without source builds', () => {
-  for (const service of Object.values(services)) {
-    assert.ok(service.image)
-    assert.equal(service.build, undefined)
-  }
+test('quick start builds application images locally and retains infrastructure images', () => {
   for (const component of ['api', 'worker', 'dashboard']) {
-    assert.equal(services[component].image, `sasaspo/nuntivus-server-${component}:0.1.0`)
+    assert.equal(services[component].image, `nuntivus-${component}:0.1.0`)
+    assert.equal(services[component].pull_policy, 'build')
+    const project = component === 'api' ? 'Api' : component === 'worker' ? 'Worker' : 'Dashboard'
+    assert.equal(services[component].build.dockerfile, `NuntivusServer.${project}/Dockerfile`)
+  }
+  for (const name of ['migrate', 'bootstrap']) {
+    assert.deepEqual(services[name].build, services.api.build)
+    assert.equal(services[name].image, services.api.image)
+    assert.equal(services[name].pull_policy, 'build')
+  }
+  for (const name of ['initialize', 'postgres', 'admin-check', 'nats']) {
+    assert.ok(services[name].image)
+    assert.equal(services[name].build, undefined)
   }
 })
 

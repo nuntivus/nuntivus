@@ -4,7 +4,7 @@ import { FieldErrorText } from '../../components/forms/form-feedback'
 import { CodeIcon, ContractsIcon, EventsIcon, SettingsIcon } from '../../components/icons/nav-icons'
 import { formStateToBackendConfig, parseRawSection, type AdvancedOptionsDraft, type OptionKey, type ValidationErrors } from './contract-options'
 
-export function ConfigSection({ title, summary, enabled, onToggle, sectionKey, value, onChange, eventTypes, errors, disabled, children, onRawEditingChange }: {
+export function ConfigSection({ title, summary, enabled, onToggle, sectionKey, value, onChange, eventTypes, errors, showValidation = false, disabled, children, onRawEditingChange }: {
   title: string
   summary: string
   enabled: boolean
@@ -14,11 +14,12 @@ export function ConfigSection({ title, summary, enabled, onToggle, sectionKey, v
   onChange: (next: AdvancedOptionsDraft) => void
   eventTypes: string[]
   errors: ValidationErrors
+  showValidation?: boolean
   disabled?: boolean
   children: ReactNode
   onRawEditingChange?: (key: OptionKey, editing: boolean) => void
 }) {
-  const [open, setOpen] = useState(() => enabled || Object.keys(errors).some((path) => path === sectionKey || path.startsWith(`${sectionKey}.`)))
+  const [open, setOpen] = useState(() => enabled || (showValidation && Object.keys(errors).some((path) => path === sectionKey || path.startsWith(`${sectionKey}.`))))
   const [raw, setRaw] = useState<string | null>(null)
   const [rawError, setRawError] = useState<string | null>(null)
   const id = useId()
@@ -54,7 +55,7 @@ export function ConfigSection({ title, summary, enabled, onToggle, sectionKey, v
             <div><Heading size="3">{title}</Heading><Text size="1" color="gray">{sectionMeta.description}</Text></div>
           </Flex>
           <Flex align="center" gap="3">
-            <Badge color={sectionErrors ? 'red' : 'gray'}>{sectionErrors ? 'Needs attention' : summary}</Badge>
+            <Badge color={showValidation && sectionErrors ? 'red' : 'gray'}>{showValidation && sectionErrors ? 'Needs attention' : summary}</Badge>
             <Switch id={`${id}-enabled`} checked={enabled} disabled={disabled || raw !== null} onCheckedChange={(checked) => { onToggle(checked); if (checked) setOpen(true) }} aria-label={`Enable ${title}`} />
             <Button type="button" size="1" variant="soft" color="gray" aria-expanded={open} aria-controls={id} disabled={raw !== null} onClick={() => setOpen(!open)} aria-label={`${open ? 'Collapse' : 'Expand'} ${title}`}>{open ? '⌃' : '⌄'}</Button>
           </Flex>

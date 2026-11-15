@@ -28,6 +28,7 @@ import {
 } from '../features/events/use-events'
 import { useConfirmDialog } from '../hooks/use-confirm-dialog'
 import { useNotifications } from '../hooks/use-notifications'
+import { useFormValidation } from '../hooks/use-form-validation'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import type { DeliveryListItem } from '../services/api/events-api'
 import { useAppSelector } from '../store/hooks'
@@ -108,7 +109,8 @@ export function EventDetailPage() {
   const sourceName = useEntityLabel('source', detail?.source)
   const replayedDeliveriesQuery = useReplayedEventDeliveriesQuery(lastReplay?.replayedEventId)
 
-  const replayKeyError = !replayKey.trim() ? 'Replay key is required.' : null
+  const replayValidation = useFormValidation({ replayKeyError: !replayKey.trim() ? 'Replay key is required.' : null })
+  const { replayKeyError } = replayValidation.fieldErrors
 
   async function handleCopy(value: string, field: string) {
     if (!value) {
@@ -124,7 +126,7 @@ export function EventDetailPage() {
   }
 
   async function handleReplay() {
-    if (!id || !canReplayEvents || !!replayKeyError || replayMutation.isPending) {
+    if (!id || !canReplayEvents || replayMutation.isPending || !replayValidation.validate()) {
       return
     }
 
@@ -151,6 +153,7 @@ export function EventDetailPage() {
 
       setReplayKey('')
       setReplayReason('')
+      replayValidation.reset()
       notifications.success('Event replay started successfully.', 'Replay event')
     } catch (error) {
       notifications.error(getApiErrorMessage(error, 'Unable to replay event.'), 'Replay event')
@@ -371,7 +374,7 @@ export function EventDetailPage() {
             <>
               <div className="event-replay-controls">
                 <TextField.Root placeholder="Replay key" value={replayKey} onChange={(event) => setReplayKey(event.target.value)} disabled={replayMutation.isPending} aria-invalid={replayKeyError ? 'true' : 'false'} aria-describedby={replayKeyError ? 'event-replay-key-error' : undefined} />
-                <Button type="button" onClick={() => void handleReplay()} disabled={replayMutation.isPending || !!replayKeyError}><RetryIcon />{replayMutation.isPending ? 'Submitting...' : 'Replay event'}</Button>
+                <Button type="button" onClick={() => void handleReplay()} disabled={replayMutation.isPending}><RetryIcon />{replayMutation.isPending ? 'Submitting...' : 'Replay event'}</Button>
               </div>
               <FieldErrorText id="event-replay-key-error" message={replayKeyError} />
               <TextArea

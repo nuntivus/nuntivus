@@ -1,7 +1,11 @@
 name: nuntivus-quickstart
 
 x-api: &api
-  image: sasaspo/nuntivus-server-api:${NUNTIVUS_IMAGE_TAG:-0.1.0}
+  image: nuntivus-api:${NUNTIVUS_IMAGE_TAG:-local}
+  pull_policy: build
+  build:
+    context: .
+    dockerfile: NuntivusServer.Api/Dockerfile
   entrypoint:
     - /bin/sh
     - -ec
@@ -166,7 +170,11 @@ services:
       start_period: 20s
 
   worker:
-    image: sasaspo/nuntivus-server-worker:${NUNTIVUS_IMAGE_TAG:-0.1.0}
+    image: nuntivus-worker:${NUNTIVUS_IMAGE_TAG:-local}
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: NuntivusServer.Worker/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:
@@ -201,7 +209,11 @@ services:
       start_period: 20s
 
   dashboard:
-    image: sasaspo/nuntivus-server-dashboard:${NUNTIVUS_IMAGE_TAG:-0.1.0}
+    image: nuntivus-dashboard:${NUNTIVUS_IMAGE_TAG:-local}
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: NuntivusServer.Dashboard/Dockerfile
     restart: unless-stopped
     depends_on:
       api:

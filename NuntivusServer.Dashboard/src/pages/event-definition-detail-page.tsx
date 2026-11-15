@@ -30,6 +30,7 @@ import {
   useUpdateEventDefinitionMutation,
 } from '../features/event-definitions/use-event-definitions'
 import { useNotifications } from '../hooks/use-notifications'
+import { useFormValidation } from '../hooks/use-form-validation'
 import { ApiError, getApiErrorMessage } from '../services/api/api-client'
 import { useAppSelector } from '../store/hooks'
 import { SchemaCompatibilityPanel } from '../features/event-definitions/schema-compatibility-panel'
@@ -89,13 +90,15 @@ export function EventDefinitionDetailPage() {
   const selectedSchemaQuery = useEventSchemaVersionQuery(eventType, selectedSchemaVersion)
 
   const schemaVersionValue = Number.parseInt(schemaVersionInput, 10)
-  const schemaVersionError =
-    !schemaVersionInput.trim()
+  const schemaValidation = useFormValidation({
+    schemaVersionError: !schemaVersionInput.trim()
       ? 'Version is required.'
       : Number.isNaN(schemaVersionValue) || schemaVersionValue <= 0
         ? 'Version must be a positive number.'
-        : null
-  const schemaJsonError = !schemaJsonInput.trim() ? 'Schema JSON is required.' : null
+        : null,
+    schemaJsonError: !schemaJsonInput.trim() ? 'Schema JSON is required.' : null,
+  })
+  const { schemaVersionError, schemaJsonError } = schemaValidation.fieldErrors
 
   const definition = definitionQuery.data
   const schemaItems = schemasQuery.data?.items ?? []
@@ -210,7 +213,7 @@ export function EventDefinitionDetailPage() {
   async function handleCreateSchemaDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (!canWriteDefinitions || schemaVersionError || schemaJsonError) {
+    if (!canWriteDefinitions || createSchemaMutation.isPending || !schemaValidation.validate()) {
       return
     }
 
@@ -225,6 +228,7 @@ export function EventDefinitionDetailPage() {
 
       setSchemaVersionInput('')
       setSchemaJsonInput('')
+      schemaValidation.reset()
       notifications.success('Schema draft created.', 'Event definition')
     } catch (error) {
       setSchemaDraftError(getApiErrorMessage(error, 'Unable to create schema draft.'))
@@ -540,7 +544,7 @@ export function EventDefinitionDetailPage() {
 
             <Button
               type="submit"
-              disabled={!canWriteDefinitions || createSchemaMutation.isPending || !!schemaVersionError || !!schemaJsonError}
+              disabled={!canWriteDefinitions || createSchemaMutation.isPending}
             >
               {createSchemaMutation.isPending ? 'Creating...' : 'Create schema draft'}
             </Button>

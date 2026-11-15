@@ -21,21 +21,22 @@ See the [architecture](docs/architecture.md) and [feature limitations](docs/feat
 ## Docker quick-start (local only)
 
 Requires Docker Engine/Desktop with Linux containers and Docker Compose 2.24.4+.
-Download [docker-compose.quickstart.yml](docker-compose.quickstart.yml) into an
-empty folder. No source checkout, .NET, Node.js, or `.env` configuration is needed.
+Clone this repository and run from its root. The application is built from local
+source; host installations of .NET and Node.js and an `.env` file are not needed.
 
-From that folder, run:
+From the repository root, run:
 
 ```sh
 docker compose -f docker-compose.quickstart.yml up -d --wait
 ```
 
-Compose downloads the published `sasaspo/nuntivus-server-api`,
-`sasaspo/nuntivus-server-worker`, and `sasaspo/nuntivus-server-dashboard` images
-(version `0.1.0`), plus PostgreSQL and NATS. It generates unique database and NATS
+Compose builds the API, worker, and dashboard from the checkout instead of pulling
+application images from Docker Hub. PostgreSQL, NATS, Docker build base images,
+and build packages may still be downloaded. It generates unique database and NATS
 credentials, an encryption key, a signing key, and an initial administrator
 password; applies migrations; and starts the complete application. The Dashboard's
-API address is configured automatically. Nothing is built locally.
+API address is configured automatically. Subsequent starts rebuild from local source
+using Docker's build cache.
 
 Open **http://localhost:5173** and sign in as **admin**. Retrieve the generated
 initial password locally:
@@ -147,6 +148,10 @@ trusted HTTPS reverse proxy.
 
 Read the [operations guides](docs/self-hosting/README.md) for backups, restores,
 upgrades, and deployment-specific acceptance checks.
+
+See [Compose deployment modes](docs/self-hosting/compose-deployments.md) to start
+API and worker independently on one host or deploy them on separate hosts using
+shared PostgreSQL and NATS infrastructure.
 
 ## Development and tests
 

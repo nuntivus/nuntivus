@@ -30,6 +30,7 @@ services:
 
   migrate:
     image: nuntivus-api:${NUNTIVUS_IMAGE_TAG}
+    pull_policy: never
     restart: "no"
     build:
       context: .
@@ -46,6 +47,7 @@ services:
 
   api:
     image: nuntivus-api:${NUNTIVUS_IMAGE_TAG}
+    pull_policy: never
     build:
       context: .
       dockerfile: NuntivusServer.Api/Dockerfile
@@ -80,6 +82,7 @@ services:
 
   worker:
     image: nuntivus-worker:${NUNTIVUS_IMAGE_TAG}
+    pull_policy: never
     build:
       context: .
       dockerfile: NuntivusServer.Worker/Dockerfile

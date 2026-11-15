@@ -162,12 +162,16 @@ for (const { action, endpoint, confirmText } of [
             assert.match(await operationId.inputValue(), /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i)
 
             await operationId.fill('test')
+            assert.equal(await page.getByText('Operation ID must be a valid GUID.').count(), 0)
+            await page.getByRole('button', { name: action, exact: true }).click()
             assert.equal(await page.getByText('Operation ID must be a valid GUID.').count(), 1)
-            assert.equal(await page.getByRole('button', { name: action, exact: true }).isDisabled(), true)
+            assert.equal(await page.getByRole('button', { name: action, exact: true }).isEnabled(), true)
+            assert.equal(await page.getByRole('alertdialog').count(), 0)
             assert.equal(requests.length, 0)
 
             const validId = '8f3d6e6c-8dd6-4abc-9f48-8a9522537273'
             await operationId.fill(validId)
+            assert.equal(await page.getByText('Operation ID must be a valid GUID.').count(), 0)
             await page.getByRole('button', { name: action, exact: true }).click()
             await page.getByRole('button', { name: confirmText, exact: true }).click()
             await page.waitForFunction(() => document.querySelector('input[placeholder="GUID"]')?.value !== '8f3d6e6c-8dd6-4abc-9f48-8a9522537273')

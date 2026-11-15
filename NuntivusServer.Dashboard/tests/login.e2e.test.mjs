@@ -31,7 +31,9 @@ test('login branding and labeled fields fit desktop and mobile screens', async (
     assert.equal(await page.getByLabel('Username', { exact: true }).getAttribute('autocomplete'), 'username')
     assert.equal(await page.getByLabel('Password', { exact: true }).getAttribute('autocomplete'), 'current-password')
     assert.equal(await page.getByLabel('Password', { exact: true }).getAttribute('type'), 'password')
-    assert.equal(await page.getByRole('button', { name: 'Sign in', exact: true }).isDisabled(), true)
+    assert.equal(await page.getByRole('button', { name: 'Sign in', exact: true }).isEnabled(), true)
+    assert.equal(await page.getByRole('alert').count(), 0)
+    assert.equal(await page.locator('[aria-invalid="true"]').count(), 0)
 
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 320, height: 568 }]) {
       await page.setViewportSize(viewport)
@@ -43,6 +45,50 @@ test('login branding and labeled fields fit desktop and mobile screens', async (
   } finally {
     await browser.close()
   }
+})
+
+test('login validates on submit and clears field feedback as values are corrected', async () => {
+  const browser = await chromium.launch({ headless: true })
+  try {
+    const page = await browser.newPage()
+    const requests = []
+    await page.route('**/v1/auth/local/login', async route => {
+      requests.push(route.request().postDataJSON())
+      await route.fulfill({ status: 401, contentType: 'application/json', body: '{}' })
+    })
+    await page.goto(`${appUrl}/login`)
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    await page.getByText('Username is required.', { exact: true }).waitFor()
+    assert.equal(await page.getByText('Password is required.', { exact: true }).isVisible(), true)
+    assert.equal(requests.length, 0)
+    await page.getByLabel('Username', { exact: true }).fill('test.admin')
+    await page.getByText('Username is required.', { exact: true }).waitFor({ state: 'hidden' })
+    await page.getByLabel('Password', { exact: true }).fill('test-password')
+    assert.equal(await page.getByRole('alert').count(), 0)
+    assert.equal(await page.locator('[aria-invalid="true"]').count(), 0)
+  } finally { await browser.close() }
+})
+
+test('login submits browser-autofilled values without requiring change events', async () => {
+  const browser = await chromium.launch({ headless: true })
+  try {
+    const page = await browser.newPage()
+    let credentials
+    await page.route('**/v1/auth/local/login', async route => {
+      credentials = route.request().postDataJSON()
+      await route.fulfill({ status: 401, contentType: 'application/json', body: '{}' })
+    })
+    await page.goto(`${appUrl}/login`)
+    await page.getByRole('heading', { name: 'Admin login' }).waitFor()
+    await page.evaluate(() => {
+      document.querySelector('[name="username"]').value = 'autofilled.admin'
+      document.querySelector('[name="password"]').value = 'autofilled-password'
+    })
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    await page.getByRole('alertdialog').waitFor()
+    assert.deepEqual(credentials, { username: 'autofilled.admin', password: 'autofilled-password' })
+    assert.equal(await page.locator('[aria-invalid="true"]').count(), 0)
+  } finally { await browser.close() }
 })
 
 test('login submits credentials by keyboard and preserves the failure dialog', async () => {

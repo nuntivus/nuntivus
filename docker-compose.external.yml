@@ -1,0 +1,23 @@
+# Combine with docker-compose.prod.yml when PostgreSQL and NATS are managed separately.
+# Start only the required application service; run migrations explicitly first.
+services:
+  postgres:
+    profiles: ["local-infrastructure"]
+  nats:
+    profiles: ["local-infrastructure"]
+  migrate:
+    depends_on: !reset {}
+    environment:
+      Database__PostgresConnectionString: ${NUNTIVUS_DATABASE_CONNECTION_STRING:?Set the shared PostgreSQL connection string}
+  api:
+    depends_on: !reset {}
+    environment:
+      Database__PostgresConnectionString: ${NUNTIVUS_DATABASE_CONNECTION_STRING:?Set the shared PostgreSQL connection string}
+  worker:
+    depends_on: !reset {}
+    environment:
+      Database__PostgresConnectionString: ${NUNTIVUS_DATABASE_CONNECTION_STRING:?Set the shared PostgreSQL connection string}
+      Nats__Url: ${NUNTIVUS_NATS_URL:?Set the shared NATS URL}
+      Nats__Token: ${NUNTIVUS_NATS_TOKEN:-}
+      Nats__User: ${NUNTIVUS_NATS_USER:-}
+      Nats__Password: ${NUNTIVUS_NATS_PASSWORD:-}

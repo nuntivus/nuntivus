@@ -59,9 +59,14 @@ test('customer name field is accessible by its visible label', async () => {
         assert.equal(await nameInput.inputValue(), 'Regression Customer')
 
         await nameInput.fill('')
+        assert.equal(await nameInput.getAttribute('aria-invalid'), 'false')
+        assert.equal(await page.getByRole('alert').count(), 0)
+        await page.getByRole('button', { name: 'Save customer' }).click()
         assert.equal(await nameInput.getAttribute('aria-invalid'), 'true')
         assert.equal(await page.getByRole('alert').textContent(), 'Name is required.')
-        assert.equal(await page.getByRole('button', { name: 'Save customer' }).isDisabled(), true)
+        assert.equal(await page.getByRole('button', { name: 'Save customer' }).isEnabled(), true)
+        await nameInput.fill('Corrected customer')
+        assert.equal(await page.getByRole('alert').count(), 0)
     } finally {
         await browser.close()
     }
@@ -149,6 +154,15 @@ test('contract basics fields are accessible by their visible labels', async () =
         await page.getByRole('heading', { name: 'Review contract', exact: true }).waitFor()
         assert.equal(await page.getByText('Destinations: destination-1', { exact: true }).count(), 1)
         assert.equal(await page.getByRole('button', { name: 'Create contract', exact: true }).count(), 1)
+        await page.getByRole('switch', { name: 'Enable Rate limiting' }).click()
+        assert.equal(await page.getByRole('alert').count(), 0)
+        assert.equal(await page.getByText('Needs attention', { exact: true }).count(), 0)
+        await page.getByRole('button', { name: 'Create contract', exact: true }).click()
+        await page.getByText('Needs attention', { exact: true }).waitFor()
+        assert.equal(await page.locator('#rate-limit-error').isVisible(), true)
+        await page.getByLabel('Requests per second', { exact: true }).fill('10')
+        await page.locator('#rate-limit-error').waitFor({ state: 'hidden' })
+        assert.equal(await page.getByText('Needs attention', { exact: true }).count(), 0)
     } finally {
         await browser.close()
     }
