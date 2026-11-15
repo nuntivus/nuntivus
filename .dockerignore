@@ -6,6 +6,16 @@
 **/backups
 **/test-results
 **/playwright-report
+**/coverage
+**/.nyc_output
+**/.docusaurus
+**/*.tsbuildinfo
+**/.eslintcache
+**/*.log
+**/*.tmp
+**/*.bak
+NuntivusServer.Website/build
+NuntivusServer.Website/docs/reference
 **/*.pfx
 **/*.p12
 **/*.pem

@@ -23,6 +23,10 @@ backups/
 **/playwright-report/
 **/node_modules/
 **/dist/
+**/coverage/
+**/.nyc_output/
+*.tsbuildinfo
+.eslintcache
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
