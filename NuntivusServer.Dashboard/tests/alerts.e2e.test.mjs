@@ -34,8 +34,11 @@ test('alert inbox acknowledges notifications and creates configurable reminder r
       const fields = document.querySelectorAll('#alert-create-form .configuration-grid-2 .field')
       return fields.length >= 2 && Math.abs(fields[0].getBoundingClientRect().y - fields[1].getBoundingClientRect().y) < 2
     })
-    const contractBounds = await details.locator('.field').first().boundingBox()
-    const nameBounds = await details.locator('.field').last().boundingBox()
+    const [contractBounds, nameBounds] = await details.locator('.field').evaluateAll(fields =>
+      fields.map(field => {
+        const { y, width } = field.getBoundingClientRect()
+        return { y, width }
+      }))
     assert.ok(Math.abs(contractBounds.y - nameBounds.y) < 2)
     assert.ok(contractBounds.width > 300 && nameBounds.width > 300)
     assert.equal(await page.locator('form .configuration-section').count(), 3)
@@ -53,6 +56,7 @@ test('alert inbox acknowledges notifications and creates configurable reminder r
     assert.equal(writes[0].webhookUrl, null)
     await page.getByRole('button', { name: 'Add rule', exact: true }).click()
     await page.setViewportSize({ width: 390, height: 844 })
+    await details.waitFor()
     const mobileFields = await details.locator('.field').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().top))
     assert.ok(mobileFields[1] > mobileFields[0])
     assert.equal(await page.locator('form .configuration-section').evaluateAll(elements => elements.every(element => element.scrollWidth <= element.clientWidth + 1)), true)

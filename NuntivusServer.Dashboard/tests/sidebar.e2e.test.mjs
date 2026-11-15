@@ -34,8 +34,15 @@ test('workflow sidebar groups collapse accessibly and keep Settings visible', as
     await nav.getByRole('link', { name: 'Failed Deliveries', exact: true }).waitFor()
     const brand = page.locator('.sidebar-brand')
     const logo = brand.locator('img')
-    assert.equal(await logo.evaluate(image => image.complete && image.naturalWidth > 0), true)
-    assert.match(await logo.getAttribute('src'), /nuntivus-logo/)
+    await page.waitForFunction(() => {
+      const image = document.querySelector('.sidebar-brand img')
+      return image?.complete && image.naturalWidth > 0
+    })
+    const expectedLogo = await page.evaluate(async () => {
+      const { default: url } = await import('/src/assets/nuntivus-logo.svg?import')
+      return new URL(url, document.baseURI).href
+    })
+    assert.equal(await logo.evaluate(image => image.currentSrc), expectedLogo)
     assert.equal(await brand.innerText(), 'Nuntivus Admin')
 
     const groups = {
@@ -77,6 +84,7 @@ test('workflow sidebar groups collapse accessibly and keep Settings visible', as
     assert.equal(await settings.getAttribute('aria-current'), 'page')
     assert.equal(await nav.locator('a[aria-current="page"]').count(), 0)
 
+    await page.getByRole('button', { name: 'Hide menu', exact: true }).click()
     await page.setViewportSize({ width: 390, height: 700 })
     await page.getByRole('button', { name: 'Show menu', exact: true }).click()
     await nav.getByRole('link', { name: 'Deliveries', exact: true }).click()

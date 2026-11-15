@@ -64,17 +64,30 @@ test('failure list defaults to both states, supports narrowing and exports the c
 
     for (const status of ['Failed', 'Dead']) {
       await page.getByRole('combobox', { name: 'Failure status' }).click()
+      const response = page.waitForResponse(response => {
+        const url = new URL(response.url())
+        return url.pathname === '/v1/deliveries' && url.searchParams.get('status') === status
+          && url.searchParams.get('failuresOnly') === 'true' && response.ok()
+      })
       await page.getByRole('option', { name: `${status} only`, exact: true }).click()
       await page.waitForURL(url => url.searchParams.get('status') === status)
-      await table.getByText(status, { exact: true }).waitFor()
+      await response
+      await page.waitForFunction(expected => {
+        const rows = document.querySelectorAll('[aria-label="Failed deliveries table"] table tbody tr')
+        return rows.length === 1 && rows[0].querySelector('.rt-Badge')?.textContent === expected
+      }, status)
+      const rowId = `00000000-0000-4000-8000-${status === 'Failed' ? '000000000001' : '000000000002'}`
+      const row = table.getByRole('row', { name: `Open delivery ${rowId}`, exact: true })
+      await row.getByText(status, { exact: true }).waitFor()
       await table.getByText(status === 'Failed' ? 'Dead' : 'Failed', { exact: true }).waitFor({ state: 'hidden' })
-      assert.equal(await table.getByText(status, { exact: true }).count(), 1)
+      assert.equal(await row.getByText(status, { exact: true }).count(), 1)
       assert.equal(requests.at(-1).searchParams.get('failuresOnly'), 'true')
     }
 
     await page.getByRole('button', { name: 'Reset', exact: true }).click()
     await page.waitForURL(url => !url.searchParams.has('status'))
     await table.getByText('Failed', { exact: true }).waitFor()
+    await table.getByText('Dead', { exact: true }).waitFor()
     assert.equal(await table.getByText('Dead', { exact: true }).count(), 1)
     const download = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export CSV', exact: true }).click()

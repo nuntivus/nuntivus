@@ -67,6 +67,10 @@ for (const [path, labels] of [
     const { browser, page } = await openApp()
     try {
       await page.goto(`${appUrl}${path}`)
+      if (path === '/alerts') {
+        await page.getByRole('button', { name: 'Add rule', exact: true }).click()
+        await page.getByRole('dialog', { name: 'Create rule', exact: true }).waitFor()
+      }
       for (const label of labels) {
         await page.getByRole('combobox', { name: label, exact: true }).waitFor()
         assert.equal(await page.getByRole('textbox', { name: label, exact: true }).count(), 0)

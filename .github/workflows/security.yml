@@ -2,10 +2,8 @@ name: Security
 
 on:
   push:
-  pull_request:
-  workflow_dispatch:
-  schedule:
-    - cron: '23 6 * * 1'
+    branches:
+      - main
 
 permissions:
   contents: read
