@@ -1,20 +1,29 @@
 [
   {
-	"Name": "Dashboard + Worker + API",
-	"Projects": [
-	  {
-		"Path": "NuntivusServer.Api\\NuntivusServer.Api.csproj",
-		"Action": "Start",
-		"DebugTarget": "https"
-	  },
-	  {
-		"Path": "NuntivusServer.Worker\\NuntivusServer.Worker.csproj",
-		"Action": "Start"
-	  },
-	  {
-		"Path": "NuntivusServer.Dashboard\\nuntivusserver.dashboard.esproj",
-		"Action": "Start"
-	  }
-	]
+    "Name": "Dashboard + Worker + API",
+    "Projects": [
+      {
+        "Path": "NuntivusServer.Api\\NuntivusServer.Api.csproj",
+        "Action": "Start",
+        "DebugTarget": "https"
+      },
+      {
+        "Path": "NuntivusServer.Worker\\NuntivusServer.Worker.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "NuntivusServer.Dashboard\\nuntivusserver.dashboard.esproj",
+        "Action": "Start"
+      }
+    ]
+  },
+  {
+    "Name": "Website",
+    "Projects": [
+      {
+        "Path": "NuntivusServer.Website\\nuntivusserver.website.esproj",
+        "Action": "Start"
+      }
+    ]
   }
 ]

@@ -36,17 +36,11 @@ See the feature guides for exact API contracts and supported configuration.
 
 ## Runtime boundaries
 
-```text
-HTTP Sources -> API ------> PostgreSQL <------ Pull Source workers
-							  |
-					   transactional outbox
-							  |
-						NATS JetStream
-							  |
-				contract matching and delivery workers
-							  |
-				  customer destinations + PostgreSQL
-```
+![Nuntivus architecture: HTTP sources enter through the API and pull connectors run in the Worker. Both persist events and outbox records in PostgreSQL. The Worker publishes to JetStream, matches contracts, dispatches customer deliveries, and persists results.](assets/architecture.svg)
+
+Solid blue arrows show event and work flow; the dashed green arrow shows
+delivery state persisted back to PostgreSQL. Dashed containers group services
+hosted by the same Worker process, not additional deployments.
 
 PostgreSQL is the source of truth for business state. NATS JetStream distributes
 asynchronous work; it is not a replacement for persisted events and deliveries.
