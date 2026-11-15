@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" fill="none" role="img" aria-labelledby="title description">
+  <title id="title">Nuntivus Server product overview</title>
+  <desc id="description">Self-hosted customer event infrastructure. Receive events from managed sources, apply customer contracts with schemas, filters and transformations, then deliver to HTTP, Kafka, RabbitMQ, NATS or Amazon SQS. Includes retries, replay, observability and an administration dashboard. Early development; delivery is at least once.</desc>
+  <defs>
+	<linearGradient id="background" x1="0" y1="0" x2="1280" y2="720" gradientUnits="userSpaceOnUse">
+	  <stop stop-color="#10152c" />
+	  <stop offset="1" stop-color="#090d18" />
+	</linearGradient>
+	<linearGradient id="accent" x1="56" y1="0" x2="1224" y2="0" gradientUnits="userSpaceOnUse">
+	  <stop stop-color="#7664ff" />
+	  <stop offset="1" stop-color="#009cff" />
+	</linearGradient>
+	<linearGradient id="letter" x1="200" y1="180" x2="650" y2="620" gradientUnits="userSpaceOnUse">
+	  <stop stop-color="#29248f" /><stop offset="1" stop-color="#28218b" />
+	</linearGradient>
+	<linearGradient id="arrow" x1="525" y1="180" x2="750" y2="490" gradientUnits="userSpaceOnUse">
+	  <stop stop-color="#008fff" /><stop offset="1" stop-color="#0084f5" />
+	</linearGradient>
+  </defs>
+  <rect x="1" y="1" width="1278" height="718" rx="24" fill="url(#background)" stroke="#2b3552" stroke-width="2" />
+  <path d="M56 2h1168" stroke="url(#accent)" stroke-width="4" />
+  <g transform="translate(56 45) scale(.09) translate(-180 -155)">
+	<path d="M189 560V245C189 200 228 164 272 164H310C337 164 359 176 379 200L522 358L662 430V561C662 602 634 632 594 632H556C530 632 508 620 490 596L339 395V559C339 601 310 632 271 632H257C217 632 189 602 189 560Z" fill="url(#letter)" />
+	<path d="M522 196C522 174 542 161 560 173L765 315C781 326 781 347 765 359L544 527C534 535 522 528 522 516V196Z" fill="url(#arrow)" />
+  </g>
+  <g font-family="Segoe UI, Arial, sans-serif">
+	<text x="128" y="79" fill="#f2f5ff" font-size="28" font-weight="700">Nuntivus Server</text>
+	<rect x="967" y="49" width="257" height="34" rx="17" fill="#222641" stroke="#485079" />
+	<text x="1095" y="71" text-anchor="middle" fill="#c4caff" font-size="14" font-weight="600" letter-spacing="1">OPEN SOURCE · SELF-HOSTED</text>
+	<text x="56" y="165" fill="#f2f5ff" font-size="46" font-weight="700" letter-spacing="-1">Your events. Every customer.</text>
+	<text x="56" y="218" fill="#67b6ff" font-size="46" font-weight="700" letter-spacing="-1">Their destination.</text>
+	<text x="56" y="250" fill="#acb9d1" font-size="19">Publish business events once. Define how each customer receives them.</text>
+
+	<rect x="56" y="286" width="338" height="266" rx="16" fill="#151d31" stroke="#34415e" />
+	<rect x="470" y="286" width="340" height="266" rx="16" fill="#1b2040" stroke="#6e64bd" />
+	<rect x="886" y="286" width="338" height="266" rx="16" fill="#112238" stroke="#305a80" />
+	<g stroke="#6bb7ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+	  <path d="M411 419h40m-9-9 9 9-9 9M827 419h40m-9-9 9 9-9 9" />
+	</g>
+
+	<rect x="80" y="310" width="42" height="42" rx="10" fill="#223355" />
+	<g stroke="#82bdff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+	  <path d="M104 320h9v22h-9M88 331h19m-6-6 6 6-6 6" />
+	</g>
+	<text x="80" y="387" fill="#f2f5ff" font-size="25" font-weight="700">Managed sources</text>
+	<text x="80" y="416" fill="#acb9d1" font-size="17">Receive and ingest business events.</text>
+	<path d="M80 437h290" stroke="#34415e" />
+	<text x="80" y="466" fill="#dde7fa" font-size="16">HTTP API · HTTP polling</text>
+	<text x="80" y="494" fill="#dde7fa" font-size="16">RabbitMQ · Kafka · NATS</text>
+	<text x="80" y="522" fill="#dde7fa" font-size="16">Amazon SQS · Folder · Amazon S3</text>
+
+	<rect x="494" y="310" width="42" height="42" rx="10" fill="#34305c" />
+	<g stroke="#b6a8ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+	  <path d="M507 318h12l7 7v20h-19zM519 318v8h7M512 333h9m-9 6h9" />
+	</g>
+	<text x="494" y="387" fill="#f2f5ff" font-size="25" font-weight="700">Customer contracts</text>
+	<text x="494" y="416" fill="#bac0dc" font-size="17">Define delivery for each customer.</text>
+	<path d="M494 437h292" stroke="#44456c" />
+	<text x="494" y="466" fill="#e6e2ff" font-size="16">Event types and schema validation</text>
+	<text x="494" y="494" fill="#e6e2ff" font-size="16">Filters and payload transformations</text>
+	<text x="494" y="522" fill="#e6e2ff" font-size="16">Rate limits and delivery policies</text>
+
+	<rect x="910" y="310" width="42" height="42" rx="10" fill="#193c58" />
+	<g stroke="#72c8f6" stroke-width="2">
+	  <circle cx="931" cy="331" r="13" /><circle cx="931" cy="331" r="7" /><circle cx="931" cy="331" r="1" />
+	</g>
+	<text x="910" y="387" fill="#f2f5ff" font-size="25" font-weight="700">Shared destinations</text>
+	<text x="910" y="416" fill="#acb9d1" font-size="17">Deliver through each team's stack.</text>
+	<path d="M910 437h290" stroke="#30506b" />
+	<text x="910" y="466" fill="#dde7fa" font-size="16">HTTP · Kafka · RabbitMQ</text>
+	<text x="910" y="494" fill="#dde7fa" font-size="16">NATS · Amazon SQS</text>
+	<text x="910" y="522" fill="#a8d7f3" font-size="16">One event. Customer-specific delivery.</text>
+
+	<g fill="#131b2c" stroke="#2d3953">
+	  <rect x="56" y="582" width="274" height="58" rx="12" />
+	  <rect x="354" y="582" width="274" height="58" rx="12" />
+	  <rect x="652" y="582" width="274" height="58" rx="12" />
+	  <rect x="950" y="582" width="274" height="58" rx="12" />
+	</g>
+	<g fill="#ccd7ec" font-size="17" font-weight="600" text-anchor="middle">
+	  <text x="193" y="618">Retries and replay</text>
+	  <text x="491" y="618">Delivery history and SLOs</text>
+	  <text x="789" y="618">React admin dashboard</text>
+	  <text x="1087" y="618">Read-only customer portal</text>
+	</g>
+	<text x="56" y="683" fill="#a7b5cf" font-size="15">At-least-once processing · Consumers must tolerate duplicates</text>
+	<text x="1224" y="683" text-anchor="end" fill="#f0c77c" font-size="15" font-weight="600">Early development · Not production ready</text>
+  </g>
+</svg>

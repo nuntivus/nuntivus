@@ -1,19 +1,29 @@
-# Nuntivus Server
+<p align="center">
+  <img src="NuntivusServer.Dashboard/src/assets/nuntivus-logo.svg" alt="Nuntivus logo" width="88" height="72" />
+</p>
 
-Self-hosted customer event infrastructure for SaaS and platform teams.
-Publish business events once; define how each customer receives them.
+<h1 align="center">Nuntivus Server</h1>
+
+<p align="center">
+  <strong>Self-hosted customer event infrastructure for SaaS and platform teams.</strong><br />
+  Publish business events once; define how each customer receives them.
+</p>
+
+[Quick start](#docker-quick-start-local-only) · [Features](#features) · [Documentation](#documentation) · [Contributing](#contributing)
 
 > **Early development — not yet production ready.** APIs, schemas, and configuration
 > may change before the first stable release.
 
+![Nuntivus product overview: managed sources route events through customer contracts to shared destinations, with retries, observability, and administration tools.](docs/assets/product-overview.svg)
+
 ## Features
 
-- Managed HTTP and pull Sources, with source-scoped ingestion idempotency.
-- Customer contracts with shared destinations, filters, and delivery policies.
-- HTTP, Kafka, RabbitMQ, NATS, and SQS delivery integrations.
-- Schema validation, compatibility review, typed transformations, and dry runs.
-- Delivery history, retries/replay, SLOs, alerts, and staff metadata exports.
-- React administration dashboard and invitation-only read-only customer portal.
+- 🔌 **Managed sources** — HTTP and pull Sources, with source-scoped ingestion idempotency.
+- 👥 **Customer contracts** — shared destinations, filters, and delivery policies.
+- 📡 **Delivery integrations** — HTTP, Kafka, RabbitMQ, NATS, and SQS.
+- 🧩 **Event processing** — schema validation, compatibility review, typed transformations, and dry runs.
+- 📊 **Delivery operations** — history, retries/replay, SLOs, alerts, and staff metadata exports.
+- 🖥️ **Administration** — React dashboard and invitation-only read-only customer portal.
 
 Processing is **at least once**; external consumers must tolerate duplicates.
 See the [architecture](docs/architecture.md) and [feature limitations](docs/features/product-verification.md).
