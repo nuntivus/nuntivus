@@ -4,11 +4,11 @@
     "net8.0": {
       "AWSSDK.S3": {
         "type": "Direct",
-        "requested": "[3.7.301, )",
-        "resolved": "3.7.301",
-        "contentHash": "aoDjFndiGKPTgHliwRSLf9PllOSbtnu3rLzEzzUl25OiPiXCfI9Mco31O9AcJJjcsqj3oWxlTuNDhu8GL3fNJw==",
+        "requested": "[4.1.0, )",
+        "resolved": "4.1.0",
+        "contentHash": "uV//Txuga5jW6wIE5UXi6RaqAvc0eg76i7vmUDgK2H4yOtrSG4BxF+IdXYOu4sbPG/L6q/k2UbK5L6ptysj9oA==",
         "dependencies": {
-          "AWSSDK.Core": "[3.7.300.5, 4.0.0)"
+          "AWSSDK.Core": "[4.1.0, 5.0.0)"
         }
       },
       "AWSSDK.SQS": {
@@ -151,11 +151,6 @@
         "dependencies": {
           "Serilog": "4.0.0"
         }
-      },
-      "AWSSDK.Core": {
-        "type": "Transitive",
-        "resolved": "3.7.300.18",
-        "contentHash": "ha0Rujw0HHYbYRFkok6SBj7WKQkaWGbdKc0LQSHY11n9s0xjCeobipkrns4B6ZdFDBRKGM2RmVxcmGYeBurhOA=="
       },
       "Humanizer.Core": {
         "type": "Transitive",
@@ -405,8 +400,8 @@
       },
       "System.Memory": {
         "type": "Transitive",
-        "resolved": "4.5.5",
-        "contentHash": "XIWiDvKPXaTveaB7HVganDlOCRoj03l+jrwNvcge/t8vhGYKvqV+dMv6G4SAX2NoNmN0wZfVPTAlFwZcZvVOUw=="
+        "resolved": "4.6.3",
+        "contentHash": "qdcDOgnFZY40+Q9876JUHnlHu7bosOHX8XISRoH94fwk6hgaeQGSgfZd8srWRZNt5bV9ZW2TljcegDNxsf+96A=="
       },
       "System.Text.Json": {
         "type": "Transitive",
