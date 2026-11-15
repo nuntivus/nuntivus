@@ -5,7 +5,7 @@ import { themes } from 'prism-react-renderer'
 const config: Config = {
   title: 'Nuntivus',
   tagline: 'Your events. Every customer. Their destination.',
-  url: 'https://nuntivus.com',
+  url: 'https://www.nuntivus.com',
   baseUrl: '/',
   trailingSlash: true,
   favicon: 'img/favicon.svg',
@@ -15,6 +15,12 @@ const config: Config = {
   markdown: { format: 'detect', hooks: { onBrokenMarkdownLinks: 'throw' } },
   i18n: { defaultLocale: 'en', locales: ['en'] },
   presets: [['classic', {
+    sitemap: {
+      filename: 'sitemap.xml',
+      changefreq: null,
+      priority: null,
+      ignorePatterns: ['/search/**', '/404.html'],
+    },
     docs: { sidebarPath: './sidebars.ts', showLastUpdateTime: false },
     blog: { showReadingTime: true, blogTitle: 'Nuntivus blog', blogDescription: 'Project news, architecture and self-hosted event delivery.', onInlineAuthors: 'throw', onUntruncatedBlogPosts: 'throw' },
     theme: { customCss: './src/css/custom.css' },
