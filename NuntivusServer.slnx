@@ -42,5 +42,4 @@
   <Project Path="NuntivusServer.IntegrationTests/NuntivusServer.IntegrationTests.csproj" />
   <Project Path="NuntivusServer.UnitTests/NuntivusServer.UnitTests.csproj" />
   <Project Path="NuntivusServer.Worker/NuntivusServer.Worker.csproj" />
-  <Project Path="NuntivusServer.Website/nuntivusserver.website.esproj"><Build /></Project>
 </Solution>

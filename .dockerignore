@@ -14,8 +14,6 @@
 **/*.log
 **/*.tmp
 **/*.bak
-NuntivusServer.Website/build
-NuntivusServer.Website/docs/reference
 **/*.pfx
 **/*.p12
 **/*.pem

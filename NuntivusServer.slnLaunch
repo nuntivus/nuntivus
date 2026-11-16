@@ -16,14 +16,5 @@
         "Action": "Start"
       }
     ]
-  },
-  {
-    "Name": "Website",
-    "Projects": [
-      {
-        "Path": "NuntivusServer.Website\\nuntivusserver.website.esproj",
-        "Action": "Start"
-      }
-    ]
   }
 ]
