@@ -11,10 +11,9 @@ using Testcontainers.PostgreSql;
 
 namespace NuntivusServer.IntegrationTests
 {
-    public sealed class EventDefinitionsApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
+    public sealed class EventDefinitionsApiFixture : WebApplicationFactory<NuntivusServer.Api.ApiAssemblyMarker>, IAsyncLifetime
     {
-        private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-            .WithImage("postgres:16-alpine")
+        private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
             .WithDatabase("nuntivus_it")
             .WithUsername("nuntivus")
             .WithPassword("nuntivus")

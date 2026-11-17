@@ -149,7 +149,7 @@ namespace NuntivusServer.IntegrationTests
                 {
                     var result = await executor.ExecuteAsync(Request(), token);
                     if (result.Succeeded) measurement.Latencies.Add(Stopwatch.GetElapsedTime(started).TotalMilliseconds);
-                    else measurement.Errors.Add(result.Error ?? result.Category.ToString());
+                    else measurement.Errors.Add(result.Error ?? result.Category?.ToString() ?? "Unknown delivery failure");
                 }
                 catch (Exception ex) { measurement.Errors.Add(ex.GetType().Name); }
             });

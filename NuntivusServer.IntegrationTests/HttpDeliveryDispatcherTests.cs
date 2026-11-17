@@ -102,12 +102,11 @@ namespace NuntivusServer.IntegrationTests
 
             var taskA = dispatcherA.DispatchAsync(deliveryId, CancellationToken.None);
             var taskB = dispatcherB.DispatchAsync(deliveryId, CancellationToken.None);
-            await Task.WhenAll(taskA, taskB);
+            var results = await Task.WhenAll(taskA, taskB);
 
-            taskA.Result.EnsureSuccess();
-            taskB.Result.EnsureSuccess();
+            Assert.All(results, result => result.EnsureSuccess());
 
-            var outcomes = new[] { taskA.Result.Value, taskB.Result.Value };
+            var outcomes = results.Select(result => result.Value).ToArray();
             Assert.Equal(1, outcomes.Count(o => o == DeliveryDispatchOutcome.Delivered));
             Assert.Equal(1, outcomes.Count(o => o == DeliveryDispatchOutcome.Skipped));
 
@@ -465,12 +464,11 @@ namespace NuntivusServer.IntegrationTests
 
             var firstTask = firstWorker.DispatchAsync(seeded.DeliveryIds[0], CancellationToken.None);
             var secondTask = secondWorker.DispatchAsync(seeded.DeliveryIds[1], CancellationToken.None);
-            await Task.WhenAll(firstTask, secondTask);
+            var results = await Task.WhenAll(firstTask, secondTask);
 
-            firstTask.Result.EnsureSuccess();
-            secondTask.Result.EnsureSuccess();
+            Assert.All(results, result => result.EnsureSuccess());
 
-            var outcomes = new[] { firstTask.Result.Value, secondTask.Result.Value };
+            var outcomes = results.Select(result => result.Value).ToArray();
             Assert.Contains(DeliveryDispatchOutcome.Delivered, outcomes);
             Assert.Contains(DeliveryDispatchOutcome.Skipped, outcomes);
 

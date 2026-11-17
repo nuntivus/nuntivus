@@ -21,7 +21,7 @@ namespace NuntivusServer.IntegrationTests
     [Collection(nameof(ContractsApiCollection))]
     public sealed class PortalApiTests(ContractsApiFixture fixture) : IAsyncLifetime
     {
-        private WebApplicationFactory<Program> _app = null!;
+        private WebApplicationFactory<NuntivusServer.Api.ApiAssemblyMarker> _app = null!;
         private HttpClient _admin = null!;
         private HttpClient _customer = null!;
         public async Task InitializeAsync()
@@ -185,8 +185,8 @@ namespace NuntivusServer.IntegrationTests
         {
             var invitation = await Invite("local", "concurrent-reader");
             var responses = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => _customer.PostAsJsonAsync("/v1/portal/local/accept", new PortalAcceptRequest(invitation.Token, "correct horse battery staple"))));
-            Assert.Single(responses.Where(response => response.StatusCode == HttpStatusCode.OK));
-            Assert.Single(responses.Where(response => response.StatusCode == HttpStatusCode.BadRequest));
+            Assert.Single(responses, response => response.StatusCode == HttpStatusCode.OK);
+            Assert.Single(responses, response => response.StatusCode == HttpStatusCode.BadRequest);
             var expired = await Invite("local", "expired-reader");
             await using var connection = new NpgsqlConnection(fixture.ConnectionString);
             await connection.ExecuteAsync("UPDATE portal_invitations SET expires_at = now() - interval '1 second' WHERE id = @Id", new { expired.Id });

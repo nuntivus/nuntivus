@@ -142,7 +142,7 @@ namespace NuntivusServer.IntegrationTests
                 $"/v1/events/{sourceId:D}/replay", new ReplayEventRequest("concurrent-key", null))));
             Assert.All(responses, response => Assert.Equal(HttpStatusCode.OK, response.StatusCode));
             var bodies = await Task.WhenAll(responses.Select(response => response.Content.ReadFromJsonAsync<ReplayEventResponse>()));
-            Assert.Single(bodies.Where(body => body!.Status == "accepted"));
+            Assert.Single(bodies, body => body!.Status == "accepted");
             Assert.Single(bodies.Select(body => body!.ReplayedEventId).Distinct());
             var replayed = Guid.Parse(bodies[0]!.ReplayedEventId);
             await using var connection = new NpgsqlConnection(_fixture.ConnectionString);

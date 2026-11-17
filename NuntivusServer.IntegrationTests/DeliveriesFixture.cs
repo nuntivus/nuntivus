@@ -12,8 +12,7 @@ namespace NuntivusServer.IntegrationTests
     /// </summary>
     public sealed class DeliveriesFixture : IAsyncLifetime
     {
-        private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-            .WithImage("postgres:16-alpine")
+        private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
             .WithDatabase("nuntivus_it")
             .WithUsername("nuntivus")
             .WithPassword("nuntivus")

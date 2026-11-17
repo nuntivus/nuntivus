@@ -32,7 +32,7 @@ namespace NuntivusServer.Api.Controllers.Events
             [FromBody] CreateEventDefinitionRequest request,
             CancellationToken cancellationToken)
         {
-            _logger.Information("Received CreateEventDefinition request for type {EventType}.", request?.EventType);
+            _logger.Information("Received CreateEventDefinition request for type {EventType}.", request.EventType);
 
             var result = await _definitions.CreateAsync(
                 request.EventType,

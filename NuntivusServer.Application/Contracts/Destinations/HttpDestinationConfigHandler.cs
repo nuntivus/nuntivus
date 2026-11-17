@@ -232,11 +232,12 @@ namespace NuntivusServer.Application.Contracts.Destinations
             if (currentConfig is null || nextConfig is null)
                 return Result.Failure<Destination>(Error.Validation("Destination configuration is empty."));
 
-            var authType = nextConfig.Authentication?.Type?.Trim().ToLowerInvariant();
-            if (!string.Equals(authType, "hmac", StringComparison.Ordinal))
+            var nextAuthentication = nextConfig.Authentication;
+            var authType = nextAuthentication?.Type?.Trim().ToLowerInvariant();
+            if (nextAuthentication is null || !string.Equals(authType, "hmac", StringComparison.Ordinal))
                 return Result.Success(next);
 
-            var nextCredential = nextConfig.Authentication.Credential;
+            var nextCredential = nextAuthentication.Credential;
             if (nextCredential is null)
             {
                 return Result.Failure<Destination>(Error.Validation(
@@ -286,7 +287,7 @@ namespace NuntivusServer.Application.Contracts.Destinations
 
             var rotatedConfig = new HttpDestinationConfig(
                 nextConfig.Url,
-                new HttpAuthentication(nextConfig.Authentication.Type, rotatedCredential),
+                new HttpAuthentication(nextAuthentication.Type, rotatedCredential),
                 nextConfig.Headers,
                 nextConfig.SecretHeaders,
                 nextConfig.ProtectedHeaders,

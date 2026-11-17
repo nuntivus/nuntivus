@@ -16,10 +16,9 @@ namespace NuntivusServer.IntegrationTests
     /// Shared fixture spinning up a real Postgres container and hosting the API
     /// via WebApplicationFactory. All tests in the collection share the container.
     /// </summary>
-    public sealed class CustomersApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
+    public sealed class CustomersApiFixture : WebApplicationFactory<NuntivusServer.Api.ApiAssemblyMarker>, IAsyncLifetime
     {
-        private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-            .WithImage("postgres:16-alpine")
+        private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
             .WithDatabase("nuntivus_it")
             .WithUsername("nuntivus")
             .WithPassword("nuntivus")

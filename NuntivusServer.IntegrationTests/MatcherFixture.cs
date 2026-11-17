@@ -37,15 +37,13 @@ namespace NuntivusServer.IntegrationTests
     /// </summary>
     public sealed class MatcherFixture : IAsyncLifetime
     {
-        private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-            .WithImage("postgres:16-alpine")
+        private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
             .WithDatabase("nuntivus_it")
             .WithUsername("nuntivus")
             .WithPassword("nuntivus")
             .Build();
 
-        private readonly IContainer _nats = new ContainerBuilder()
-            .WithImage("nats:2.10-alpine")
+        private readonly IContainer _nats = new ContainerBuilder("nats:2.10-alpine")
             .WithCommand("-js")
             .WithPortBinding(4222, true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(4222))

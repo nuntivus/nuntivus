@@ -16,23 +16,19 @@ namespace NuntivusServer.IntegrationTests
 
     public sealed class DestinationAdaptersFixture : IAsyncLifetime
     {
-        private readonly KafkaContainer _kafka = new KafkaBuilder()
-            .WithImage("confluentinc/cp-kafka:7.6.1")
+        private readonly KafkaContainer _kafka = new KafkaBuilder("confluentinc/cp-kafka:7.6.1")
             .Build();
 
-        private readonly RabbitMqContainer _rabbitMq = new RabbitMqBuilder()
-            .WithImage("rabbitmq:3.13-alpine")
+        private readonly RabbitMqContainer _rabbitMq = new RabbitMqBuilder("rabbitmq:3.13-alpine")
             .Build();
 
-        private readonly IContainer _nats = new ContainerBuilder()
-            .WithImage("nats:2.10-alpine")
+        private readonly IContainer _nats = new ContainerBuilder("nats:2.10-alpine")
             .WithCommand("-js")
             .WithPortBinding(4222, true)
             .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(4222))
             .Build();
 
-        private readonly IContainer _localStack = new ContainerBuilder()
-            .WithImage("localstack/localstack:3.5")
+        private readonly IContainer _localStack = new ContainerBuilder("localstack/localstack:3.5")
             .WithEnvironment("SERVICES", "sqs,s3")
             .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1")
             .WithEnvironment("AWS_ACCESS_KEY_ID", "test")
@@ -41,8 +37,7 @@ namespace NuntivusServer.IntegrationTests
             .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(4566))
             .Build();
 
-        private readonly IContainer _http = new ContainerBuilder()
-            .WithImage("python:3.12-alpine")
+        private readonly IContainer _http = new ContainerBuilder("python:3.12-alpine")
             .WithEntrypoint("python", "-u", "-c")
             .WithCommand("from http.server import BaseHTTPRequestHandler,HTTPServer\nimport json\nclass Handler(BaseHTTPRequestHandler):\n sequence=0\n def log_message(self,*args): pass\n def do_HEAD(self):\n  self.send_response(200);self.end_headers()\n def do_GET(self):\n  Handler.sequence+=1\n  body=json.dumps({'type':'stress.created','payload':{'sequence':Handler.sequence}}).encode()\n  self.send_response(200);self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)\n def do_POST(self):\n  self.rfile.read(int(self.headers.get('Content-Length','0')));self.send_response(200);self.end_headers()\nHTTPServer(('0.0.0.0',8080),Handler).serve_forever()")
             .WithPortBinding(8080, true)

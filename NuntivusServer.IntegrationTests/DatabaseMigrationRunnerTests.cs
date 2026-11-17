@@ -233,8 +233,7 @@ namespace NuntivusServer.IntegrationTests
 
         private static async Task WithPostgresAsync(Func<string, Task> action)
         {
-            var postgres = new PostgreSqlBuilder()
-                .WithImage("postgres:16-alpine")
+            var postgres = new PostgreSqlBuilder("postgres:16-alpine")
                 .WithDatabase("nuntivus_it")
                 .WithUsername("nuntivus")
                 .WithPassword("nuntivus")

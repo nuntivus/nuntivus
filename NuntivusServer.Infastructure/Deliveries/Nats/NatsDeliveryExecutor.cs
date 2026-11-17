@@ -106,7 +106,7 @@ namespace NuntivusServer.Infastructure.Deliveries.Nats
                 var metadata = new Dictionary<string, string>
                 {
                     ["subject"] = config.Subject.Trim(),
-                    ["stream"] = ack.Stream,
+                    ["stream"] = ack.Stream ?? string.Empty,
                     ["sequence"] = ack.Seq.ToString(),
                     ["duplicate"] = ack.Duplicate.ToString(),
                 };

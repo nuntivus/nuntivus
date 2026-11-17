@@ -14,11 +14,13 @@ namespace NuntivusServer.Application.Contracts.Destinations
             uri = default!;
             error = string.Empty;
 
-            if (!Uri.TryCreate(url, UriKind.Absolute, out uri))
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var validatedUri))
             {
                 error = "Destination url must be an absolute URL.";
                 return false;
             }
+
+            uri = validatedUri;
 
             if (uri.Scheme == Uri.UriSchemeHttps)
             {

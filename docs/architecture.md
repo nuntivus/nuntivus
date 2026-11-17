@@ -109,5 +109,5 @@ staff-only, permission-gated metadata exports, not unrestricted payload dumps.
 | `NuntivusServer.UnitTests`, `NuntivusServer.IntegrationTests` | Backend coverage |
 | `migration` | Ordered database migrations |
 
-Runtime technologies include .NET 8, Dapper/Npgsql, PostgreSQL, NATS JetStream,
+Runtime technologies include .NET 10, Dapper/Npgsql, PostgreSQL, NATS JetStream,
 OpenTelemetry, and Docker Compose. APIs and schemas may change before a stable release.

@@ -1286,8 +1286,8 @@ namespace NuntivusServer.IntegrationTests
             Assert.Equal(HttpStatusCode.NoContent,
                 (await _client.DeleteAsync($"/v1/destinations/{second.Id}?removeBindings=true")).StatusCode);
             var remaining = await _client.GetFromJsonAsync<ContractView>($"/v1/contracts/{contract.Id}");
-            Assert.Single(remaining!.Destinations!);
-            Assert.Null(remaining.Destinations.Single().DestinationId);
+            var remainingDestination = Assert.Single(remaining!.Destinations!);
+            Assert.Null(remainingDestination.DestinationId);
         }
 
         [Fact]

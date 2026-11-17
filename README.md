@@ -7,7 +7,7 @@
 <p align="center">
 	<a href="https://github.com/nuntivus/nuntivus/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/nuntivus/nuntivus/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI build and tests on main" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat" alt="License: Apache 2.0" /></a>
-  <a href="NuntivusServer.Api/NuntivusServer.Api.csproj"><img src="https://img.shields.io/badge/.NET%20target-8.0-512BD4?style=flat&amp;logo=dotnet&amp;logoColor=white" alt="Application target: .NET 8.0" /></a>
+	<a href="NuntivusServer.Api/NuntivusServer.Api.csproj"><img src="https://img.shields.io/badge/.NET%20target-10.0-512BD4?style=flat&amp;logo=dotnet&amp;logoColor=white" alt="Application target: .NET 10.0" /></a>
   <a href="NuntivusServer.Dashboard/package.json"><img src="https://img.shields.io/badge/Node.js-24-5FA04E?style=flat&amp;logo=nodedotjs&amp;logoColor=white" alt="Frontend toolchain: Node.js 24" /></a>
   <a href="docs/publication-readiness.md"><img src="https://img.shields.io/badge/status-early%20development-orange?style=flat" alt="Status: early development, not production ready" /></a>
 </p>
@@ -180,7 +180,7 @@ shared PostgreSQL and NATS infrastructure.
 
 ## Development and tests
 
-Projects target .NET 8; the solution uses the SDK pinned in `global.json`.
+Projects target .NET 10; the solution uses the SDK pinned in `global.json`.
 The dashboard is validated separately through npm.
 
 See [development and validation](docs/development.md) for setup, builds, backend

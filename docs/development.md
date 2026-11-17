@@ -2,13 +2,13 @@
 
 ## Prerequisites
 
-- The SDK selected by `global.json`; projects continue to target .NET 8.
-- .NET 8 and ASP.NET Core 8 runtimes for backend tests.
+- The .NET 10 SDK selected by `global.json`; backend projects target .NET 10.
+- .NET 10 and ASP.NET Core 10 runtimes for backend tests.
 - Node.js 24 and npm, plus Playwright Chromium for browser tests.
 - Docker Engine/Desktop with Linux containers for Testcontainers and Compose.
 
-A newer SDK can build `net8.0`. The `.slnx` solution requires a supporting SDK;
-installing only the .NET 8 SDK is not sufficient to build that solution format.
+Use the pinned SDK to build the `net10.0` projects and `.slnx` solution consistently
+in Visual Studio, CLI builds, CI, and Docker builds.
 
 ## Local runtime
 
@@ -72,7 +72,7 @@ npm audit
 
 NuGet lockfiles are committed. Use `dotnet restore --locked-mode` in CI and
 regenerate the relevant lockfiles intentionally when changing package references.
-The pinned build SDK is 10.0.401; the deployed API and Worker remain .NET 8.
+The pinned build SDK is 10.0.401; the API and Worker target .NET 10.
 
 The dashboard has narrowly scoped `minimatch` overrides for ESLint/config-array
 and TypeScript-ESLint because their current parent ranges include the vulnerable

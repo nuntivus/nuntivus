@@ -59,7 +59,7 @@ namespace NuntivusServer.Api.Security
             {
                 options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
                 options.ForwardLimit = 1;
-                options.KnownNetworks.Clear();
+                options.KnownIPNetworks.Clear();
                 options.KnownProxies.Clear();
                 foreach (var value in proxies) options.KnownProxies.Add(IPAddress.Parse(value));
                 // With no explicit trust, process no forwarded headers at all.
