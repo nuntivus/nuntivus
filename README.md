@@ -43,6 +43,22 @@
 Processing is **at least once**; external consumers must tolerate duplicates.
 See the [architecture](docs/architecture.md) and [feature limitations](docs/features/product-verification.md).
 
+## Dashboard screenshots
+
+Preview the administration dashboard, from sign-in to source configuration and delivery monitoring.
+
+| Sign-in | Dashboard overview |
+| --- | --- |
+| ![Dashboard sign-in page](docs/assets/dashboard-login.jpg) | ![Dashboard home page](docs/assets/dashboard-home.jpg) |
+
+| Sources | Routes |
+| --- | --- |
+| ![Dashboard source configuration](docs/assets/dashboard-source.jpg) | ![Dashboard route configuration](docs/assets/dashboard-route.jpg) |
+
+| Contracts | Deliveries |
+| --- | --- |
+| ![Dashboard contract management](docs/assets/dashboard-contract.jpg) | ![Dashboard delivery monitoring](docs/assets/dashboard-delivery.jpg) |
+
 ## Docker quick-start (local only)
 
 Requires Docker Engine/Desktop with Linux containers and Docker Compose 2.24.4+.
